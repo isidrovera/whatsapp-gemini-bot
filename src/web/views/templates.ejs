@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title><%= title %> - WhatsApp Bot Admin</title>
+
+  <!-- Fuente / Tailwind -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter','ui-sans-serif','system-ui'] },
+          colors: {
+            primary: { DEFAULT:'#1e3a8a', 600:'#1e3a8a', 700:'#1e40af' },
+          },
+          boxShadow: {
+            soft: '0 10px 25px -10px rgba(0,0,0,.15)',
+            overlay: '0 30px 80px rgba(0,0,0,.45)'
+          },
+        }
+      },
+      darkMode:'media'
+    }
+  </script>
+
+  <!-- Motion + Lucide -->
+  <script src="https://unpkg.com/@motionone/dom/dist/motion.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    @media (prefers-reduced-motion: reduce){
+      *{
+        animation-duration:.001ms !important;
+        animation-iteration-count:1 !important;
+        transition-duration:.001ms !important;
+        scroll-behavior:auto !important;
+      }
+    }
+    .sidebar-link-active{
+      background-color:rgba(255,255,255,.12);
+      color:#fff !important;
+      font-weight:600;
+    }
+    .scrollbar-thin::-webkit-scrollbar{height:4px;width:4px}
+    .scrollbar-thin::-webkit-scrollbar-thumb{background:#47556933;border-radius:9999px}
+    .scrollbar-thin::-webkit-scrollbar-track{background:transparent}
+  </style>
+</head>
+
+<body class="h-full bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100">
+<a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-3 focus:py-2 focus:rounded-lg shadow">
+  Saltar al contenido
+</a>
+
+<%
+  // util para marcar link activo en sidebar
+  function isActive(p){
+    return (page === p || (!page && p==='templates')) ? 'sidebar-link-active' : '';
+  }
+
+  // intento de parse seguro de variables por template
+  function parseVars(v){
+    try {
+      if (!v) return [];
+      return Array.isArray(v) ? v : JSON.parse(v);
+    } catch { return []; }
+  }
+%>
+
+<div class="min-h-screen w-full flex relative">
+
+  <!-- overlay móvil sidebar -->
+  <div id="mobile-sidebar-overlay"
+       class="fixed inset-0 bg-black/40 z-40 opacity-0 pointer-events-none transition-opacity md:hidden"></div>
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar"
+         class="w-[280px] flex flex-col bg-gradient-to-b from-primary to-primary-700 text-white shadow-soft
+                fixed inset-y-0 left-0 z-50 -translate-x-full transition-transform
+                md:translate-x-0 md:relative md:flex"
+         role="navigation"
+         aria-label="Menú principal">
+
+    <!-- header sidebar -->
+    <div class="px-5 py-6 border-b border-white/10 bg-white/5 backdrop-blur flex items-center justify-between">
+      <h2 class="text-xl font-semibold flex items-center gap-2">
+        <i data-lucide="bot" class="w-5 h-5"></i> Bot Admin
+      </h2>
+
+      <!-- cerrar sidebar en móvil -->
+      <button id="close-sidebar-btn"
+              class="md:hidden inline-flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 p-2"
+              aria-label="Cerrar menú">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+
+    <!-- nav links -->
+    <nav class="py-4 flex-1 overflow-y-auto text-[15px] leading-5">
+      <ul class="px-2 space-y-1">
+        <li>
+          <a href="/"
+             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('dashboard') %>">
+            <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+            <span>Dashboard</span>
+          </a>
+        </li>
+
+        <li>
+          <a href="/contacts"
+             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('contacts') %>">
+            <i data-lucide="users" class="w-5 h-5"></i>
+            <span>Contactos</span>
+          </a>
+        </li>
+
+        <li>
+          <a href="/conversations"
+             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('conversations') %>">
+            <i data-lucide="message-circle" class="w-5 h-5"></i>
+            <span>Conversaciones</span>
+          </a>
+        </li>
+
+        <li>
+          <a href="/blocked"
+             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('blocked') %>">
+            <i data-lucide="ban" class="w-5 h-5"></i>
+            <span>Bloqueados</span>
+          </a>
+        </li>
+
+        <li><div class="my-3 h-px bg-white/10"></div></li>
+
+        <li>
+          <a href="/calendar"
+             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('calendar') %>">
+            <i data-lucide="calendar" class="w-5 h-5"></i>
+            <span>Calendario</span>
+          </a>
+        </li>
+
+        <li>
+          <a href="/working-hours"
+             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('working-hours') %>">
+            <i data-lucide="clock" class="w-5 h-5"></i>
+            <span>Horarios</span>
+          </a>
+        </li>
+
+        <li>
+          <a href="/admin-users"
+             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('admin-users') %>">
+            <i data-lucide="shield" class="w-5 h-5"></i>
+            <span>Usuarios Admin</span>
+          </a>
+        </li>
+
+        <li><div class="my-3 h-px bg-white/10"></div></li>
+
+        <li>
+          <a href="/settings"
+             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('settings') %>">
+            <i data-lucide="settings" class="w-5 h-5"></i>
+            <span>Configuración</span>
+          </a>
+        </li>
+
+        <li>
+          <a href="/departments"
+             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('departments') %>">
+            <i data-lucide="building-2" class="w-5 h-5"></i>
+            <span>Departamentos</span>
+          </a>
+        </li>
+
+        <li>
+          <a href="/products"
+             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('products') %>">
+            <i data-lucide="package" class="w-5 h-5"></i>
+            <span>Productos</span>
+          </a>
+        </li>
+
+        <li>
+          <a href="/auto-responses"
+             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('auto-responses') %>">
+            <i data-lucide="robot" class="w-5 h-5"></i>
+            <span>Auto-respuestas</span>
+          </a>
+        </li>
+
+        <li>
+          <a href="/tags"
+             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('tags') %>">
+            <i data-lucide="tags" class="w-5 h-5"></i>
+            <span>Tags</span>
+          </a>
+        </li>
+
+        <li>
+          <a href="/templates"
+             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white hover:bg-white/10 transition <%= isActive('templates') %>"
+             aria-current="<%= isActive('templates') ? 'page' : false %>">
+            <i data-lucide="file-text" class="w-5 h-5"></i>
+            <span>Plantillas</span>
+          </a>
+        </li>
+
+        <li>
+          <a href="/metrics"
+             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('metrics') %>">
+            <i data-lucide="line-chart" class="w-5 h-5"></i>
+            <span>Métricas</span>
+          </a>
+        </li>
+      </ul>
+    </nav>
+
+    <!-- footer sidebar -->
+    <div class="mt-auto p-4 bg-white/5 border-t border-white/10">
+      <div class="rounded-xl bg-white/10 p-3">
+        <div class="text-[11px] uppercase tracking-wide opacity-80">Sesión activa</div>
+        <div class="font-semibold text-sm mt-1 flex items-center gap-2">
+          <i data-lucide="user" class="w-4 h-4"></i> <%= user || 'Admin' %>
+        </div>
+      </div>
+      <form method="POST" action="/auth/logout" class="mt-3">
+        <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <% } %>
+
+        <button type="submit"
+                class="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-red-500/20 hover:bg-red-500/30 text-white py-2.5 text-sm font-medium transition">
+          <i data-lucide="log-out" class="w-4 h-4"></i> Cerrar sesión
+        </button>
+      </form>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main id="main-content" class="flex-1 p-4 md:p-8 w-full md:w-auto md:ml-0 ml-0">
+
+    <!-- HEADER PAGE -->
+    <header class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+
+      <div class="flex items-start justify-between w-full md:w-auto">
+        <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
+          <i data-lucide="file-text" class="w-7 h-7 text-primary"></i>
+          Plantillas de Mensajes
+        </h1>
+
+        <!-- abrir sidebar en móvil -->
+        <button id="open-sidebar-btn"
+                class="md:hidden inline-flex items-center justify-center rounded-lg text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 p-2 shadow-soft"
+                aria-label="Abrir menú">
+          <i data-lucide="menu" class="w-6 h-6"></i>
+        </button>
+      </div>
+
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-end w-full md:w-auto">
+        <button
+          class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-sm font-semibold shadow-soft transition"
+          onclick="openNewTemplateModal()">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i>
+          Nueva Plantilla
+        </button>
+      </div>
+    </header>
+
+    <!-- TIP -->
+    <section class="mb-6">
+      <div class="rounded-2xl bg-blue-50 text-blue-900 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-200 dark:border-blue-900/40 px-4 py-3 text-sm font-medium flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 shadow-soft">
+        <div class="flex items-start gap-2">
+          <i data-lucide="info" class="w-5 h-5 text-blue-600 dark:text-blue-300 flex-shrink-0"></i>
+          <div>
+            <strong class="font-semibold">Tip:</strong>
+            Usa variables como
+            <code class="bg-white/60 dark:bg-slate-800/60 px-1 py-0.5 rounded text-xs font-mono text-slate-800 dark:text-slate-200">{{nombre}}</code>,
+            <code class="bg-white/60 dark:bg-slate-800/60 px-1 py-0.5 rounded text-xs font-mono text-slate-800 dark:text-slate-200">{{empresa}}</code>,
+            <code class="bg-white/60 dark:bg-slate-800/60 px-1 py-0.5 rounded text-xs font-mono text-slate-800 dark:text-slate-200">{{telefono}}</code>,
+            etc. para personalizar.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEARCH + LIST CARD -->
+    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-soft border border-slate-100/70 dark:border-white/5 p-6 mb-10">
+
+      <!-- search row -->
+      <div class="flex flex-col lg:flex-row lg:items-center gap-3 mb-5">
+        <div class="flex-1 flex items-stretch gap-2 w-full">
+          <input
+            id="searchInput"
+            type="text"
+            placeholder="🔍 Buscar por nombre, categoría o contenido..."
+            class="flex-1 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-3 py-2.5 text-slate-700 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
+            oninput="filterTemplates()"
+          />
+          <button
+            class="inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-3 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 shadow-soft"
+            onclick="clearSearch()">
+            Limpiar
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
+          <input id="prettyFormatToggle" type="checkbox" class="accent-indigo-600">
+          <label for="prettyFormatToggle" class="cursor-pointer select-none flex items-center gap-1">
+            <i data-lucide="align-left" class="w-4 h-4"></i>
+            <span>Dar formato al texto</span>
+          </label>
+        </div>
+      </div>
+
+      <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
+        <i data-lucide="list" class="w-5 h-5 text-primary"></i>
+        Plantillas disponibles
+      </h2>
+
+      <!-- GRID -->
+      <div id="templatesList"
+           class="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        <% if (templates && templates.length > 0) { %>
+          <% templates.forEach(t => { const vars = parseVars(t.variables); %>
+            <div
+              class="group relative rounded-xl border border-slate-200 dark:border-white/5 bg-white dark:bg-slate-900 shadow-soft p-4 flex flex-col"
+              data-name="<%= (t.name||'').toLowerCase() %>"
+              data-cat ="<%= (t.category||'').toLowerCase() %>"
+              data-card
+            >
+              <!-- header -->
+              <div class="flex items-start justify-between gap-3 mb-2">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2 text-slate-900 dark:text-white font-semibold text-sm leading-snug">
+                    <span class="truncate"><%= t.name %></span>
+                    <span class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold
+                                 <%= t.isActive
+                                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                      : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' %>">
+                      <i data-lucide="<%= t.isActive ? 'check' : 'x' %>" class="w-3.5 h-3.5"></i>
+                      <span><%= t.isActive ? 'Activo' : 'Inactivo' %></span>
+                    </span>
+                  </div>
+                  <div class="text-[12px] leading-4 text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-1">
+                    <i data-lucide="folder" class="w-3.5 h-3.5"></i>
+                    <span class="truncate"><%= t.category %></span>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap gap-2 shrink-0">
+                  <button
+                    class="inline-flex items-center gap-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-2 py-1 text-[12px] font-medium border border-slate-200 dark:border-slate-700"
+                    onclick="copyContent(`<%- (t.content||'').replace(/`/g,'\\`') %>`)">
+                    <i data-lucide="clipboard-copy" class="w-3.5 h-3.5"></i> Copiar
+                  </button>
+
+                  <button
+                    class="inline-flex items-center gap-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 text-[12px] font-medium shadow-soft"
+                    onclick="editTemplate('<%= t.id %>')">
+                    <i data-lucide="pencil" class="w-3.5 h-3.5"></i> Editar
+                  </button>
+
+                  <button
+                    class="inline-flex items-center gap-1 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 dark:text-indigo-300 px-2 py-1 text-[12px] font-medium border border-indigo-200/70 dark:border-indigo-900/50"
+                    onclick="duplicateTemplate('<%= t.id %>')">
+                    <i data-lucide="copy-plus" class="w-3.5 h-3.5"></i> Duplicar
+                  </button>
+
+                  <button
+                    class="inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-2 py-1 text-[12px] font-medium shadow-soft"
+                    onclick="askDeleteTemplate('<%= t.id %>')">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- contenido -->
+              <div class="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-[13px] leading-relaxed text-slate-700 dark:text-slate-200 font-mono whitespace-pre-wrap max-h-40 overflow-y-auto scrollbar-thin">
+                <%= t.content %>
+              </div>
+
+              <!-- variables -->
+              <div class="mt-3 min-h-[2rem] text-[12px] leading-4 text-slate-500 dark:text-slate-400">
+                <% if (vars && vars.length) { %>
+                  <div class="flex flex-wrap items-start gap-2">
+                    <span class="uppercase text-[11px] tracking-wide font-semibold text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                      <i data-lucide="code-2" class="w-3.5 h-3.5"></i>
+                      Variables:
+                    </span>
+                    <% vars.forEach(v => { %>
+                      <span class="inline-flex items-center rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50 px-2 py-0.5 font-mono text-[11px] font-medium">
+                        {{<%- v %>}}
+                      </span>
+                    <% }) %>
+                  </div>
+                <% } else { %>
+                  <span class="italic text-slate-400 dark:text-slate-600 flex items-center gap-1">
+                    <i data-lucide="minus-circle" class="w-3.5 h-3.5"></i>
+                    Sin variables dinámicas
+                  </span>
+                <% } %>
+              </div>
+            </div>
+          <% }) %>
+        <% } else { %>
+          <div class="col-span-full text-center text-slate-500 dark:text-slate-400 py-16 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 shadow-soft">
+            <div class="text-base font-semibold text-slate-700 dark:text-white mb-1">No hay plantillas aún</div>
+            <div class="text-sm">Crea tu primera respuesta rápida para WhatsApp.</div>
+          </div>
+        <% } %>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- MODAL CREAR / EDITAR -->
+<div id="templateModal"
+     class="hidden fixed inset-0 z-[1000] flex items-center justify-center p-4">
+  <!-- fondo blur oscurecido -->
+  <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+
+  <div class="relative w-full max-w-2xl rounded-2xl bg-white dark:bg-slate-900 shadow-overlay border border-slate-200 dark:border-white/5 flex flex-col max-h-[85vh]">
+    <!-- header -->
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-white/5 flex items-start justify-between">
+      <div>
+        <div id="modalTitle" class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          Nueva Plantilla
+        </div>
+        <div class="text-[12px] leading-4 text-slate-500 dark:text-slate-400 mt-1">
+          Usa variables tipo
+          <code class="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50 px-1 py-0.5 rounded font-mono text-[11px]">{{nombre}}</code>
+          para personalizar.
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+        <button
+          class="inline-flex items-center gap-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 text-[12px] font-medium border border-slate-200 dark:border-slate-700 shadow-soft"
+          type="button"
+          onclick="copyFromEditor()">
+          <i data-lucide="clipboard-copy" class="w-3.5 h-3.5"></i> Copiar
+        </button>
+
+        <button
+          class="inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 p-2 border border-transparent"
+          type="button"
+          aria-label="Cerrar"
+          onclick="closeTemplateModal()">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- body -->
+    <div class="px-5 py-4 overflow-y-auto flex-1 space-y-4">
+      <form id="templateForm" class="space-y-4">
+        <input type="hidden" id="templateId"/>
+
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="space-y-1.5">
+            <label class="text-[13px] font-medium text-slate-700 dark:text-slate-200">Nombre *</label>
+            <input
+              id="templateName"
+              required
+              placeholder="Bienvenida, Seguimiento, Despedida"
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] px-3 py-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
+              type="text">
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="text-[13px] font-medium text-slate-700 dark:text-slate-200">Categoría *</label>
+            <input
+              id="templateCategory"
+              required
+              placeholder="greeting / followup / soporte / ventas / ..."
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] px-3 py-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
+              type="text">
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="flex items-center gap-2 flex-wrap justify-between">
+            <label class="text-[13px] font-medium text-slate-700 dark:text-slate-200">Contenido *</label>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-4 flex-wrap">
+              <span>Vars detectadas:
+                <span id="varsDetected" class="font-semibold text-slate-700 dark:text-white">0</span>
+              </span>
+              <span class="tabular-nums">
+                <span id="charCount" class="font-semibold text-slate-700 dark:text-white">0</span> chars
+              </span>
+            </div>
+          </div>
+
+          <textarea
+            id="templateContent"
+            rows="6"
+            required
+            placeholder="Hola {{nombre}}, gracias por contactarnos..."
+            class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] leading-relaxed px-3 py-2.5 text-slate-800 dark:text-slate-100 font-mono outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
+            oninput="updatePreview();updateCounter();detectVariables();">
+          </textarea>
+
+          <div class="text-[12px] leading-4 text-slate-500 dark:text-slate-400">
+            Variables disponibles: {{nombre}}, {{empresa}}, {{telefono}}, {{dni}}, {{ruc}}
+          </div>
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="text-[13px] font-medium text-slate-700 dark:text-slate-200">Estado</label>
+          <select
+            id="templateActive"
+            class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] px-3 py-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition">
+            <option value="true">Activo</option>
+            <option value="false">Inactivo</option>
+          </select>
+        </div>
+
+        <div class="space-y-2">
+          <div class="text-[13px] font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+            <i data-lucide="eye" class="w-4 h-4 text-indigo-500"></i>
+            Vista previa
+          </div>
+
+          <div class="rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 p-3 text-[14px] leading-relaxed text-slate-800 dark:text-slate-100"
+               id="templatePreview">
+            Escribe contenido arriba para ver la vista previa...
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- footer -->
+    <div class="px-5 py-4 border-t border-slate-200 dark:border-white/5 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
+      <button
+        type="button"
+        class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-4 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 shadow-soft w-full sm:w-auto"
+        onclick="closeTemplateModal()">
+        <i data-lucide="x" class="w-4 h-4"></i> Cancelar
+      </button>
+
+      <button
+        type="button"
+        class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold shadow-soft w-full sm:w-auto"
+        onclick="submitTemplateForm()">
+        <i data-lucide="save" class="w-4 h-4"></i> Guardar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CONFIRM -->
+<div id="confirmModal"
+     class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
+
+  <div class="relative w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-overlay border border-slate-200 dark:border-white/5 flex flex-col">
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-white/5 flex items-start justify-between">
+      <div class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="alert-triangle" class="w-5 h-5 text-rose-500"></i>
+        ¿Confirmar?
+      </div>
+      <button
+        class="inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 p-2 border border-transparent"
+        onclick="closeConfirmModal()">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+
+    <div class="px-5 py-4 text-sm text-slate-600 dark:text-slate-300 leading-relaxed" id="confirmText">
+      Esta acción no se puede deshacer.
+    </div>
+
+    <div class="px-5 py-4 border-t border-slate-200 dark:border-white/5 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
+      <button
+        class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-4 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 shadow-soft w-full sm:w-auto"
+        onclick="closeConfirmModal()">
+        <i data-lucide="x" class="w-4 h-4"></i> Cancelar
+      </button>
+
+      <button
+        id="confirmOkBtn"
+        class="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 text-sm font-semibold shadow-soft w-full sm:w-auto">
+        <i data-lucide="trash-2" class="w-4 h-4"></i> Aceptar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ================== SEARCH ==================
+  function filterTemplates(){
+    const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+    const cards = document.querySelectorAll('#templatesList [data-name]');
+    cards.forEach(card => {
+      const name = card.dataset.name || '';
+      const cat  = card.dataset.cat || '';
+      const content = (card.innerText || '').toLowerCase();
+      const hit = !q || name.includes(q) || cat.includes(q) || content.includes(q);
+      card.style.display = hit ? '' : 'none';
+    });
+  }
+
+  function clearSearch(){
+    const si = document.getElementById('searchInput');
+    si.value = '';
+    filterTemplates();
+    si.focus();
+  }
+
+  // ================== PREVIEW / CONTADOR / VARS ==================
+  function updatePreview() {
+    const content = document.getElementById('templateContent').value;
+    const preview = document.getElementById('templatePreview');
+
+    const previewContent = content
+      .replace(/{{\s*nombre\s*}}/gi,  '<span class="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1 py-0.5 text-[12px] font-mono font-semibold">Juan Pérez</span>')
+      .replace(/{{\s*empresa\s*}}/gi, '<span class="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1 py-0.5 text-[12px] font-mono font-semibold">Mi Empresa SAC</span>')
+      .replace(/{{\s*telefono\s*}}/gi,'<span class="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1 py-0.5 text-[12px] font-mono font-semibold">51999888777</span>')
+      .replace(/{{\s*dni\s*}}/gi,     '<span class="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1 py-0.5 text-[12px] font-mono font-semibold">12345678</span>')
+      .replace(/{{\s*ruc\s*}}/gi,     '<span class="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1 py-0.5 text-[12px] font-mono font-semibold">20123456789</span>');
+
+    preview.innerHTML = previewContent || 'Escribe contenido arriba para ver la vista previa...';
+  }
+
+  function updateCounter(){
+    const n = document.getElementById('templateContent').value.length;
+    document.getElementById('charCount').textContent = n;
+  }
+
+  function detectVariables(){
+    const txt = document.getElementById('templateContent').value;
+    const vars = Array.from(new Set(
+      (txt.match(/{{\s*[\w.-]+\s*}}/g)||[])
+        .map(v=>v.replace(/\s+/g,'')) // quita espacios internos
+    ));
+    document.getElementById('varsDetected').textContent = vars.length;
+  }
+
+  // ================== MODAL HELPERS ==================
+  function openModal(el){ el.classList.remove('hidden'); }
+  function closeModal(el){ el.classList.add('hidden'); }
+
+  function openTemplateModal(){ openModal(document.getElementById('templateModal')); }
+  function closeTemplateModal(){ closeModal(document.getElementById('templateModal')); }
+  function openConfirmModal(){ openModal(document.getElementById('confirmModal')); }
+  function closeConfirmModal(){ closeModal(document.getElementById('confirmModal')); }
+
+  // cerrar modal haciendo click fuera del cuadro
+  window.addEventListener('click',(e)=>{
+    const tm = document.getElementById('templateModal');
+    const cm = document.getElementById('confirmModal');
+    [tm,cm].forEach(mod=>{
+      if(!mod) return;
+      if(!mod.classList.contains('hidden') && e.target === mod){
+        mod.classList.add('hidden');
+      }
+    })
+  });
+
+  // cerrar con ESC
+  window.addEventListener('keydown',(e)=>{
+    if(e.key === 'Escape'){
+      closeTemplateModal();
+      closeConfirmModal();
+    }
+  });
+
+  // ================== CRUD TEMPLATE ==================
+  function copyContent(text){ navigator.clipboard.writeText(text||''); }
+  function copyFromEditor(){ copyContent(document.getElementById('templateContent').value); }
+
+  function openNewTemplateModal() {
+    document.getElementById('modalTitle').textContent = 'Nueva Plantilla';
+    document.getElementById('templateId').value = '';
+    document.getElementById('templateName').value = '';
+    document.getElementById('templateCategory').value = '';
+    document.getElementById('templateContent').value = '';
+    document.getElementById('templateActive').value = 'true';
+
+    document.getElementById('templatePreview').textContent = 'Escribe contenido arriba para ver la vista previa...';
+    updateCounter();
+    detectVariables();
+
+    openTemplateModal();
+  }
+
+  async function editTemplate(id){
+    try {
+      const res = await fetch(`/templates/api/${id}`);
+      const t = await res.json();
+
+      document.getElementById('modalTitle').textContent = 'Editar Plantilla';
+      document.getElementById('templateId').value = t.id || '';
+      document.getElementById('templateName').value = t.name || '';
+      document.getElementById('templateCategory').value = t.category || '';
+      document.getElementById('templateContent').value = t.content || '';
+      document.getElementById('templateActive').value = t.isActive ? 'true' : 'false';
+
+      updatePreview();
+      updateCounter();
+      detectVariables();
+
+      openTemplateModal();
+    } catch (err) {
+      alert('Error cargando plantilla');
+      console.error(err);
+    }
+  }
+
+  async function duplicateTemplate(id){
+    try{
+      const res = await fetch(`/templates/api/${id}`);
+      const t = await res.json();
+
+      const data = {
+        name: (t.name || 'Plantilla') + ' (copia)',
+        category: t.category || 'general',
+        content: t.content || '',
+        isActive: !!t.isActive
+      };
+
+      const create = await fetch('/templates/api', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(data)
+      });
+
+      if (create.ok) location.reload();
+      else alert('No se pudo duplicar');
+    } catch(e){
+      alert('Error: ' + e.message);
+    }
+  }
+
+  async function submitTemplateForm(){
+    const id = document.getElementById('templateId').value;
+    const data = {
+      name:      document.getElementById('templateName').value,
+      category:  document.getElementById('templateCategory').value,
+      content:   document.getElementById('templateContent').value,
+      isActive:  document.getElementById('templateActive').value === 'true'
+    };
+
+    try {
+      const url = id ? `/templates/api/${id}` : '/templates/api';
+      const method = id ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers:{ 'Content-Type':'application/json' },
+        body:JSON.stringify(data),
+      });
+
+      if (res.ok) {
+        location.reload();
+      } else {
+        alert('Error al guardar plantilla');
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  }
+
+  function askDeleteTemplate(id){
+    const okBtn = document.getElementById('confirmOkBtn');
+    okBtn.onclick = async () => {
+      try {
+        const res = await fetch(`/templates/api/${id}`, { method:'DELETE' });
+        if (res.ok) {
+          location.reload();
+        } else {
+          alert('No se pudo eliminar la plantilla');
+        }
+      } catch(err){
+        alert('Error: ' + err.message);
+      }
+    };
+    openConfirmModal();
+  }
+
+  // ================== CTRL/CMD+S GUARDAR EN MODAL ==================
+  window.addEventListener('keydown',(e)=>{
+    const isMac = navigator.platform.toUpperCase().includes('MAC');
+    const saveCombo = (isMac && e.metaKey && e.key.toLowerCase()==='s')
+                   || (!isMac && e.ctrlKey && e.key.toLowerCase()==='s');
+
+    if (saveCombo) {
+      const modalOpen = !document.getElementById('templateModal').classList.contains('hidden');
+      if (modalOpen) {
+        e.preventDefault();
+        submitTemplateForm();
+      }
+    }
+  });
+
+  // ================== SIDEBAR MÓVIL ==================
+  (function(){
+    const sidebar   = document.getElementById('sidebar');
+    const overlay   = document.getElementById('mobile-sidebar-overlay');
+    const openBtn   = document.getElementById('open-sidebar-btn');
+    const closeBtn  = document.getElementById('close-sidebar-btn');
+
+    function openSidebar(){
+      sidebar.classList.remove('-translate-x-full');
+      overlay.classList.remove('opacity-0','pointer-events-none');
+    }
+    function closeSidebar(){
+      sidebar.classList.add('-translate-x-full');
+      overlay.classList.add('opacity-0','pointer-events-none');
+    }
+
+    if (openBtn)  openBtn.addEventListener('click', openSidebar);
+    if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
+    if (overlay)  overlay.addEventListener('click', closeSidebar);
+  })();
+
+  // ================== ANIMACIONES (igual dashboard) ==================
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!prefersReduced && window.motion) {
+    const cards = document.querySelectorAll('[data-card]');
+    cards.forEach((el, i) => {
+      motion.animate(
+        el,
+        { opacity:[0,1], transform:['translateY(8px)','translateY(0)'] },
+        { duration:.4, delay:i*0.04, easing:'ease-out' }
+      );
+      el.addEventListener('pointerenter', () =>
+        motion.animate(el, { transform:['translateY(0)','translateY(-2px)'] }, { duration:.18, easing:'ease-out' })
+      );
+      el.addEventListener('pointerleave', () =>
+        motion.animate(el, { transform:['translateY(-2px)','translateY(0)'] }, { duration:.18, easing:'ease-out' })
+      );
+    });
+  }
+
+  // ================== INIT ICONS ==================
+  window.lucide && lucide.createIcons();
+</script>
+</body>
+</html>

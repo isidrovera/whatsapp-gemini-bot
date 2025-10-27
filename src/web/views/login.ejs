@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login - WhatsApp Bot Admin</title>
+
+  <!-- Fuente + Tailwind -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'media',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter','ui-sans-serif','system-ui'] },
+          boxShadow: {
+            card: '0 25px 60px -10px rgba(0,0,0,.45)'
+          },
+          colors: {
+            brandA: '#667eea',
+            brandB: '#764ba2',
+          },
+        }
+      }
+    };
+  </script>
+
+  <style>
+    @media (prefers-reduced-motion: reduce){
+      *{
+        animation-duration:.001ms!important;
+        animation-iteration-count:1!important;
+        transition-duration:.001ms!important;
+        scroll-behavior:auto!important
+      }
+    }
+  </style>
+</head>
+<body class="h-full bg-gradient-to-br from-brandA to-brandB flex items-center justify-center p-4 text-slate-800">
+
+  <main
+    class="w-full max-w-sm bg-white rounded-2xl shadow-card overflow-hidden animate-[fadeIn_.5s_ease-out]"
+  >
+    <!-- HEADER -->
+    <header class="bg-gradient-to-br from-brandA to-brandB text-white px-6 py-8 text-center">
+      <h1 class="text-2xl font-semibold flex items-center justify-center gap-2">
+        <span class="text-3xl leading-none">🤖</span>
+        <span>WhatsApp Bot</span>
+      </h1>
+      <p class="text-sm text-white/90 mt-2 font-medium">
+        Panel de Administración
+      </p>
+    </header>
+
+    <!-- BODY -->
+    <section class="px-6 py-8">
+
+      <% if (error) { %>
+        <div
+          class="mb-6 flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-800 text-sm px-4 py-3"
+          role="alert"
+          aria-live="assertive"
+        >
+          <div class="text-lg leading-none">⚠️</div>
+          <div class="flex-1">
+            <%= error %>
+          </div>
+        </div>
+      <% } %>
+
+      <form method="POST" action="/auth/login" class="space-y-5">
+        <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <% } %>
+
+        <!-- Usuario -->
+        <div>
+          <label
+            for="username"
+            class="block text-sm font-semibold text-slate-700 mb-2"
+          >
+            Usuario
+          </label>
+
+          <div class="relative">
+            <span
+              class="absolute left-3 top-1/2 -translate-y-1/2 text-xl select-none text-slate-400"
+              aria-hidden="true"
+            >👤</span>
+
+            <input
+              type="text"
+              id="username"
+              name="username"
+              required
+              autofocus
+              placeholder="Ingrese su usuario"
+              class="block w-full rounded-xl border-2 border-slate-200 bg-white px-10 py-3 text-[15px] font-medium text-slate-800 placeholder-slate-400 outline-none transition focus:border-brandA focus:ring-4 focus:ring-brandA/10"
+            />
+          </div>
+        </div>
+
+        <!-- Password -->
+        <div>
+          <label
+            for="password"
+            class="block text-sm font-semibold text-slate-700 mb-2"
+          >
+            Contraseña
+          </label>
+
+          <div class="relative">
+            <span
+              class="absolute left-3 top-1/2 -translate-y-1/2 text-xl select-none text-slate-400"
+              aria-hidden="true"
+            >🔒</span>
+
+            <input
+              type="password"
+              id="password"
+              name="password"
+              required
+              placeholder="Ingrese su contraseña"
+              class="block w-full rounded-xl border-2 border-slate-200 bg-white px-10 py-3 text-[15px] font-medium text-slate-800 placeholder-slate-400 outline-none transition focus:border-brandA focus:ring-4 focus:ring-brandA/10"
+            />
+          </div>
+        </div>
+
+        <!-- Botón -->
+        <button
+          type="submit"
+          class="w-full inline-flex items-center justify-center rounded-xl bg-gradient-to-br from-brandA to-brandB text-white font-semibold text-base py-3 shadow-lg shadow-brandA/30 hover:shadow-xl hover:shadow-brandA/40 active:scale-[.99] transition"
+        >
+          Iniciar Sesión
+        </button>
+      </form>
+
+      <!-- Credenciales default -->
+      <div class="mt-8 rounded-lg border-l-4 border-amber-500 bg-amber-50 px-4 py-4 text-[13px] leading-relaxed">
+        <div class="text-amber-800 font-semibold text-xs flex items-center gap-2 uppercase tracking-wide">
+          <span class="text-base leading-none">⚠️</span>
+          <span>Primera vez</span>
+        </div>
+
+        <div class="mt-3 text-amber-900 space-y-1">
+          <p><span class="font-semibold">Usuario:</span> <code class="font-mono text-[12px] bg-white/60 px-1 rounded">admin</code></p>
+          <p><span class="font-semibold">Contraseña:</span> <code class="font-mono text-[12px] bg-white/60 px-1 rounded">admin123</code></p>
+        </div>
+
+        <p class="mt-3 text-[11px] text-amber-800/90 font-medium flex items-start gap-2">
+          <span class="text-lg leading-none">⚡</span>
+          <span>Cambia estas credenciales después del primer ingreso.</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="bg-slate-50 text-center text-[12px] text-slate-500 px-6 py-4">
+      © 2025 WhatsApp Bot Admin. Todos los derechos reservados.
+    </footer>
+  </main>
+
+  <!-- Animación simple -->
+  <style>
+    @keyframes fadeIn {
+      from { opacity:0; transform:translateY(-10px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+  </style>
+</body>
+</html>

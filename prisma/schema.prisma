@@ -1,0 +1,403 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // relación inversa con InternalNote
+  notes InternalNote[]
+
+  @@map("admins")
+}
+
+model Contact {
+  id              String           @id @default(uuid())
+  phoneNumber     String           @unique @map("phone_number") // E.164 sin '+'
+  billysId        String?          @unique @map("billys_id")    // Ej: "51987654321@c.us"
+  name            String?
+  dni             String?          @unique
+  ruc             String?          @unique
+  companyName     String?          @map("company_name")         // LEGACY: empresa principal rápida para UI
+  state           String           @default("NEW")
+  isBlocked       Boolean          @default(false) @map("is_blocked")
+  humanTakeoverAt DateTime?        @map("human_takeover_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  // Conversaciones histórico (por phoneNumber)
+  conversations ConversationHistory[]
+
+  // Multiempresa
+  companies ContactCompany[]
+
+  @@map("contacts")
+}
+
+model Company {
+  id        String           @id @default(uuid())
+  ruc       String           @unique
+  name      String
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  contacts  ContactCompany[]
+
+  @@map("companies")
+}
+
+model ContactCompany {
+  id         String   @id @default(uuid())
+  contactId  String   @map("contact_id")
+  companyId  String   @map("company_id")
+  role       String?  // "TI", "Compras", "Gerente", etc.
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, companyId]) // No repetir misma empresa con el mismo contacto
+  @@index([contactId])
+  @@index([companyId])
+  @@map("contact_companies")
+}
+
+model BlockedNumber {
+  id         String   @id @default(uuid())
+  identifier String   @unique
+  type       String
+  reason     String?
+  blockedAt  DateTime @default(now()) @map("blocked_at")
+
+  @@map("blocked_numbers")
+}
+
+model ConversationHistory {
+  id          String   @id @default(uuid())
+  phoneNumber String   @map("phone_number")
+  role        String
+  content     String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relación por phoneNumber, no por id
+  contact Contact @relation(fields: [phoneNumber], references: [phoneNumber])
+
+  @@index([phoneNumber, createdAt])
+  @@map("conversation_history")
+}
+
+model SystemVariable {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("system_variables")
+}
+
+/**
+ * ================================
+ * TABLA DE CONFIGURACIÓN UNIFICADA
+ * ================================
+ */
+model Configuration {
+  id          String   @id @default(uuid())
+  category    String // "gemini", "odoo", "external_api", "system", "company"
+  key         String
+  value       String?
+  isEncrypted Boolean  @default(false) @map("is_encrypted")
+  description String?
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // para where: { category_key: { category, key } }
+  @@unique([category, key], name: "category_key")
+  @@map("configurations")
+}
+
+/**
+ * ================================
+ * CALENDARIO (FERIADOS Y EVENTOS)
+ * ================================
+ */
+model CalendarEvent {
+  id          String   @id @default(uuid())
+  title       String
+  date        DateTime @db.Date
+  type        String // "holiday", "special_event", "closure"
+  description String?
+  isRecurring Boolean  @default(false) @map("is_recurring")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([date, type, title])
+  @@index([date])
+  @@map("calendar_events")
+}
+
+/**
+ * ================================
+ * HORARIOS DE TRABAJO
+ * ================================
+ */
+model WorkingHours {
+  id         String   @id @default(uuid())
+  dayOfWeek  Int      @map("day_of_week") // 0=Domingo, 1=Lunes, ..., 6=Sábado
+  isWorkday  Boolean  @default(true) @map("is_workday")
+  openTime   String?  @map("open_time")   // "08:30"
+  closeTime  String?  @map("close_time")  // "18:30"
+  breakStart String?  @map("break_start") // "13:00"
+  breakEnd   String?  @map("break_end")   // "14:00"
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([dayOfWeek])
+  @@map("working_hours")
+}
+
+/**
+ * =========================================
+ * DEPARTAMENTOS / ÁREAS (enrutamiento)
+ * =========================================
+ */
+model Department {
+  id          String   @id @default(uuid())
+  name        String   @unique // "Ventas", "Soporte", etc.
+  description String?
+  phoneNumber String?  @map("phone_number")
+  email       String?
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  keywords DepartmentKeyword[]
+  contacts DepartmentContact[]
+
+  @@map("departments")
+}
+
+model DepartmentKeyword {
+  id           String   @id @default(uuid())
+  departmentId String   @map("department_id")
+  keyword      String   // "soporte", "comprar", "factura"
+  priority     Int      @default(1)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([departmentId, keyword])
+  @@index([departmentId])
+  @@map("department_keywords")
+}
+
+model DepartmentContact {
+  id           String   @id @default(uuid())
+  departmentId String   @map("department_id")
+  name         String
+  phoneNumber  String   @map("phone_number")
+  role         String?  // "Vendedor Senior", "Técnico Especializado"
+  isActive     Boolean  @default(true) @map("is_active")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@index([departmentId])
+  @@map("department_contacts")
+}
+
+/**
+ * ================================
+ * PRODUCTOS / SERVICIOS
+ * ================================
+ */
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  category    String   // "Impresora", "Tóner", "Servicio", "Alquiler"
+  description String?
+  price       Float?
+  imageUrl    String?  @map("image_url")
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  keywords ProductKeyword[]
+
+  @@index([category])
+  @@map("products")
+}
+
+model ProductKeyword {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  keyword   String   // "hp laserjet", "toner negro", "alquiler mensual"
+  createdAt DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, keyword])
+  @@index([productId])
+  @@map("product_keywords")
+}
+
+/**
+ * ================================
+ * RESPUESTAS AUTOMÁTICAS (FAQs)
+ * ================================
+ */
+model AutoResponse {
+  id        String   @id @default(uuid())
+  trigger   String   // "horario", "precio", "ubicación"
+  response  String   @db.Text
+  isActive  Boolean  @default(true) @map("is_active")
+  priority  Int      @default(1)
+  category  String?  // "info", "support", "sales"
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([trigger])
+  @@map("auto_responses")
+}
+
+/**
+ * ================================
+ * AUTOMATION / WORKFLOWS
+ * ================================
+ */
+model AutomationRule {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  trigger     String   // "keyword_match", "time_based", "no_response"
+  condition   String   @db.Text // JSON
+  action      String   // "send_message", "create_ticket", "assign_to_department"
+  actionData  String   @db.Text // JSON
+  isActive    Boolean  @default(true) @map("is_active")
+  priority    Int      @default(1) @map("priority")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("automation_rules")
+}
+
+/**
+ * ================================
+ * MÉTRICAS Y ANÁLISIS
+ * ================================
+ */
+model ConversationMetric {
+  id              String   @id @default(uuid())
+  date            DateTime @db.Date
+  totalMessages   Int      @default(0) @map("total_messages")
+  uniqueContacts  Int      @default(0) @map("unique_contacts")
+  newContacts     Int      @default(0) @map("new_contacts")
+  serviceRequests Int      @default(0) @map("service_requests")
+  salesInquiries  Int      @default(0) @map("sales_inquiries")
+  humanTakeovers  Int      @default(0) @map("human_takeovers")
+  avgResponseTime Float?   @map("avg_response_time") // En segundos
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([date])
+  @@map("conversation_metrics")
+}
+
+/**
+ * ================================
+ * ETIQUETAS / TAGS
+ * ================================
+ */
+model Tag {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  color       String?  // HEX
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  conversations ConversationTag[]
+
+  @@map("tags")
+}
+
+model ConversationTag {
+  id          String   @id @default(uuid())
+  phoneNumber String   @map("phone_number")
+  tagId       String   @map("tag_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([phoneNumber, tagId])
+  @@index([phoneNumber])
+  @@index([tagId])
+  @@map("conversation_tags")
+}
+
+/**
+ * ================================
+ * PLANTILLAS DE MENSAJES
+ * ================================
+ */
+model MessageTemplate {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  content   String   @db.Text
+  category  String   // "greeting", "followup", "closing", "info"
+  variables String?  @db.Text // JSON con variables disponibles
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("message_templates")
+}
+
+/**
+ * ================================
+ * NOTAS INTERNAS
+ * ================================
+ */
+model InternalNote {
+  id          String   @id @default(uuid())
+  phoneNumber String   @map("phone_number")
+  adminId     String   @map("admin_id")
+  note        String   @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  admin Admin @relation(fields: [adminId], references: [id])
+
+  @@index([phoneNumber])
+  @@index([adminId])
+  @@map("internal_notes")
+}
+
+model ApiKey {
+  id          String    @id @default(uuid())
+  name        String    // "Odoo Production", "Sistema Facturación", "App Mobile"
+  key         String    @unique // La clave generada
+  description String?   // Descripción del uso
+  isActive    Boolean   @default(true) @map("is_active")
+  lastUsedAt  DateTime? @map("last_used_at")
+  expiresAt   DateTime? @map("expires_at") // Opcional: fecha de expiración
+  createdBy   String?   @map("created_by") // ID del admin que la creó
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([key])
+  @@index([isActive])
+  @@map("api_keys")
+}

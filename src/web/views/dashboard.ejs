@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title><%= title %> - WhatsApp Bot Admin</title>
+
+  <!-- Fuente + Tailwind -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] },
+          colors: {
+            primary: { DEFAULT: '#1e3a8a', 600: '#1e3a8a', 700:'#1e40af' },
+          },
+          boxShadow: {
+            soft: '0 10px 25px -10px rgba(0,0,0,.15)',
+          }
+        }
+      },
+      darkMode: 'media'
+    }
+  </script>
+
+  <!-- Animaciones -->
+  <script src="https://unpkg.com/@motionone/dom/dist/motion.min.js"></script>
+  <!-- Iconos -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    @media (prefers-reduced-motion: reduce){
+      *{
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+    /* Estado activo del menú lateral */
+    .sidebar-link-active {
+      background-color: rgba(255,255,255,.12);
+      color:#fff !important;
+      font-weight:600;
+    }
+  </style>
+</head>
+<body class="h-full bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100">
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-3 focus:py-2 focus:rounded-lg shadow">
+    Saltar al contenido
+  </a>
+
+  <%
+    // Helpers / Defaults
+    const s = (typeof stats === 'object' && stats) ? stats : {};
+    const rc = Array.isArray(recentContacts) ? recentContacts : [];
+    const rp = Array.isArray(recentProducts) ? recentProducts : [];
+    const ws = (typeof whatsappStatus === 'object' && whatsappStatus) ? whatsappStatus : { connected:false, hasQR:false };
+
+    const nf = new Intl.NumberFormat('es-PE');
+    const df = new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' });
+    function fmtNum(v){ return nf.format(Number(v || 0)); }
+    function fmtDate(d){ try { return df.format(new Date(d)); } catch { return '-'; } }
+    function isActive(p){ return (page === p || (!page && p==='dashboard')) ? 'sidebar-link-active' : ''; }
+  %>
+
+  <div class="min-h-screen w-full flex relative">
+
+    <!-- Overlay móvil -->
+    <div id="mobile-sidebar-overlay"
+         class="fixed inset-0 bg-black/40 z-40 opacity-0 pointer-events-none transition-opacity md:hidden">
+    </div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar"
+           class="w-[280px] flex flex-col bg-gradient-to-b from-primary to-primary-700 text-white shadow-soft
+                  fixed inset-y-0 left-0 z-50 -translate-x-full transition-transform md:translate-x-0 md:relative md:flex"
+           role="navigation"
+           aria-label="Menú principal">
+
+      <div class="px-5 py-6 border-b border-white/10 bg-white/5 backdrop-blur flex items-center justify-between">
+        <h2 class="text-xl font-semibold flex items-center gap-2">
+          <i data-lucide="bot" class="w-5 h-5"></i> Bot Admin
+        </h2>
+
+        <!-- Botón cerrar sidebar móvil -->
+        <button id="close-sidebar-btn"
+                class="md:hidden inline-flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 p-2"
+                aria-label="Cerrar menú">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <nav class="py-4 flex-1 overflow-y-auto">
+        <ul class="px-2 space-y-1 text-[15px] leading-5">
+          <li>
+            <a href="/"
+               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('dashboard') %>"
+               aria-current="<%= isActive('dashboard') ? 'page' : false %>">
+              <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+              <span>Dashboard</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="/contacts"
+               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('contacts') %>"
+               aria-current="<%= isActive('contacts') ? 'page' : false %>">
+              <i data-lucide="users" class="w-5 h-5"></i>
+              <span>Contactos</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="/conversations"
+               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('conversations') %>"
+               aria-current="<%= isActive('conversations') ? 'page' : false %>">
+              <i data-lucide="message-circle" class="w-5 h-5"></i>
+              <span>Conversaciones</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="/blocked"
+               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('blocked') %>"
+               aria-current="<%= isActive('blocked') ? 'page' : false %>">
+              <i data-lucide="ban" class="w-5 h-5"></i>
+              <span>Bloqueados</span>
+            </a>
+          </li>
+
+          <li><div class="my-3 h-px bg-white/10"></div></li>
+
+          <li>
+            <a href="/calendar"
+               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('calendar') %>"
+               aria-current="<%= isActive('calendar') ? 'page' : false %>">
+              <i data-lucide="calendar" class="w-5 h-5"></i>
+              <span>Calendario</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="/working-hours"
+               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('working-hours') %>"
+               aria-current="<%= isActive('working-hours') ? 'page' : false %>">
+              <i data-lucide="clock" class="w-5 h-5"></i>
+              <span>Horarios</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="/admin-users"
+               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('admin-users') %>"
+               aria-current="<%= isActive('admin-users') ? 'page' : false %>">
+              <i data-lucide="shield" class="w-5 h-5"></i>
+              <span>Usuarios Admin</span>
+            </a>
+          </li>
+
+          <li><div class="my-3 h-px bg-white/10"></div></li>
+
+          <li>
+            <a href="/settings"
+               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('settings') %>"
+               aria-current="<%= isActive('settings') ? 'page' : false %>">
+              <i data-lucide="settings" class="w-5 h-5"></i>
+              <span>Configuración</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="/departments"
+               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('departments') %>"
+               aria-current="<%= isActive('departments') ? 'page' : false %>">
+              <i data-lucide="building-2" class="w-5 h-5"></i>
+              <span>Departamentos</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="/products"
+               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('products') %>"
+               aria-current="<%= isActive('products') ? 'page' : false %>">
+              <i data-lucide="package" class="w-5 h-5"></i>
+              <span>Productos</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="/auto-responses"
+               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('auto-responses') %>"
+               aria-current="<%= isActive('auto-responses') ? 'page' : false %>">
+              <i data-lucide="robot" class="w-5 h-5"></i>
+              <span>Auto-respuestas</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="/tags"
+               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('tags') %>"
+               aria-current="<%= isActive('tags') ? 'page' : false %>">
+              <i data-lucide="tags" class="w-5 h-5"></i>
+              <span>Tags</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="/templates"
+               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('templates') %>"
+               aria-current="<%= isActive('templates') ? 'page' : false %>">
+              <i data-lucide="file-text" class="w-5 h-5"></i>
+              <span>Plantillas</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="/metrics"
+               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('metrics') %>"
+               aria-current="<%= isActive('metrics') ? 'page' : false %>">
+              <i data-lucide="line-chart" class="w-5 h-5"></i>
+              <span>Métricas</span>
+            </a>
+          </li>
+        </ul>
+      </nav>
+
+      <div class="mt-auto p-4 bg-white/5 border-t border-white/10">
+        <div class="rounded-xl bg-white/10 p-3">
+          <div class="text-[11px] uppercase tracking-wide opacity-80">Sesión activa</div>
+          <div class="font-semibold text-sm mt-1 flex items-center gap-2">
+            <i data-lucide="user" class="w-4 h-4"></i> <%= user || 'Admin' %>
+          </div>
+        </div>
+        <form method="POST" action="/auth/logout" class="mt-3">
+          <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <% } %>
+          <button type="submit"
+                  class="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-red-500/20 hover:bg-red-500/30 text-white py-2.5 text-sm font-medium transition">
+            <i data-lucide="log-out" class="w-4 h-4"></i> Cerrar sesión
+          </button>
+        </form>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main id="main-content" class="flex-1 p-4 md:p-8 md:ml-0 ml-0 w-full md:w-auto">
+
+      <!-- Header con estado WhatsApp -->
+      <header class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+
+        <div class="flex items-start justify-between w-full md:w-auto">
+          <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
+            <i data-lucide="bar-chart-3" class="w-7 h-7 text-primary"></i>
+            Dashboard
+          </h1>
+
+          <!-- Botón abrir sidebar móvil -->
+          <button id="open-sidebar-btn"
+                  class="md:hidden inline-flex items-center justify-center rounded-lg text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 p-2 shadow-soft"
+                  aria-label="Abrir menú">
+            <i data-lucide="menu" class="w-6 h-6"></i>
+          </button>
+        </div>
+
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-end w-full md:w-auto">
+          <%
+            const status = ws.connected ? 'connected' : 'disconnected';
+            const label  = 'WhatsApp';
+            const value  = ws.connected ? 'Conectado' : (ws.hasQR ? 'Esperando escaneo' : 'Desconectado');
+            const icon   = ws.connected ? 'check-circle' : (ws.hasQR ? 'hourglass' : 'x-circle');
+            const badgeClass = ws.connected
+              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+              : ws.hasQR
+                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300';
+          %>
+
+          <!-- Estado WhatsApp -->
+          <div class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium <%= badgeClass %>">
+            <i data-lucide="<%= icon %>" class="w-4 h-4"></i>
+            <span class="uppercase tracking-wide text-xs opacity-80"><%= label %></span>
+            <span class="font-semibold"><%= value %></span>
+          </div>
+
+          <% if (ws.connected && ws.botNumber) { %>
+            <div class="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2">
+              <i data-lucide="phone" class="w-4 h-4"></i>
+              <span><%= ws.botNumber %></span>
+            </div>
+          <% } %>
+
+          <% if (!ws.connected && ws.hasQR) { %>
+            <a href="/auth/qr"
+               class="inline-flex items-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 text-sm font-semibold transition shadow-soft">
+              <i data-lucide="qrcode" class="w-4 h-4"></i> Ver QR
+            </a>
+          <% } %>
+
+          <% if (ws.connected) { %>
+            <button
+              class="inline-flex items-center gap-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-2 text-sm font-semibold transition shadow-soft"
+              onclick="disconnectWhatsApp()">
+              <i data-lucide="plug-x" class="w-4 h-4"></i>
+              <span>Desconectar WhatsApp</span>
+            </button>
+          <% } %>
+        </div>
+      </header>
+
+      <!-- KPIs -->
+      <section aria-label="Indicadores principales"
+               class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 mb-6">
+        <% const cards = [
+          { t:'Total Contactos', n:fmtNum(s.totalContacts), l:'Usuarios en el sistema', c:'from-blue-500 to-indigo-500' },
+          { t:'Registrados', n:fmtNum(s.registeredContacts), l:'Con DNI y RUC', c:'from-emerald-500 to-teal-500' },
+          { t:'Bloqueados', n:fmtNum(s.blockedCount), l:'Números/grupos bloqueados', c:'from-rose-500 to-pink-500' },
+          { t:'Mensajes Totales', n:fmtNum(s.totalMessages), l:'En historial completo', c:'from-violet-500 to-fuchsia-500' },
+          { t:'Mensajes Hoy', n:fmtNum(s.messagesToday), l:'Conversaciones activas', c:'from-orange-500 to-amber-500' },
+          { t:'Human Takeover', n:fmtNum(s.humanTakeovers), l:'Intervenciones activas', c:'from-yellow-500 to-lime-500' },
+          { t:'Departamentos', n:fmtNum(s.departmentsCount), l:'Áreas operativas', c:'from-sky-500 to-cyan-500' },
+          { t:'Productos', n:fmtNum(s.productsCount), l:'Catálogo activo', c:'from-indigo-500 to-blue-500' },
+          { t:'Auto-respuestas', n:fmtNum(s.autoResponsesCount), l:'Flows y reglas', c:'from-teal-500 to-emerald-500' },
+          { t:'Tags', n:fmtNum(s.tagsCount), l:'Segmentación', c:'from-cyan-500 to-sky-500' },
+          { t:'Plantillas', n:fmtNum(s.templatesCount), l:'Mensajes predefinidos', c:'from-fuchsia-500 to-violet-500' },
+        ]; %>
+
+        <% cards.forEach((card) => { %>
+          <div
+            class="group relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 shadow-soft p-5 border border-slate-100/70 dark:border-white/5"
+            data-card
+          >
+            <div class="absolute inset-0 opacity-10 bg-gradient-to-br <%= card.c %>"></div>
+            <div class="relative">
+              <h3 class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 font-medium"><%= card.t %></h3>
+              <div class="mt-2 text-4xl font-extrabold text-slate-900 dark:text-white" data-kpi><%= card.n %></div>
+              <p class="mt-1 text-sm text-slate-500 dark:text-slate-400"><%= card.l %></p>
+            </div>
+          </div>
+        <% }) %>
+      </section>
+
+      <!-- Accesos rápidos -->
+      <section aria-label="Accesos rápidos"
+               class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        <button
+          type="button"
+          onclick="safeNavigate('/products/new')"
+          class="text-left relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 p-5 border border-slate-100/70 dark:border-white/5 shadow-soft hover:shadow-lg transition group w-full">
+          <div class="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-gradient-to-br from-indigo-500 to-blue-500 opacity-10"></div>
+          <div class="relative flex items-start gap-3">
+            <div class="rounded-xl bg-indigo-50 dark:bg-indigo-900/40 p-2">
+              <i data-lucide="plus-square" class="w-5 h-5 text-indigo-600 dark:text-indigo-300"></i>
+            </div>
+            <div>
+              <h3 class="font-semibold">Nuevo producto</h3>
+              <p class="text-sm text-slate-500 dark:text-slate-400">Crear ítem de catálogo</p>
+            </div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onclick="safeNavigate('/auto-responses/new')"
+          class="text-left relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 p-5 border border-slate-100/70 dark:border-white/5 shadow-soft hover:shadow-lg transition group w-full">
+          <div class="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 opacity-10"></div>
+          <div class="relative flex items-start gap-3">
+            <div class="rounded-xl bg-emerald-50 dark:bg-emerald-900/40 p-2">
+              <i data-lucide="sparkles" class="w-5 h-5 text-emerald-600 dark:text-emerald-300"></i>
+            </div>
+            <div>
+              <h3 class="font-semibold">Nueva auto-respuesta</h3>
+              <p class="text-sm text-slate-500 dark:text-slate-400">Regla o flujo</p>
+            </div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onclick="safeNavigate('/templates/new')"
+          class="text-left relative overflow-hidden rounded-2xl bg-white dark:bg-slate-900 p-5 border border-slate-100/70 dark:border-white/5 shadow-soft hover:shadow-lg transition group w-full">
+          <div class="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-gradient-to-br from-fuchsia-500 to-violet-500 opacity-10"></div>
+          <div class="relative flex items-start gap-3">
+            <div class="rounded-xl bg-fuchsia-50 dark:bg-fuchsia-900/40 p-2">
+              <i data-lucide="file-plus" class="w-5 h-5 text-fuchsia-600 dark:text-fuchsia-300"></i>
+            </div>
+            <div>
+              <h3 class="font-semibold">Nueva plantilla</h3>
+              <p class="text-sm text-slate-500 dark:text-slate-400">Mensaje predefinido</p>
+            </div>
+          </div>
+        </button>
+      </section>
+
+      <!-- Contactos recientes -->
+      <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-soft border border-slate-100/70 dark:border-white/5">
+        <div class="px-6 py-4 border-b border-slate-100/70 dark:border-white/5 flex items-center justify-between">
+          <h2 class="text-lg font-bold flex items-center gap-2">
+            <i data-lucide="contact" class="w-5 h-5 text-primary"></i> Contactos recientes
+          </h2>
+        </div>
+
+        <% if (rc.length > 0) { %>
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-slate-50/60 dark:bg-white/5 text-slate-500 dark:text-slate-400 uppercase text-xs tracking-wide">
+                <tr>
+                  <th class="text-left px-6 py-3">Teléfono</th>
+                  <th class="text-left px-6 py-3">Nombre</th>
+                  <th class="text-left px-6 py-3">Empresa</th>
+                  <th class="text-left px-6 py-3">Estado</th>
+                  <th class="text-left px-6 py-3">Registro</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100/70 dark:divide-white/5">
+                <% rc.forEach(contact => { %>
+                  <tr class="hover:bg-slate-50/50 dark:hover:bg-white/5 transition">
+                    <td class="px-6 py-3 font-semibold"><%= contact.phoneNumber %></td>
+                    <td class="px-6 py-3"><%= contact.name || '-' %></td>
+                    <td class="px-6 py-3"><%= contact.companyName || '-' %></td>
+                    <td class="px-6 py-3">
+                      <% if (contact.state === 'REGISTERED') { %>
+                        <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                          <i data-lucide="check" class="w-3.5 h-3.5"></i> Registrado
+                        </span>
+                      <% } else if (contact.state === 'WAITING_DNI' || contact.state === 'WAITING_RUC') { %>
+                        <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                          <i data-lucide="hourglass" class="w-3.5 h-3.5"></i> Esperando
+                        </span>
+                      <% } else { %>
+                        <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
+                          <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Nuevo
+                        </span>
+                      <% } %>
+                    </td>
+                    <td class="px-6 py-3">
+                      <% const d = new Date(contact.createdAt); %>
+                      <time datetime="<%= d.toISOString() %>"><%= fmtDate(d) %></time>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } else { %>
+          <div class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+            <p class="text-sm">Sin contactos recientes. Los nuevos contactos aparecerán aquí.</p>
+          </div>
+        <% } %>
+      </section>
+
+      <!-- Productos recientes -->
+      <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-soft border border-slate-100/70 dark:border-white/5 mt-6">
+        <div class="px-6 py-4 border-b border-slate-100/70 dark:border-white/5 flex items-center justify-between">
+          <h2 class="text-lg font-bold flex items-center gap-2">
+            <i data-lucide="package-plus" class="w-5 h-5 text-primary"></i> Productos recientes
+          </h2>
+        </div>
+
+        <% if (rp.length > 0) { %>
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-slate-50/60 dark:bg-white/5 text-slate-500 dark:text-slate-400 uppercase text-xs tracking-wide">
+                <tr>
+                  <th class="text-left px-6 py-3">SKU</th>
+                  <th class="text-left px-6 py-3">Nombre</th>
+                  <th class="text-left px-6 py-3">Estado</th>
+                  <th class="text-left px-6 py-3">Creado</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100/70 dark:divide-white/5">
+                <% rp.forEach(p => { %>
+                  <tr class="hover:bg-slate-50/50 dark:hover:bg-white/5 transition">
+                    <td class="px-6 py-3 font-semibold"><%= p.sku || '-' %></td>
+                    <td class="px-6 py-3"><%= p.name || '-' %></td>
+                    <td class="px-6 py-3">
+                      <% if (p.isActive) { %>
+                        <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                          <i data-lucide="check" class="w-3.5 h-3.5"></i> Activo
+                        </span>
+                      <% } else { %>
+                        <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
+                          <i data-lucide="x" class="w-3.5 h-3.5"></i> Inactivo
+                        </span>
+                      <% } %>
+                    </td>
+                    <td class="px-6 py-3">
+                      <% const d = new Date(p.createdAt); %>
+                      <time datetime="<%= d.toISOString() %>"><%= fmtDate(d) %></time>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } else { %>
+          <div class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+            <p class="text-sm">Sin productos recientes. Los últimos productos aparecerán aquí.</p>
+          </div>
+        <% } %>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- JS: icons + animaciones + sidebar móvil + acciones -->
+  <script>
+    // Iconos
+    window.lucide && lucide.createIcons();
+
+    // Sidebar móvil
+    (function(){
+      const sidebar   = document.getElementById('sidebar');
+      const overlay   = document.getElementById('mobile-sidebar-overlay');
+      const openBtn   = document.getElementById('open-sidebar-btn');
+      const closeBtn  = document.getElementById('close-sidebar-btn');
+
+      function openSidebar(){
+        sidebar.classList.remove('-translate-x-full');
+        overlay.classList.remove('opacity-0','pointer-events-none');
+      }
+      function closeSidebar(){
+        sidebar.classList.add('-translate-x-full');
+        overlay.classList.add('opacity-0','pointer-events-none');
+      }
+
+      if (openBtn)  openBtn.addEventListener('click', openSidebar);
+      if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
+      if (overlay)  overlay.addEventListener('click', closeSidebar);
+    })();
+
+    // Botón desconectar WhatsApp
+    async function disconnectWhatsApp() {
+      if (!confirm('¿Seguro que deseas desconectar WhatsApp y volver a escanear con otro número?')) {
+        return;
+      }
+      try {
+        const res = await fetch('/auth/logout-whatsapp', {
+          method: 'POST',
+          credentials: 'include'
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          alert('Error al desconectar:\n' + text);
+          return;
+        }
+
+        // intentar leer json para mostrar mensaje bonito si existe
+        let msg = 'WhatsApp desconectado';
+        const ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) {
+          const data = await res.json();
+          if (data && data.message) msg = data.message;
+        }
+        alert('✅ ' + msg);
+
+        // recargar dashboard para actualizar estado
+        window.location.reload();
+      } catch (err) {
+        alert('❌ Error al desconectar WhatsApp');
+        console.error(err);
+      }
+    }
+
+    // Navegación "segura" de accesos rápidos
+    async function safeNavigate(url) {
+      try {
+        // probamos HEAD primero para saber si existe
+        const res = await fetch(url, {
+          method: 'HEAD',
+          credentials: 'include'
+        });
+
+        if (res.ok) {
+          window.location.href = url;
+        } else if (res.status === 404) {
+          alert('Esta función aún no está lista en el panel (' + url + ').');
+        } else if (res.status === 401 || res.status === 403) {
+          alert('No autorizado. Inicia sesión de nuevo.');
+          window.location.href = '/auth/login';
+        } else {
+          alert('No se pudo abrir: ' + url + ' (status ' + res.status + ')');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error al intentar navegar a ' + url);
+      }
+    }
+
+    // Animaciones suaves si no hay reduced motion
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!prefersReduced && window.motion) {
+      const cards = document.querySelectorAll('[data-card]');
+      cards.forEach((el, i) => {
+        motion.animate(
+          el,
+          { opacity:[0,1], transform:['translateY(8px)','translateY(0)'] },
+          { duration:.4, delay:i*0.04, easing:'ease-out' }
+        );
+        el.addEventListener('pointerenter', () =>
+          motion.animate(el, { transform: ['translateY(0)','translateY(-2px)'] }, { duration:.18, easing:'ease-out' })
+        );
+        el.addEventListener('pointerleave', () =>
+          motion.animate(el, { transform: ['translateY(-2px)','translateY(0)'] }, { duration:.18, easing:'ease-out' })
+        );
+      });
+
+      // Count up KPIs
+      const nums = document.querySelectorAll('[data-kpi]');
+      nums.forEach(node => {
+        const finalText = node.textContent.trim().replace(/\./g,'').replace(/,/g,'');
+        const finalVal = Number(finalText.replace(/\D/g,'')) || Number(finalText) || 0;
+        if (!Number.isFinite(finalVal) || finalVal <= 0) return;
+
+        let current = 0;
+        const steps = 24;
+        const stepVal = Math.max(1, Math.floor(finalVal / steps));
+        const nf = new Intl.NumberFormat('es-PE');
+
+        const tick = () => {
+          current = Math.min(finalVal, current + stepVal);
+          node.textContent = nf.format(current);
+          if (current < finalVal) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+    }
+  </script>
+</body>
+</html>

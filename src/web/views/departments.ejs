@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title><%= title %> - WhatsApp Bot Admin</title>
+
+  <!-- Fuente + Tailwind -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'media',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter','ui-sans-serif','system-ui'] },
+          colors: {
+            primary: { DEFAULT:'#1e3a8a', 700:'#1e40af' }
+          },
+          boxShadow: {
+            soft:'0 10px 25px -10px rgba(0,0,0,.15)'
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Motion / Icons -->
+  <script src="https://unpkg.com/@motionone/dom/dist/motion.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    @media (prefers-reduced-motion: reduce){
+      *{
+        animation-duration:.001ms!important;
+        animation-iteration-count:1!important;
+        transition-duration:.001ms!important;
+        scroll-behavior:auto!important
+      }
+    }
+    /* overlay móvil para sidebar */
+    .sidebar-overlay {
+      opacity:0;
+      pointer-events:none;
+      transition:opacity .2s;
+    }
+    .sidebar-overlay.active {
+      opacity:1;
+      pointer-events:auto;
+    }
+    /* sidebar móvil visible */
+    .sidebar-panel {
+      transform:translateX(-100%);
+      transition:transform .2s;
+    }
+    .sidebar-panel.active {
+      transform:translateX(0);
+    }
+  </style>
+</head>
+<body class="h-full bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100">
+  <a
+    href="#main"
+    class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-3 focus:py-2 focus:rounded-lg shadow"
+  >Saltar al contenido</a>
+
+  <%
+    function navClass(id) {
+      const isHere = page === id;
+      const base = "group flex items-center gap-3 rounded-lg px-3 py-2 text-[15px] leading-5 font-medium transition";
+      const on  = "bg-white/10 text-white";
+      const off = "text-white/90 hover:text-white hover:bg-white/10";
+      return base + " " + (isHere ? on : off);
+    }
+  %>
+
+  <!-- Overlay sidebar móvil -->
+  <div
+    id="mobileSidebarOverlay"
+    class="fixed inset-0 bg-black/50 z-40 sidebar-overlay md:hidden"
+  ></div>
+
+  <div class="min-h-screen w-full flex relative">
+
+    <!-- SIDEBAR -->
+    <aside
+      id="sidebarPanel"
+      class="sidebar-panel fixed inset-y-0 left-0 z-50 w-[280px] flex flex-col bg-gradient-to-b from-primary to-primary-700 text-white shadow-soft md:static md:translate-x-0 md:flex"
+      role="navigation"
+      aria-label="Menú principal"
+    >
+      <!-- header sidebar -->
+      <div class="px-5 py-6 border-b border-white/10 bg-white/5 backdrop-blur flex items-center justify-between">
+        <h2 class="text-xl font-semibold flex items-center gap-2">
+          <i data-lucide="bot" class="w-5 h-5"></i>
+          Bot Admin
+        </h2>
+
+        <!-- cerrar sidebar en mobile -->
+        <button
+          id="sidebarCloseBtn"
+          class="md:hidden inline-flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 p-2"
+          aria-label="Cerrar menú"
+        >
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- nav -->
+      <nav class="py-4 flex-1 overflow-y-auto">
+        <ul class="px-2 space-y-1">
+          <li>
+            <a href="/" class="<%= navClass('dashboard') %>">
+              <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+              <span>Dashboard</span>
+            </a>
+          </li>
+          <li>
+            <a href="/contacts" class="<%= navClass('contacts') %>">
+              <i data-lucide="users" class="w-5 h-5"></i>
+              <span>Contactos</span>
+            </a>
+          </li>
+          <li>
+            <a href="/conversations" class="<%= navClass('conversations') %>">
+              <i data-lucide="message-circle" class="w-5 h-5"></i>
+              <span>Conversaciones</span>
+            </a>
+          </li>
+          <li>
+            <a href="/blocked" class="<%= navClass('blocked') %>">
+              <i data-lucide="ban" class="w-5 h-5"></i>
+              <span>Bloqueados</span>
+            </a>
+          </li>
+
+          <li><div class="my-3 h-px bg-white/10"></div></li>
+
+          <li>
+            <a href="/calendar" class="<%= navClass('calendar') %>">
+              <i data-lucide="calendar" class="w-5 h-5"></i>
+              <span>Calendario</span>
+            </a>
+          </li>
+          <li>
+            <a href="/working-hours" class="<%= navClass('working-hours') %>">
+              <i data-lucide="clock" class="w-5 h-5"></i>
+              <span>Horarios</span>
+            </a>
+          </li>
+
+          <li><div class="my-3 h-px bg-white/10"></div></li>
+
+          <li>
+            <a href="/departments" class="<%= navClass('departments') %>">
+              <i data-lucide="building-2" class="w-5 h-5"></i>
+              <span>Departamentos</span>
+            </a>
+          </li>
+          <li>
+            <a href="/products" class="<%= navClass('products') %>">
+              <i data-lucide="package" class="w-5 h-5"></i>
+              <span>Productos</span>
+            </a>
+          </li>
+          <li>
+            <a href="/auto-responses" class="<%= navClass('auto-responses') %>">
+              <i data-lucide="bot" class="w-5 h-5"></i>
+              <span>Respuestas Auto</span>
+            </a>
+          </li>
+          <li>
+            <a href="/tags" class="<%= navClass('tags') %>">
+              <i data-lucide="tag" class="w-5 h-5"></i>
+              <span>Etiquetas</span>
+            </a>
+          </li>
+          <li>
+            <a href="/templates" class="<%= navClass('templates') %>">
+              <i data-lucide="file-text" class="w-5 h-5"></i>
+              <span>Plantillas</span>
+            </a>
+          </li>
+          <li>
+            <a href="/metrics" class="<%= navClass('metrics') %>">
+              <i data-lucide="line-chart" class="w-5 h-5"></i>
+              <span>Métricas</span>
+            </a>
+          </li>
+
+          <li><div class="my-3 h-px bg-white/10"></div></li>
+
+          <li>
+            <a href="/admin-users" class="<%= navClass('admin-users') %>">
+              <i data-lucide="shield" class="w-5 h-5"></i>
+              <span>Usuarios Admin</span>
+            </a>
+          </li>
+          <li>
+            <a href="/settings" class="<%= navClass('settings') %>">
+              <i data-lucide="settings" class="w-5 h-5"></i>
+              <span>Configuración</span>
+            </a>
+          </li>
+        </ul>
+      </nav>
+
+      <!-- footer sidebar -->
+      <div class="mt-auto p-4 bg-white/5 border-t border-white/10">
+        <div class="rounded-xl bg-white/10 p-3">
+          <div class="text-[11px] uppercase tracking-wide opacity-80">Sesión activa</div>
+          <div class="font-semibold text-sm mt-1 flex items-center gap-2">
+            <i data-lucide="user" class="w-4 h-4"></i>
+            <span><%= user || 'Admin' %></span>
+          </div>
+        </div>
+
+        <form method="POST" action="/auth/logout" class="mt-3">
+          <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <% } %>
+
+          <button
+            type="submit"
+            class="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-red-500/20 hover:bg-red-500/30 text-white py-2.5 text-sm font-semibold transition"
+          >
+            <i data-lucide="log-out" class="w-4 h-4"></i>
+            Cerrar sesión
+          </button>
+        </form>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main id="main" class="flex-1 p-4 md:p-8">
+      <!-- ENCABEZADO -->
+      <header class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div class="flex items-start justify-between w-full md:w-auto">
+          <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
+            <i data-lucide="building-2" class="w-7 h-7 text-primary"></i>
+            <span>Departamentos</span>
+          </h1>
+
+          <!-- botón abrir sidebar móvil -->
+          <button
+            id="sidebarOpenBtn"
+            class="md:hidden inline-flex items-center justify-center rounded-lg text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 p-2 shadow-soft"
+            aria-label="Abrir menú"
+          >
+            <i data-lucide="menu" class="w-6 h-6"></i>
+          </button>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <button
+            class="inline-flex items-center gap-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 text-sm font-semibold transition shadow-soft"
+            onclick="openDeptModal()"
+          >
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            Nuevo departamento
+          </button>
+        </div>
+      </header>
+
+      <!-- FILTROS -->
+      <section class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-soft p-6 mb-6">
+        <div class="grid gap-3 md:grid-cols-5 items-center">
+          <!-- búsqueda -->
+          <div class="relative md:col-span-2">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input
+              id="q"
+              type="text"
+              placeholder="Buscar por nombre, descripción o teléfono…"
+              class="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-sky-100 dark:focus:ring-sky-900/40"
+            />
+          </div>
+
+          <!-- estado -->
+          <select
+            id="statusFilter"
+            class="rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-sm px-2.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-slate-200 dark:focus:ring-slate-700"
+          >
+            <option value="">Estado: Todos</option>
+            <option value="true">Activos</option>
+            <option value="false">Inactivos</option>
+          </select>
+
+          <!-- orden -->
+          <select
+            id="sortBy"
+            class="rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-sm px-2.5 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-slate-200 dark:focus:ring-slate-700"
+          >
+            <option value="name-asc">Orden: Nombre A–Z</option>
+            <option value="name-desc">Orden: Nombre Z–A</option>
+            <option value="status">Orden: Estado</option>
+          </select>
+
+          <div class="text-sm text-slate-500 dark:text-slate-400 hidden md:block">
+            <span id="count">0</span> departamentos
+          </div>
+        </div>
+      </section>
+
+      <!-- LISTA DEPARTAMENTOS -->
+      <section id="list" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></section>
+
+      <% if (!(departments && departments.length)) { %>
+        <div class="mt-6 text-center text-slate-500 dark:text-slate-400">
+          No hay departamentos. Crea el primero.
+        </div>
+      <% } %>
+    </main>
+  </div>
+
+  <!-- MODAL DEPARTAMENTO -->
+  <div id="deptModal" class="fixed inset-0 z-[100] hidden" aria-hidden="true">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" data-backdrop></div>
+
+    <div
+      class="relative mx-auto mt-16 w-[92%] max-w-lg rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-100 dark:border-white/10 overflow-hidden flex flex-col"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="deptTitle"
+    >
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-white/10 flex items-center justify-between">
+        <h2 id="deptTitle" class="text-lg font-semibold text-slate-900 dark:text-white">Departamento</h2>
+        <button
+          class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition text-slate-500 dark:text-slate-300"
+          data-close
+          aria-label="Cerrar"
+        >
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form class="p-6 space-y-4" id="deptForm">
+        <input type="hidden" id="dept-id" />
+
+        <div>
+          <label for="dept-name" class="block text-sm font-semibold mb-1 text-slate-800 dark:text-slate-200">
+            Nombre *
+          </label>
+          <input
+            id="dept-name"
+            type="text"
+            required
+            aria-required="true"
+            class="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-3 py-2"
+          />
+        </div>
+
+        <div>
+          <label for="dept-description" class="block text-sm font-semibold mb-1 text-slate-800 dark:text-slate-200">
+            Descripción
+          </label>
+          <textarea
+            id="dept-description"
+            class="w-full min-height-[80px] rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-3 py-2 min-h-[80px]"
+          ></textarea>
+        </div>
+
+        <div class="grid gap-3 grid-cols-2">
+          <div>
+            <label for="dept-phone" class="block text-sm font-semibold mb-1 text-slate-800 dark:text-slate-200">
+              Teléfono
+            </label>
+            <input
+              id="dept-phone"
+              type="text"
+              placeholder="51999888777"
+              class="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-3 py-2"
+            />
+          </div>
+
+          <div>
+            <label for="dept-active" class="block text-sm font-semibold mb-1 text-slate-800 dark:text-slate-200">
+              Estado
+            </label>
+            <select
+              id="dept-active"
+              class="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-3 py-2"
+            >
+              <option value="true">Activo</option>
+              <option value="false">Inactivo</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            class="px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/10 transition"
+            data-close
+          >Cancelar</button>
+
+          <button
+            type="submit"
+            class="inline-flex items-center gap-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 text-sm font-semibold transition shadow-soft"
+          >
+            <i data-lucide="save" class="w-4 h-4"></i>
+            Guardar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL KEYWORD -->
+  <div id="kwModal" class="fixed inset-0 z-[100] hidden" aria-hidden="true">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" data-backdrop></div>
+
+    <div
+      class="relative mx-auto mt-24 w-[92%] max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-100 dark:border-white/10 overflow-hidden flex flex-col"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="kwTitle"
+    >
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-white/10 flex items-center justify-between">
+        <h2 id="kwTitle" class="text-lg font-semibold text-slate-900 dark:text-white">Agregar palabra clave</h2>
+        <button
+          class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition text-slate-500 dark:text-slate-300"
+          data-close
+          aria-label="Cerrar"
+        >
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form class="p-6 space-y-4" id="kwForm">
+        <input type="hidden" id="kw-dept-id" />
+
+        <div>
+          <label class="block text-sm font-semibold mb-1 text-slate-800 dark:text-slate-200">
+            Palabra clave *
+          </label>
+          <input
+            id="kw-text"
+            type="text"
+            required
+            aria-required="true"
+            placeholder="soporte, ventas, alquiler"
+            class="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-3 py-2"
+          />
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold mb-1 text-slate-800 dark:text-slate-200">
+            Prioridad
+          </label>
+          <input
+            id="kw-priority"
+            type="number"
+            value="1"
+            min="1"
+            class="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-3 py-2"
+          />
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            class="px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/10 transition"
+            data-close
+          >Cancelar</button>
+
+          <button
+            type="submit"
+            class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold transition shadow-soft"
+          >
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            Agregar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CONTACTO -->
+  <div id="ctModal" class="fixed inset-0 z-[100] hidden" aria-hidden="true">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" data-backdrop></div>
+
+    <div
+      class="relative mx-auto mt-24 w-[92%] max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-100 dark:border-white/10 overflow-hidden flex flex-col"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ctTitle"
+    >
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-white/10 flex items-center justify-between">
+        <h2 id="ctTitle" class="text-lg font-semibold text-slate-900 dark:text-white">Agregar contacto</h2>
+        <button
+          class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 transition text-slate-500 dark:text-slate-300"
+          data-close
+          aria-label="Cerrar"
+        >
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form class="p-6 space-y-4" id="ctForm">
+        <input type="hidden" id="ct-dept-id" />
+
+        <div>
+          <label class="block text-sm font-semibold mb-1 text-slate-800 dark:text-slate-200">
+            Nombre *
+          </label>
+          <input
+            id="ct-name"
+            type="text"
+            required
+            aria-required="true"
+            class="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-3 py-2"
+          />
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold mb-1 text-slate-800 dark:text-slate-200">
+            Teléfono *
+          </label>
+          <input
+            id="ct-phone"
+            type="text"
+            required
+            aria-required="true"
+            placeholder="51999888777"
+            class="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-3 py-2"
+          />
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold mb-1 text-slate-800 dark:text-slate-200">
+            Cargo
+          </label>
+          <input
+            id="ct-role"
+            type="text"
+            placeholder="Vendedor Senior"
+            class="w-full rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-slate-900 dark:text-white px-3 py-2"
+          />
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            class="px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/10 transition"
+            data-close
+          >Cancelar</button>
+
+          <button
+            type="submit"
+            class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold transition shadow-soft"
+          >
+            <i data-lucide="user-plus" class="w-4 h-4"></i>
+            Agregar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CONFIRMACIÓN -->
+  <div id="confirmModal" class="fixed inset-0 z-[110] hidden" aria-hidden="true">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" data-backdrop></div>
+
+    <div
+      class="relative mx-auto mt-24 w-[92%] max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-100 dark:border-white/10 overflow-hidden flex flex-col"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="px-6 py-5">
+        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-1">
+          ¿Confirmar?
+        </h3>
+        <p id="confirmText" class="text-sm text-slate-600 dark:text-slate-300">
+          Esta acción no se puede deshacer.
+        </p>
+
+        <div class="mt-5 flex justify-end gap-2">
+          <button
+            class="px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/10 transition"
+            data-cancel
+          >Cancelar</button>
+
+          <button
+            class="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition shadow-soft"
+            data-ok
+          >Aceptar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOASTS -->
+  <div
+    id="toasts"
+    class="fixed bottom-4 right-4 z-[200] space-y-2 pointer-events-none"
+  ></div>
+
+  <script>
+    // ===== Utils básicos
+    window.lucide && lucide.createIcons();
+
+    const $  = (s, c = document) => c.querySelector(s);
+    const $$ = (s, c = document) => Array.from(c.querySelectorAll(s));
+
+    const debounce = (fn, ms = 250) => {
+      let t;
+      return (...a) => {
+        clearTimeout(t);
+        t = setTimeout(() => fn(...a), ms);
+      };
+    };
+
+    // Toast
+    const toast = (msg, type='info') => {
+      const wrap = $('#toasts');
+      const d = document.createElement('div');
+      const pal = {
+        info:'bg-sky-600',
+        ok:'bg-emerald-600',
+        warn:'bg-amber-600',
+        error:'bg-rose-600'
+      };
+      d.className = `pointer-events-auto text-white rounded-lg px-3 py-2 shadow-lg flex items-center gap-2 ${pal[type]||pal.info}`;
+      d.innerHTML = `
+        <i data-lucide="${type==='ok'?'check-circle':type==='warn'?'alert-triangle':type==='error'?'x-octagon':'info'}"
+           class="w-4 h-4"></i>
+        <span class="text-sm">${msg}</span>
+      `;
+      wrap.appendChild(d);
+      lucide.createIcons();
+
+      setTimeout(() => {
+        d.style.opacity = '0';
+        d.style.transform = 'translateY(6px)';
+        d.style.transition = 'all .25s';
+        setTimeout(() => d.remove(), 250);
+      }, 2200);
+    };
+
+    // ===== Datos del servidor
+    const RAW   = <%- JSON.stringify(departments || []) %>;
+    const DEPTS = RAW.map(d => ({
+      ...d,
+      nameL:(d.name||'').toLowerCase(),
+      descL:(d.description||'').toLowerCase(),
+      phoneL:(d.phoneNumber||'').toLowerCase()
+    }));
+
+    // ===== Render helpers
+    const list  = $('#list');
+    const count = $('#count');
+
+    function keywordTag(k){
+      return `
+        <span class="inline-flex items-center gap-1 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded-md px-2 py-1 text-xs font-semibold">
+          ${k.keyword}
+          <button
+            class="ml-1 text-rose-600 hover:text-rose-700"
+            title="Eliminar"
+            onclick="removeKeyword('${k.id}')"
+          >
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+          </button>
+        </span>
+      `;
+    }
+
+    function contactTag(c){
+      return `
+        <div class="rounded-md bg-indigo-50 dark:bg-indigo-900/20 text-indigo-800 dark:text-indigo-200 px-3 py-2 text-xs">
+          <div class="font-bold flex items-center gap-1">
+            <i data-lucide="user" class="w-3.5 h-3.5"></i>
+            ${c.name}
+          </div>
+          <div class="opacity-75">
+            📞 ${c.phoneNumber}${c.role?` · ${c.role}`:''}
+          </div>
+          <button
+            class="mt-1 text-rose-600 hover:text-rose-700"
+            onclick="removeContact('${c.id}')"
+          >
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      `;
+    }
+
+    function card(d){
+      const badge = d.isActive
+        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+        : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300';
+
+      return `
+        <article class="group rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 p-5 shadow-sm hover:shadow-md transition">
+          <header class="flex items-start justify-between gap-2">
+            <div>
+              <h3 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                ${d.name}
+                <span class="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold ${badge}">
+                  ${d.isActive ? 'Activo' : 'Inactivo'}
+                </span>
+              </h3>
+
+              <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                ${d.description || 'Sin descripción'}
+              </p>
+
+              ${d.phoneNumber
+                ? `<div class="mt-1 text-sm text-slate-500 dark:text-slate-400">📞 ${d.phoneNumber}</div>`
+                : ''
+              }
+            </div>
+
+            <div class="flex gap-2 shrink-0">
+              <button
+                class="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-white/10 px-3 py-1.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/10 transition"
+                onclick="openDeptModal('${d.id}')"
+              >
+                <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                Editar
+              </button>
+
+              <button
+                class="inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-xs transition shadow-soft"
+                onclick="askDeleteDept('${d.id}')"
+              >
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                Eliminar
+              </button>
+            </div>
+          </header>
+
+          <section class="mt-4">
+            <div class="text-[13px] text-slate-500 dark:text-slate-400 mb-1">
+              🔑 Palabras clave
+            </div>
+
+            <div class="flex flex-wrap gap-2 items-center">
+              ${(d.keywords || []).map(keywordTag).join('')}
+
+              <button
+                class="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300 hover:underline text-xs font-semibold"
+                onclick="openKwModal('${d.id}')"
+              >
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                Agregar
+              </button>
+            </div>
+          </section>
+
+          <section class="mt-4">
+            <div class="text-[13px] text-slate-500 dark:text-slate-400 mb-1">
+              👥 Contactos
+            </div>
+
+            <div class="flex flex-wrap gap-2 items-start">
+              ${(d.contacts || []).map(contactTag).join('')}
+
+              <button
+                class="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300 hover:underline text-xs font-semibold"
+                onclick="openCtModal('${d.id}')"
+              >
+                <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
+                Agregar
+              </button>
+            </div>
+          </section>
+        </article>
+      `;
+    }
+
+    // ===== Filtros
+    function applyFilters(){
+      const q    = ($('#q')?.value || '').toLowerCase().trim();
+      const st   = $('#statusFilter')?.value || '';
+      const sort = $('#sortBy')?.value || 'name-asc';
+
+      let data = DEPTS.filter(d => {
+        const hit  = !q || d.nameL.includes(q) || d.descL.includes(q) || d.phoneL.includes(q);
+        const pass = !st || String(d.isActive) === st;
+        return hit && pass;
+      });
+
+      data.sort((a,b)=>{
+        if (sort === 'name-asc')  return a.name.localeCompare(b.name);
+        if (sort === 'name-desc') return b.name.localeCompare(a.name) * -1;
+        if (sort === 'status') {
+          // activos primero
+          if (a.isActive === b.isActive) return a.name.localeCompare(b.name);
+          return a.isActive ? -1 : 1;
+        }
+        return 0;
+      });
+
+      list.innerHTML = data.map(card).join('');
+      if (count) count.textContent = data.length;
+
+      window.lucide && lucide.createIcons();
+
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && window.motion){
+        motion.animate(
+          $$('#list article'),
+          { opacity:[0,1], transform:['translateY(8px)','translateY(0)'] },
+          {
+            duration:.28,
+            delay:(i)=>i*0.02,
+            easing:'ease-out'
+          }
+        );
+      }
+    }
+
+    // ===== Modal infra
+    function setupModal(modalId) {
+      const modal  = document.getElementById(modalId);
+      const dialog = modal.querySelector('[role="dialog"]');
+      const backdropEls = $$('[data-backdrop]', modal);
+      const closeEls    = $$('[data-close]', modal);
+
+      let lastFocus = null;
+
+      function open() {
+        lastFocus = document.activeElement;
+        modal.classList.remove('hidden');
+        dialog.setAttribute('tabindex','-1');
+        dialog.focus();
+        document.addEventListener('keydown', escHandler);
+      }
+
+      function close() {
+        modal.classList.add('hidden');
+        document.removeEventListener('keydown', escHandler);
+        if (lastFocus) lastFocus.focus();
+      }
+
+      function escHandler(e){
+        if (e.key === 'Escape') close();
+      }
+
+      backdropEls.forEach(el => {
+        el.addEventListener('click', close);
+      });
+      closeEls.forEach(el => {
+        el.addEventListener('click', close);
+      });
+
+      return { open, close };
+    }
+
+    const deptM    = setupModal('deptModal');
+    const kwM      = setupModal('kwModal');
+    const ctM      = setupModal('ctModal');
+    const confirmM = setupModal('confirmModal');
+
+    // ===== Departamento CRUD
+    function openDeptModal(id='') {
+      $('#deptTitle').textContent = id
+        ? '✏️ Editar departamento'
+        : '➕ Nuevo departamento';
+
+      $('#dept-id').value           = '';
+      $('#dept-name').value         = '';
+      $('#dept-description').value  = '';
+      $('#dept-phone').value        = '';
+      $('#dept-active').value       = 'true';
+
+      if (id) {
+        fetch(`/departments/api/${id}`)
+          .then(r => r.json())
+          .then(d => {
+            $('#dept-id').value          = d.id;
+            $('#dept-name').value        = d.name || '';
+            $('#dept-description').value = d.description || '';
+            $('#dept-phone').value       = d.phoneNumber || '';
+            $('#dept-active').value      = d.isActive ? 'true' : 'false';
+            deptM.open();
+          })
+          .catch(() => toast('Error al cargar','error'));
+        return;
+      }
+
+      deptM.open();
+    }
+
+    document.getElementById('deptForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const id   = $('#dept-id').value;
+      const data = {
+        name:         $('#dept-name').value,
+        description:  $('#dept-description').value,
+        phoneNumber:  $('#dept-phone').value,
+        isActive:     $('#dept-active').value === 'true'
+      };
+
+      try {
+        const res = await fetch(id
+          ? `/departments/api/${id}`
+          : '/departments/api',
+          {
+            method: id ? 'PUT' : 'POST',
+            headers: { 'Content-Type':'application/json' },
+            body: JSON.stringify(data)
+          }
+        );
+
+        if (res.ok) {
+          toast('Departamento guardado','ok');
+          setTimeout(() => location.reload(), 600);
+        } else {
+          toast('No se pudo guardar','error');
+        }
+      } catch {
+        toast('Error al guardar','error');
+      }
+    });
+
+    function askDeleteDept(id){
+      $('#confirmText').textContent = '¿Eliminar este departamento? Esta acción no se puede deshacer.';
+      confirmM.open();
+
+      const okBtn     = $('[data-ok]',     document.getElementById('confirmModal'));
+      const cancelBtn = $('[data-cancel]', document.getElementById('confirmModal'));
+
+      const cleanup = () => {
+        okBtn.onclick = null;
+        cancelBtn.onclick = null;
+      };
+
+      okBtn.onclick = async () => {
+        cleanup();
+        try {
+          const res = await fetch(`/departments/api/${id}`, { method:'DELETE' });
+          if (res.ok) {
+            toast('Departamento eliminado','ok');
+            setTimeout(() => location.reload(), 600);
+          } else {
+            toast('No se pudo eliminar','error');
+          }
+        } catch {
+          toast('Error al eliminar','error');
+        }
+      };
+
+      cancelBtn.onclick = () => {
+        cleanup();
+        confirmM.open().close?.(); // fallback por si open() devolviera obj; re-cerramos manual
+        document.getElementById('confirmModal').classList.add('hidden');
+      };
+    }
+
+    // ===== Keywords
+    function openKwModal(deptId){
+      $('#kw-dept-id').value = deptId;
+      $('#kw-text').value    = '';
+      $('#kw-priority').value= '1';
+      kwM.open();
+    }
+
+    document.getElementById('kwForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const deptId = $('#kw-dept-id').value;
+      const data   = {
+        keyword:  $('#kw-text').value,
+        priority: parseInt($('#kw-priority').value || '1', 10)
+      };
+
+      try {
+        const res = await fetch(`/departments/api/${deptId}/keywords`, {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (res.ok) {
+          toast('Keyword agregada','ok');
+          setTimeout(() => location.reload(), 600);
+        } else {
+          toast('No se pudo agregar','error');
+        }
+      } catch {
+        toast('Error','error');
+      }
+    });
+
+    async function removeKeyword(id){
+      $('#confirmText').textContent = '¿Eliminar esta palabra clave?';
+      confirmM.open();
+
+      const okBtn     = $('[data-ok]',     document.getElementById('confirmModal'));
+      const cancelBtn = $('[data-cancel]', document.getElementById('confirmModal'));
+
+      const cleanup = () => {
+        okBtn.onclick = null;
+        cancelBtn.onclick = null;
+      };
+
+      okBtn.onclick = async () => {
+        cleanup();
+        try {
+          const res = await fetch(`/departments/api/keywords/${id}`, { method:'DELETE' });
+          if (res.ok) {
+            toast('Keyword eliminada','ok');
+            setTimeout(() => location.reload(), 600);
+          } else {
+            toast('No se pudo eliminar','error');
+          }
+        } catch {
+          toast('Error','error');
+        }
+      };
+
+      cancelBtn.onclick = () => {
+        cleanup();
+        confirmM.open().close?.();
+        document.getElementById('confirmModal').classList.add('hidden');
+      };
+    }
+
+    // ===== Contactos
+    function openCtModal(deptId){
+      $('#ct-dept-id').value = deptId;
+      $('#ct-name').value    = '';
+      $('#ct-phone').value   = '';
+      $('#ct-role').value    = '';
+      ctM.open();
+    }
+
+    document.getElementById('ctForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const deptId = $('#ct-dept-id').value;
+      const data   = {
+        name:        $('#ct-name').value,
+        phoneNumber: $('#ct-phone').value,
+        role:        $('#ct-role').value
+      };
+
+      try {
+        const res = await fetch(`/departments/api/${deptId}/contacts`, {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (res.ok) {
+          toast('Contacto agregado','ok');
+          setTimeout(() => location.reload(), 600);
+        } else {
+          toast('No se pudo agregar','error');
+        }
+      } catch {
+        toast('Error','error');
+      }
+    });
+
+    async function removeContact(id){
+      $('#confirmText').textContent = '¿Eliminar este contacto?';
+      confirmM.open();
+
+      const okBtn     = $('[data-ok]',     document.getElementById('confirmModal'));
+      const cancelBtn = $('[data-cancel]', document.getElementById('confirmModal'));
+
+      const cleanup = () => {
+        okBtn.onclick = null;
+        cancelBtn.onclick = null;
+      };
+
+      okBtn.onclick = async () => {
+        cleanup();
+        try {
+          const res = await fetch(`/departments/api/contacts/${id}`, { method:'DELETE' });
+          if (res.ok) {
+            toast('Contacto eliminado','ok');
+            setTimeout(() => location.reload(), 600);
+          } else {
+            toast('No se pudo eliminar','error');
+          }
+        } catch {
+          toast('Error','error');
+        }
+      };
+
+      cancelBtn.onclick = () => {
+        cleanup();
+        confirmM.open().close?.();
+        document.getElementById('confirmModal').classList.add('hidden');
+      };
+    }
+
+    // ===== Filtros (input / selects)
+    $('#q')?.addEventListener('input', debounce(applyFilters, 150));
+    $('#statusFilter')?.addEventListener('change', applyFilters);
+    $('#sortBy')?.addEventListener('change', applyFilters);
+
+    // ===== Sidebar móvil
+    const sidebarPanel        = document.getElementById('sidebarPanel');
+    const mobileSidebarOverlay= document.getElementById('mobileSidebarOverlay');
+    const sidebarOpenBtn      = document.getElementById('sidebarOpenBtn');
+    const sidebarCloseBtn     = document.getElementById('sidebarCloseBtn');
+
+    function openSidebar() {
+      sidebarPanel.classList.add('active');
+      mobileSidebarOverlay.classList.add('active');
+    }
+    function closeSidebar() {
+      sidebarPanel.classList.remove('active');
+      mobileSidebarOverlay.classList.remove('active');
+    }
+
+    sidebarOpenBtn?.addEventListener('click', openSidebar);
+    sidebarCloseBtn?.addEventListener('click', closeSidebar);
+    mobileSidebarOverlay?.addEventListener('click', closeSidebar);
+
+    // ===== Init
+    document.addEventListener('DOMContentLoaded', () => {
+      applyFilters();
+      window.lucide && lucide.createIcons();
+
+      // animar header / filtros suave
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && window.motion){
+        $$('header.rounded-2xl, section.rounded-2xl').forEach((el,i)=>{
+          motion.animate(
+            el,
+            { opacity:[0,1], transform:['translateY(8px)','translateY(0)'] },
+            { duration:.35, delay:i*0.03, easing:'ease-out' }
+          );
+        });
+      }
+    });
+  </script>
+</body>
+</html>
