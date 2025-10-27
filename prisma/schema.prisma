@@ -45,16 +45,71 @@ model Contact {
 }
 
 model Company {
-  id        String           @id @default(uuid())
-  ruc       String           @unique
-  name      String
-  createdAt DateTime         @default(now()) @map("created_at")
-  updatedAt DateTime         @updatedAt @map("updated_at")
+  id          String   @id @default(uuid())
+  // Documento puede ser RUC (11) o DNI (8)
+  tipoDoc     String   @default("RUC") @map("tipo_doc") // "RUC" | "DNI"
+  numeroDoc   String   @unique @map("numero_doc")       // ruc o dni
+  razonSocial String   @map("razon_social")             // razón social o nombre completo
+  estadoSunat String?  @map("estado_sunat")             // "ACTIVO", "HABIDO", "BAJA", o "PERSONA NATURAL", etc.
 
-  contacts  ContactCompany[]
+  // Campos legacy que ya usas:
+  // - ruc: podemos mantenerlo como columna opcional por compatibilidad.
+  // - name: podemos mapearlo a razónSocial para no romper vistas viejas.
+  ruc         String?  @unique
+  name        String   @default("")  // <- deprecado, mantenlo vivo para no romper código antiguo
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt      @map("updated_at")
+
+  // Relaciones
+  contacts    ContactCompany[]  // EXISTENTE: contactos "del chat" asociados a la empresa
+  branches    Branch[]          // NUEVO: sucursales físicas
 
   @@map("companies")
 }
+model Branch {
+  id            String   @id @default(uuid())
+  companyId     String   @map("company_id")
+
+  nombre        String                          // "Sede Principal", "Sucursal Arequipa"
+  direccion     String
+  distrito      String?
+  provincia     String?
+  departamento  String?                         // Región
+  referencia    String?                         // "2do piso oficina 5"
+  telefono      String?
+  email         String?
+  isActive      Boolean  @default(true) @map("is_active")
+
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt      @map("updated_at")
+
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contacts      BranchContact[]
+
+  @@index([companyId])
+  @@map("branches")
+}
+model BranchContact {
+  id         String   @id @default(uuid())
+  branchId   String   @map("branch_id")
+
+  nombre     String
+  cargo      String?        // "Jefe de Compras", "Soporte TI"
+  email      String?
+  celular    String?
+  whatsapp   String?
+  isActive   Boolean  @default(true) @map("is_active")
+
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt      @map("updated_at")
+
+  branch     Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId])
+  @@map("branch_contacts")
+}
+
 
 model ContactCompany {
   id         String   @id @default(uuid())

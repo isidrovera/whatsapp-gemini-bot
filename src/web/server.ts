@@ -37,6 +37,9 @@ import apiRouter from './routes/api.js';
 // Middleware de auth
 import { requireAuth } from './middleware/auth.js';
 
+//Compañias
+import companiesRouter from './routes/companies.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -157,6 +160,8 @@ app.use('/auto-responses', requireAuth, autoResponsesRouter);
 app.use('/tags', requireAuth, tagsRouter);
 app.use('/templates', requireAuth, templatesRouter);
 app.use('/metrics', requireAuth, metricsRouter);
+app.use('/companies', requireAuth, companiesRouter);
+
 
 // Gestión de API keys desde el panel interno
 app.use('/api-keys', requireAuth, apiKeysRouter);

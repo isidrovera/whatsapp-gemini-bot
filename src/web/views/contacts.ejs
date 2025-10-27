@@ -33,21 +33,11 @@
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
-    @media (prefers-reduced-motion: reduce){
-      *{
-        animation-duration: 0.001ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.001ms !important;
-        scroll-behavior: auto !important;
-      }
-    }
-
     .sidebar-link-active {
       background-color: rgba(255,255,255,.12);
       color:#fff !important;
       font-weight:600;
     }
-
     .modal {
       display: none;
       position: fixed;
@@ -64,41 +54,6 @@
       display: flex;
       align-items: flex-start;
       justify-content: center;
-    }
-
-    .form-label {
-      display:block;
-      font-size:.75rem;
-      font-weight:500;
-      color:rgb(100 116 139);
-      margin-bottom:.25rem;
-    }
-    .form-input, .form-select {
-      width:100%;
-      border-radius:.5rem;
-      border-width:2px;
-      border-color:rgb(226 232 240);
-      background-color:rgb(255 255 255);
-      color:rgb(15 23 42);
-      font-size:.875rem;
-      padding:.625rem .75rem;
-      outline:0;
-    }
-    .form-input:focus, .form-select:focus {
-      --tw-ring-offset-shadow:0 0 #0000;
-      --tw-ring-shadow:0 0 #0000;
-      border-color:rgb(99 102 241);
-    }
-    @media (prefers-color-scheme: dark){
-      .form-label {color:rgb(148 163 184);}
-      .form-input, .form-select {
-        background-color:rgb(15 23 42);
-        border-color:rgb(51 65 85);
-        color:white;
-      }
-      .form-input:focus, .form-select:focus {
-        border-color:rgb(99 102 241);
-      }
     }
   </style>
 </head>
@@ -553,23 +508,23 @@
           <input type="hidden" id="editContactId" />
 
           <div class="mb-4">
-            <label class="form-label">Teléfono</label>
-            <input id="editPhoneNumber" class="form-input" disabled />
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Teléfono</label>
+            <input id="editPhoneNumber" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors" disabled />
           </div>
 
           <div class="mb-4">
-            <label class="form-label">Nombre</label>
-            <input id="editName" class="form-input" placeholder="Nombre completo" />
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Nombre</label>
+            <input id="editName" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors" placeholder="Nombre completo" />
           </div>
 
           <div class="mb-4">
-            <label class="form-label">DNI</label>
-            <input id="editDni" class="form-input" placeholder="8 dígitos" maxlength="8" />
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">DNI</label>
+            <input id="editDni" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors" placeholder="8 dígitos" maxlength="8" />
           </div>
 
           <div class="mb-4">
-            <label class="form-label">Estado</label>
-            <select id="editState" class="form-select">
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Estado</label>
+            <select id="editState" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors cursor-pointer">
               <option value="NEW">Nuevo</option>
               <option value="WAITING_DNI">Esperando DNI</option>
               <option value="WAITING_RUC">Esperando RUC</option>
@@ -629,18 +584,18 @@
         <form id="companyForm" onsubmit="return submitAddCompany()">
           <input type="hidden" id="companiesContactId" />
           <div class="mb-4">
-            <label class="form-label">RUC</label>
-            <input id="companyRuc" class="form-input" placeholder="11 dígitos" maxlength="11" required />
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">RUC</label>
+            <input id="companyRuc" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors" placeholder="11 dígitos" maxlength="11" required />
           </div>
 
           <div class="mb-4">
-            <label class="form-label">Razón Social</label>
-            <input id="companyName" class="form-input" placeholder="Ej. COPIER COMPANY S.A.C." required />
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Razón Social</label>
+            <input id="companyName" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors" placeholder="Ej. COPIER COMPANY S.A.C." required />
           </div>
 
           <div class="mb-4">
-            <label class="form-label">Rol / Área (opcional)</label>
-            <input id="companyRole" class="form-input" placeholder="Compras, Sistemas, etc." />
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Rol / Área (opcional)</label>
+            <input id="companyRole" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors" placeholder="Compras, Sistemas, etc." />
           </div>
 
           <div class="mb-4 flex items-center gap-2">
@@ -1251,24 +1206,55 @@
      * ---------------------------------- */
     async function exportExcel() {
       try {
-        const res = await fetch('/contacts/api-export');
-        const data = await res.json();
+        // Mostrar loading en el botón
+        const btn = event.target.closest('button');
+        const originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 mr-1 animate-spin"></i>Exportando...';
+        lucide.createIcons();
 
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const res = await fetch('/contacts/api-export');
+        
+        if (!res.ok) {
+          throw new Error('Error al exportar contactos');
+        }
+
+        // Convertir la respuesta a blob (archivo binario Excel)
+        const blob = await res.blob();
+        
+        // Crear URL temporal del blob
         const url = URL.createObjectURL(blob);
 
+        // Crear enlace temporal y hacer click para descargar
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'contactos-export.json';
+        a.download = `contactos-${new Date().toISOString().split('T')[0]}.xlsx`;
         document.body.appendChild(a);
         a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
+        
+        // Limpiar
+        setTimeout(() => {
+          a.remove();
+          URL.revokeObjectURL(url);
+        }, 100);
 
-        alert('✅ Export generado (contactos-export.json)');
+        // Restaurar botón
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+        lucide.createIcons();
+
+        alert('✅ Contactos exportados exitosamente como archivo Excel');
       } catch (err) {
         console.error(err);
-        alert('❌ Error al exportar');
+        
+        // Restaurar botón en caso de error
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalHTML;
+          lucide.createIcons();
+        }
+        
+        alert('❌ Error al exportar contactos');
       }
     }
 

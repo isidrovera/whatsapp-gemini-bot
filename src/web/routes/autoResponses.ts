@@ -1,12 +1,29 @@
-// src/web/routes/autoResponses.ts
 import express from 'express';
 import * as autoResponseModel from '../../models/autoResponse.js';
 import { logger } from '../../utils/logger.js';
 
 const router = express.Router();
 
-// Ver página de respuestas automáticas
-router.get('/', async (req, res) => {
+// ---------- FORM NUEVA AUTO-RESPUESTA ----------
+// Página para crear nueva respuesta automática
+router.get('/new', async (_req, res) => {
+  try {
+    // podrías precargar categorías sugeridas si tienes
+    res.render('autoResponse_new', { 
+      title: 'Nueva Auto-respuesta',
+    });
+  } catch (error) {
+    logger.error('Error loading new auto-response form:', error);
+    res.status(500).send('Error loading new auto-response form');
+  }
+});
+
+router.head('/new', (_req, res) => {
+  res.status(200).end();
+});
+
+// ---------- LISTA ----------
+router.get('/', async (_req, res) => {
   try {
     const responses = await autoResponseModel.getAll();
     res.render('autoResponses', { 
@@ -19,8 +36,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// API: Obtener todas las respuestas
-router.get('/api', async (req, res) => {
+// ---------- API: todas ----------
+router.get('/api', async (_req, res) => {
   try {
     const responses = await autoResponseModel.getAll();
     res.json(responses);
@@ -30,7 +47,7 @@ router.get('/api', async (req, res) => {
   }
 });
 
-// API: Obtener respuesta por ID
+// ---------- API: una por ID ----------
 router.get('/api/:id', async (req, res) => {
   try {
     const response = await autoResponseModel.findById(req.params.id);
@@ -44,7 +61,7 @@ router.get('/api/:id', async (req, res) => {
   }
 });
 
-// API: Crear respuesta
+// ---------- API: crear ----------
 router.post('/api', async (req, res) => {
   try {
     const { trigger, response, isActive, priority, category } = req.body;
@@ -68,7 +85,7 @@ router.post('/api', async (req, res) => {
   }
 });
 
-// API: Actualizar respuesta
+// ---------- API: actualizar ----------
 router.put('/api/:id', async (req, res) => {
   try {
     const { trigger, response, isActive, priority, category } = req.body;
@@ -88,7 +105,7 @@ router.put('/api/:id', async (req, res) => {
   }
 });
 
-// API: Eliminar respuesta
+// ---------- API: eliminar ----------
 router.delete('/api/:id', async (req, res) => {
   try {
     await autoResponseModel.remove(req.params.id);
@@ -99,7 +116,7 @@ router.delete('/api/:id', async (req, res) => {
   }
 });
 
-// API: Probar trigger
+// ---------- API: probar trigger ----------
 router.post('/api/test', async (req, res) => {
   try {
     const { message } = req.body;

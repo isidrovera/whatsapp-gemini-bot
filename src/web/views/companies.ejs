@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title><%= title %> - WhatsApp Bot Admin</title>
+
+  <!-- Tailwind & fuente -->
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'media',
+      theme: {
+        extend: {
+          fontFamily: { sans:['Inter','ui-sans-serif','system-ui'] },
+          boxShadow: {
+            soft:'0 10px 25px -10px rgba(0,0,0,.15)',
+          },
+          colors: {
+            primary: { DEFAULT:'#1e3a8a', 700:'#1e40af' },
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Iconos -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    @media (prefers-reduced-motion: reduce){
+      *{
+        animation-duration:.001ms!important;
+        animation-iteration-count:1!important;
+        transition-duration:.001ms!important;
+        scroll-behavior:auto!important
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 min-h-screen flex">
+  <!-- SIDEBAR (simplificada, igual que en metrics/dashboard; ajusta enlaces según tu layout real) -->
+  <aside class="hidden md:flex w-[280px] flex-col bg-gradient-to-b from-primary to-primary-700 text-white shadow-soft">
+    <div class="px-5 py-6 border-b border-white/10 bg-white/5 backdrop-blur flex items-center justify-between">
+      <h2 class="text-xl font-semibold flex items-center gap-2">
+        <i data-lucide="bot" class="w-5 h-5"></i> Bot Admin
+      </h2>
+    </div>
+
+    <nav class="py-4 flex-1 overflow-y-auto">
+      <ul class="px-2 space-y-1 text-[15px] leading-tight font-medium">
+        <li>
+          <a href="/" class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:bg-white/10 hover:text-white">
+            <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+            Dashboard
+          </a>
+        </li>
+        <li>
+          <a href="/contacts" class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:bg-white/10 hover:text-white">
+            <i data-lucide="users" class="w-5 h-5"></i>
+            Contactos
+          </a>
+        </li>
+        <li>
+          <a href="/departments" class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:bg-white/10 hover:text-white">
+            <i data-lucide="building-2" class="w-5 h-5"></i>
+            Departamentos
+          </a>
+        </li>
+        <li>
+          <a href="/companies" class="group flex items-center gap-3 rounded-lg px-3 py-2 bg-white/10 text-white">
+            <i data-lucide="building" class="w-5 h-5"></i>
+            Empresas
+          </a>
+        </li>
+        <li>
+          <a href="/products" class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:bg-white/10 hover:text-white">
+            <i data-lucide="package" class="w-5 h-5"></i>
+            Productos
+          </a>
+        </li>
+        <li>
+          <a href="/metrics" class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:bg-white/10 hover:text-white">
+            <i data-lucide="chart-line" class="w-5 h-5"></i>
+            Métricas
+          </a>
+        </li>
+      </ul>
+    </nav>
+
+    <div class="mt-auto p-4 bg-white/5 border-t border-white/10">
+      <div class="rounded-xl bg-white/10 p-3">
+        <div class="text-[11px] uppercase tracking-wide opacity-80">Sesión activa</div>
+        <div class="font-semibold text-sm mt-1 flex items-center gap-2">
+          <i data-lucide="user" class="w-4 h-4"></i> <%= user || 'Admin' %>
+        </div>
+      </div>
+      <form method="POST" action="/auth/logout" class="mt-3">
+        <button type="submit"
+          class="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-red-500/20 hover:bg-red-500/30 text-white py-2.5 text-sm font-semibold transition">
+          <i data-lucide="log-out" class="w-4 h-4"></i> Cerrar sesión
+        </button>
+      </form>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="flex-1 p-4 md:p-8">
+    <!-- Header -->
+    <header class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
+          <i data-lucide="building" class="w-7 h-7 text-primary"></i>
+          Empresas
+        </h1>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          Gestión de las empresas (RUC / Razón Social)
+        </p>
+      </div>
+
+      <button
+        class="inline-flex items-center gap-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 text-sm font-semibold transition shadow-soft"
+        onclick="openCreateModal()">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        Nueva Empresa
+      </button>
+    </header>
+
+    <% if (error) { %>
+      <div class="mb-4 rounded-lg bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 px-4 py-3 text-sm font-medium shadow-soft">
+        <%= error %>
+      </div>
+    <% } %>
+
+    <!-- Tabla -->
+    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-soft border border-slate-100/70 dark:border-white/5 overflow-x-auto">
+      <div class="px-6 py-4 border-b border-slate-100/70 dark:border-white/5 flex items-center justify-between">
+        <h2 class="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="list" class="w-5 h-5 text-primary"></i>
+          Lista de Empresas
+        </h2>
+      </div>
+
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50/60 dark:bg-white/5 text-slate-500 dark:text-slate-400 uppercase text-xs tracking-wide">
+          <tr>
+            <th class="text-left px-6 py-3">RUC</th>
+            <th class="text-left px-6 py-3">Nombre</th>
+            <th class="text-left px-6 py-3">Creación</th>
+            <th class="text-left px-6 py-3">Últ. Actualización</th>
+            <th class="text-left px-6 py-3">Acciones</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100/70 dark:divide-white/5">
+          <% if (companies && companies.length > 0) { %>
+            <% companies.forEach(c => { %>
+              <tr class="hover:bg-slate-50/50 dark:hover:bg-white/5 transition" data-row="<%= c.id %>">
+                <td class="px-6 py-3 font-semibold text-slate-800 dark:text-slate-100"><%= c.ruc %></td>
+                <td class="px-6 py-3 text-slate-700 dark:text-slate-200"><%= c.name %></td>
+                <td class="px-6 py-3 text-slate-500 dark:text-slate-400 text-xs">
+                  <%= new Date(c.createdAt).toLocaleString('es-PE') %>
+                </td>
+                <td class="px-6 py-3 text-slate-500 dark:text-slate-400 text-xs">
+                  <%= new Date(c.updatedAt).toLocaleString('es-PE') %>
+                </td>
+                <td class="px-6 py-3 text-sm">
+                  <div class="flex gap-2">
+                    <button
+                      class="inline-flex items-center gap-1 rounded-md bg-amber-500/20 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-1 text-xs font-semibold hover:bg-amber-500/30"
+                      onclick="openEditModal('<%= c.id %>','<%- c.ruc %>','<%- c.name.replace(/"/g,'&quot;') %>')">
+                      <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                      Editar
+                    </button>
+                    <button
+                      class="inline-flex items-center gap-1 rounded-md bg-rose-500/20 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 px-2 py-1 text-xs font-semibold hover:bg-rose-500/30"
+                      onclick="deleteCompany('<%= c.id %>')">
+                      <i data-lucide="trash" class="w-3.5 h-3.5"></i>
+                      Eliminar
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            <% }) %>
+          <% } else { %>
+            <tr>
+              <td colspan="5" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400 text-sm">
+                No hay empresas registradas.
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Modal Crear/Editar -->
+    <div id="company-modal" class="fixed inset-0 z-[999] hidden items-center justify-center bg-black/50 p-4">
+      <div class="w-full max-w-md rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-xl shadow-black/40 p-5">
+        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+          <i data-lucide="building" class="w-5 h-5 text-primary"></i>
+          <span id="modal-title">Nueva Empresa</span>
+        </h3>
+
+        <div class="space-y-4 text-sm">
+          <input type="hidden" id="companyId" />
+
+          <div>
+            <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">
+              RUC
+            </label>
+            <input
+              id="companyRuc"
+              type="text"
+              class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-4 focus:ring-sky-200 dark:focus:ring-sky-900/40"
+              placeholder="RUC empresa"
+            />
+          </div>
+
+          <div>
+            <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">
+              Nombre
+            </label>
+            <input
+              id="companyName"
+              type="text"
+              class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-4 focus:ring-sky-200 dark:focus:ring-sky-900/40"
+              placeholder="Razón social"
+            />
+          </div>
+        </div>
+
+        <div class="mt-6 flex items-center justify-end gap-2">
+          <button
+            class="inline-flex items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 text-xs font-semibold transition"
+            onclick="closeModal()">
+            Cancelar
+          </button>
+
+          <button
+            id="modal-save-btn"
+            class="inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 text-xs font-semibold transition shadow-soft"
+            onclick="saveCompany()">
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    window.lucide && lucide.createIcons();
+
+    const modal = document.getElementById('company-modal');
+    const companyIdEl = document.getElementById('companyId');
+    const companyRucEl = document.getElementById('companyRuc');
+    const companyNameEl = document.getElementById('companyName');
+    const modalTitleEl = document.getElementById('modal-title');
+
+    function openCreateModal() {
+      companyIdEl.value = '';
+      companyRucEl.value = '';
+      companyNameEl.value = '';
+      modalTitleEl.textContent = 'Nueva Empresa';
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function openEditModal(id, ruc, name) {
+      companyIdEl.value = id;
+      companyRucEl.value = ruc;
+      companyNameEl.value = name;
+      modalTitleEl.textContent = 'Editar Empresa';
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeModal() {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    async function saveCompany() {
+      const id = companyIdEl.value.trim();
+      const ruc = companyRucEl.value.trim();
+      const name = companyNameEl.value.trim();
+
+      if (!ruc || !name) {
+        alert('RUC y Nombre son requeridos');
+        return;
+      }
+
+      try {
+        let res;
+        if (id) {
+          // update
+          res = await fetch('/companies/api/' + encodeURIComponent(id), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ruc, name })
+          });
+        } else {
+          // create
+          res = await fetch('/companies/api', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ruc, name })
+          });
+        }
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          alert('Error guardando empresa: ' + (data.error || res.statusText));
+          return;
+        }
+
+        // refrescar página para ver cambios
+        window.location.reload();
+      } catch (err) {
+        console.error(err);
+        alert('Error de red al guardar empresa');
+      }
+    }
+
+    async function deleteCompany(id) {
+      if (!confirm('¿Eliminar esta empresa? Esta acción no se puede deshacer.')) {
+        return;
+      }
+
+      try {
+        const res = await fetch('/companies/api/' + encodeURIComponent(id), {
+          method: 'DELETE'
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          alert('Error eliminando empresa: ' + (data.error || res.statusText));
+          return;
+        }
+        window.location.reload();
+      } catch (err) {
+        console.error(err);
+        alert('Error de red al eliminar empresa');
+      }
+    }
+  </script>
+</body>
+</html>

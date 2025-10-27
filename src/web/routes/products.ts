@@ -4,7 +4,31 @@ import { logger } from '../../utils/logger.js';
 
 const router = express.Router();
 
-// Ver página de productos
+// ---------- FORM NUEVO PRODUCTO ----------
+// Página para crear producto nuevo (usada por /products/new)
+router.get('/new', async (req, res) => {
+  try {
+    const categories = await productModel.getCategories();
+    // Renderizamos una vista simple "product_new.ejs"
+    // que muestre un form básico (puedes mejorar el HTML luego)
+    res.render('product_new', {
+      title: 'Nuevo Producto',
+      categories,
+    });
+  } catch (err) {
+    logger.error('Error loading new product form:', err);
+    res.status(500).send('Error loading new product form');
+  }
+});
+
+// Para que safeNavigate() no dé 404 con HEAD
+router.head('/new', (_req, res) => {
+  // 200 OK sin body
+  res.status(200).end();
+});
+
+
+// ---------- LISTA DE PRODUCTOS ----------
 router.get('/', async (req, res) => {
   try {
     const products = await productModel.getAll();
@@ -13,7 +37,7 @@ router.get('/', async (req, res) => {
     res.render('products', { 
       title: 'Catálogo de Productos',
       products,
-      categories
+      categories,
     });
   } catch (error) {
     logger.error('Error loading products:', error);
@@ -21,7 +45,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// API: Obtener todos los productos
+
+// ---------- API GET TODOS ----------
 router.get('/api', async (req, res) => {
   try {
     const { category } = req.query;
@@ -40,8 +65,8 @@ router.get('/api', async (req, res) => {
   }
 });
 
-// API: Obtener categorías
-router.get('/api/categories', async (req, res) => {
+// ---------- API GET CATEGORÍAS ----------
+router.get('/api/categories', async (_req, res) => {
   try {
     const categories = await productModel.getCategories();
     res.json(categories);
@@ -51,7 +76,7 @@ router.get('/api/categories', async (req, res) => {
   }
 });
 
-// API: Obtener producto por ID
+// ---------- API GET POR ID ----------
 router.get('/api/:id', async (req, res) => {
   try {
     const product = await productModel.findById(req.params.id);
@@ -65,7 +90,7 @@ router.get('/api/:id', async (req, res) => {
   }
 });
 
-// API: Crear producto
+// ---------- API CREATE ----------
 router.post('/api', async (req, res) => {
   try {
     const { name, category, description, price, imageUrl, isActive, sortOrder } = req.body;
@@ -91,7 +116,7 @@ router.post('/api', async (req, res) => {
   }
 });
 
-// API: Actualizar producto
+// ---------- API UPDATE ----------
 router.put('/api/:id', async (req, res) => {
   try {
     const { name, category, description, price, imageUrl, isActive, sortOrder } = req.body;
@@ -113,7 +138,7 @@ router.put('/api/:id', async (req, res) => {
   }
 });
 
-// API: Eliminar producto
+// ---------- API DELETE ----------
 router.delete('/api/:id', async (req, res) => {
   try {
     await productModel.remove(req.params.id);
@@ -124,7 +149,7 @@ router.delete('/api/:id', async (req, res) => {
   }
 });
 
-// API: Agregar keyword
+// ---------- API ADD KEYWORD ----------
 router.post('/api/:id/keywords', async (req, res) => {
   try {
     const { keyword } = req.body;
@@ -141,7 +166,7 @@ router.post('/api/:id/keywords', async (req, res) => {
   }
 });
 
-// API: Eliminar keyword
+// ---------- API REMOVE KEYWORD ----------
 router.delete('/api/keywords/:keywordId', async (req, res) => {
   try {
     await productModel.removeKeyword(req.params.keywordId);
@@ -152,7 +177,7 @@ router.delete('/api/keywords/:keywordId', async (req, res) => {
   }
 });
 
-// API: Buscar productos por keyword
+// ---------- API SEARCH BY KEYWORD ----------
 router.get('/api/search/:query', async (req, res) => {
   try {
     const results = await productModel.searchByKeyword(req.params.query);

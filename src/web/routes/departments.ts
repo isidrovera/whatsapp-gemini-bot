@@ -150,6 +150,132 @@ router.delete('/api/:id', async (req, res) => {
     res.status(500).json({ error: 'Error deleting department', message: error?.message });
   }
 });
+// API: Agregar keyword a un departamento
+router.post('/api/:id/keywords', async (req, res) => {
+  try {
+    const departmentId = req.params.id;
+    const { keyword, priority } = req.body;
+
+    if (!keyword || keyword.trim() === '') {
+      return res.status(400).json({ error: 'keyword is required' });
+    }
+
+    const created = await departmentModel.addKeyword(
+      departmentId,
+      keyword,
+      priority ?? 1
+    );
+
+    res.json(created);
+  } catch (error) {
+    prettyLogError('/departments/api/:id/keywords POST', error);
+    logger.error('Error adding keyword', { message: error?.message, stack: error?.stack });
+
+    // Prisma unique constraint? (departmentId+keyword ya existe)
+    if (error.code === 'P2002') {
+      return res.status(409).json({ error: 'Keyword already exists for this department' });
+    }
+
+    res.status(500).json({ error: 'Error adding keyword', message: error?.message });
+  }
+});
+
+// API: Actualizar keyword
+router.put('/api/keywords/:keywordId', async (req, res) => {
+  try {
+    const { keywordId } = req.params;
+    const { keyword, priority } = req.body;
+
+    const updated = await departmentModel.updateKeyword(keywordId, {
+      keyword,
+      priority,
+    });
+
+    res.json(updated);
+  } catch (error) {
+    prettyLogError('/departments/api/keywords/:keywordId PUT', error);
+    logger.error('Error updating keyword', { message: error?.message, stack: error?.stack });
+    res.status(500).json({ error: 'Error updating keyword', message: error?.message });
+  }
+});
+
+// API: Eliminar keyword
+router.delete('/api/keywords/:keywordId', async (req, res) => {
+  try {
+    const { keywordId } = req.params;
+
+    await departmentModel.removeKeyword(keywordId);
+
+    res.json({ success: true });
+  } catch (error) {
+    prettyLogError('/departments/api/keywords/:keywordId DELETE', error);
+    logger.error('Error removing keyword', { message: error?.message, stack: error?.stack });
+    res.status(500).json({ error: 'Error removing keyword', message: error?.message });
+  }
+});
+// API: Agregar contacto a un departamento
+router.post('/api/:id/contacts', async (req, res) => {
+  try {
+    const departmentId = req.params.id;
+    const { name, phoneNumber, role, isActive, sortOrder } = req.body;
+
+    if (!name || !phoneNumber) {
+      return res.status(400).json({ error: 'name and phoneNumber are required' });
+    }
+
+    const created = await departmentModel.addContact({
+      departmentId,
+      name,
+      phoneNumber,
+      role: role || null,
+      isActive: isActive !== false, // default true
+      sortOrder: sortOrder || 0,
+    });
+
+    res.json(created);
+  } catch (error) {
+    prettyLogError('/departments/api/:id/contacts POST', error);
+    logger.error('Error adding contact', { message: error?.message, stack: error?.stack });
+    res.status(500).json({ error: 'Error adding contact', message: error?.message });
+  }
+});
+
+// API: Actualizar contacto
+router.put('/api/contacts/:contactId', async (req, res) => {
+  try {
+    const { contactId } = req.params;
+    const { name, phoneNumber, role, isActive, sortOrder } = req.body;
+
+    const updated = await departmentModel.updateContact(contactId, {
+      name,
+      phoneNumber,
+      role,
+      isActive,
+      sortOrder,
+    });
+
+    res.json(updated);
+  } catch (error) {
+    prettyLogError('/departments/api/contacts/:contactId PUT', error);
+    logger.error('Error updating contact', { message: error?.message, stack: error?.stack });
+    res.status(500).json({ error: 'Error updating contact', message: error?.message });
+  }
+});
+
+// API: Eliminar contacto
+router.delete('/api/contacts/:contactId', async (req, res) => {
+  try {
+    const { contactId } = req.params;
+
+    await departmentModel.removeContact(contactId);
+
+    res.json({ success: true });
+  } catch (error) {
+    prettyLogError('/departments/api/contacts/:contactId DELETE', error);
+    logger.error('Error removing contact', { message: error?.message, stack: error?.stack });
+    res.status(500).json({ error: 'Error removing contact', message: error?.message });
+  }
+});
 
 // Resto de rutas (toggle, sort-order, keywords, contacts, etc.)...
 // ---- For brevity you can keep your existing implementations but ensure

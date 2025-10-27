@@ -55,11 +55,13 @@
   </a>
 
   <%
-    // Helpers / Defaults
-    const s = (typeof stats === 'object' && stats) ? stats : {};
-    const rc = Array.isArray(recentContacts) ? recentContacts : [];
-    const rp = Array.isArray(recentProducts) ? recentProducts : [];
-    const ws = (typeof whatsappStatus === 'object' && whatsappStatus) ? whatsappStatus : { connected:false, hasQR:false };
+    // Helpers / Defaults (a prueba de balas)
+    const s  = (typeof stats !== 'undefined' && stats && typeof stats === 'object') ? stats : {};
+    const rc = (typeof recentContacts !== 'undefined' && Array.isArray(recentContacts)) ? recentContacts : [];
+    const rp = (typeof recentProducts !== 'undefined' && Array.isArray(recentProducts)) ? recentProducts : [];
+    const ws = (typeof whatsappStatus !== 'undefined' && whatsappStatus && typeof whatsappStatus === 'object')
+      ? whatsappStatus
+      : { connected:false, hasQR:false };
 
     const nf = new Intl.NumberFormat('es-PE');
     const df = new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' });
@@ -226,6 +228,13 @@
               <span>Métricas</span>
             </a>
           </li>
+          <li>
+            <a href="/companies"
+              class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition">
+              <i data-lucide="building" class="w-5 h-5"></i>
+              Empresas
+            </a>
+          </li>
         </ul>
       </nav>
 
@@ -316,18 +325,19 @@
       <!-- KPIs -->
       <section aria-label="Indicadores principales"
                class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 mb-6">
+
         <% const cards = [
-          { t:'Total Contactos', n:fmtNum(s.totalContacts), l:'Usuarios en el sistema', c:'from-blue-500 to-indigo-500' },
-          { t:'Registrados', n:fmtNum(s.registeredContacts), l:'Con DNI y RUC', c:'from-emerald-500 to-teal-500' },
-          { t:'Bloqueados', n:fmtNum(s.blockedCount), l:'Números/grupos bloqueados', c:'from-rose-500 to-pink-500' },
-          { t:'Mensajes Totales', n:fmtNum(s.totalMessages), l:'En historial completo', c:'from-violet-500 to-fuchsia-500' },
-          { t:'Mensajes Hoy', n:fmtNum(s.messagesToday), l:'Conversaciones activas', c:'from-orange-500 to-amber-500' },
-          { t:'Human Takeover', n:fmtNum(s.humanTakeovers), l:'Intervenciones activas', c:'from-yellow-500 to-lime-500' },
-          { t:'Departamentos', n:fmtNum(s.departmentsCount), l:'Áreas operativas', c:'from-sky-500 to-cyan-500' },
-          { t:'Productos', n:fmtNum(s.productsCount), l:'Catálogo activo', c:'from-indigo-500 to-blue-500' },
-          { t:'Auto-respuestas', n:fmtNum(s.autoResponsesCount), l:'Flows y reglas', c:'from-teal-500 to-emerald-500' },
-          { t:'Tags', n:fmtNum(s.tagsCount), l:'Segmentación', c:'from-cyan-500 to-sky-500' },
-          { t:'Plantillas', n:fmtNum(s.templatesCount), l:'Mensajes predefinidos', c:'from-fuchsia-500 to-violet-500' },
+          { t:'Total Contactos',    n:fmtNum(s.totalContacts),       l:'Usuarios en el sistema',            c:'from-blue-500 to-indigo-500' },
+          { t:'Registrados',        n:fmtNum(s.registeredContacts),  l:'Con DNI y RUC',                     c:'from-emerald-500 to-teal-500' },
+          { t:'Bloqueados',         n:fmtNum(s.blockedCount),        l:'Números/grupos bloqueados',         c:'from-rose-500 to-pink-500' },
+          { t:'Mensajes Totales',   n:fmtNum(s.totalMessages),       l:'En historial completo',             c:'from-violet-500 to-fuchsia-500' },
+          { t:'Mensajes Hoy',       n:fmtNum(s.messagesToday),       l:'Conversaciones activas',            c:'from-orange-500 to-amber-500' },
+          { t:'Human Takeover',     n:fmtNum(s.humanTakeovers),      l:'Intervenciones activas',            c:'from-yellow-500 to-lime-500' },
+          { t:'Departamentos',      n:fmtNum(s.departmentsCount),    l:'Áreas operativas',                  c:'from-sky-500 to-cyan-500' },
+          { t:'Productos',          n:fmtNum(s.productsCount),       l:'Catálogo activo',                   c:'from-indigo-500 to-blue-500' },
+          { t:'Auto-respuestas',    n:fmtNum(s.autoResponsesCount),  l:'Flows y reglas',                    c:'from-teal-500 to-emerald-500' },
+          { t:'Tags',               n:fmtNum(s.tagsCount),           l:'Segmentación',                      c:'from-cyan-500 to-sky-500' },
+          { t:'Plantillas',         n:fmtNum(s.templatesCount),      l:'Mensajes predefinidos',             c:'from-fuchsia-500 to-violet-500' },
         ]; %>
 
         <% cards.forEach((card) => { %>
@@ -547,7 +557,7 @@
 
         if (!res.ok) {
           const text = await res.text();
-          alert('Error al desconectar:\n' + text);
+          alert('Error al desconectar:\\n' + text);
           return;
         }
 

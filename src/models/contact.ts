@@ -57,12 +57,15 @@ async function setPrimaryCompanyInternal(contactId: string, companyId: string) {
 /**
  * Retorna { companyName, ruc } para la empresa primaria del contacto.
  * Si no hay primaria, intenta la primera. Si no hay ninguna, cae a los campos legacy.
+ *
+ * ⚠ Esta función la usa whatsapp.ts (buildMainMenu, generateOdooLinkForContact)
+ * así que debe ser exportada.
  */
-function resolvePrimaryCompany(contact: any) {
+export function resolvePrimaryCompany(contact: any) {
   // contact.companies: ContactCompany[] con { isPrimary, role, company: { name, ruc } }
 
-  if (contact.companies && contact.companies.length > 0) {
-    // buscar la primary
+  if (contact?.companies && contact.companies.length > 0) {
+    // buscar la primary explícita
     const primary = contact.companies.find((cc: any) => cc.isPrimary);
     const chosen = primary || contact.companies[0];
     if (chosen && chosen.company) {
@@ -75,14 +78,13 @@ function resolvePrimaryCompany(contact: any) {
 
   // fallback legacy
   return {
-    companyName: contact.companyName ?? null,
-    ruc: contact.ruc ?? null,
+    companyName: contact?.companyName ?? null,
+    ruc: contact?.ruc ?? null,
   };
 }
 
 /**
  * Valida un DNI peruano muy básico: 8 dígitos numéricos.
- * Puedes endurecerlo si quieres.
  */
 function isValidDNI(dni: string) {
   const onlyDigits = dni?.trim();
@@ -91,7 +93,6 @@ function isValidDNI(dni: string) {
 
 /**
  * Valida RUC peruano muy básico: 11 dígitos.
- * (No hacemos el dígito verificador todavía, pero podrías).
  */
 function isValidRUC(ruc: string) {
   const onlyDigits = ruc?.trim();
@@ -102,7 +103,8 @@ function isValidRUC(ruc: string) {
  * LECTURA / CONSULTA
  * ------------------------------------------------- */
 
-/** Busca contacto por teléfono normalizado (E.164 sin '+').
+/**
+ * Busca contacto por teléfono normalizado (E.164 sin '+').
  * Incluye sus empresas asociadas.
  */
 export async function findByPhone(phoneNumber: string) {
@@ -124,7 +126,9 @@ export async function findByPhone(phoneNumber: string) {
   }
 }
 
-/** Busca contacto por billysId (ID técnico WhatsApp ej "5192...@c.us") */
+/**
+ * Busca contacto por billysId (ID técnico WhatsApp ej "5192...@c.us")
+ */
 export async function findByBillysId(billysId: string) {
   try {
     return await prisma.contact.findUnique({
@@ -143,7 +147,8 @@ export async function findByBillysId(billysId: string) {
   }
 }
 
-/** Lista todos los contactos (más recientes primero)
+/**
+ * Lista todos los contactos (más recientes primero)
  * Enriquecidos con su empresa primaria calculada.
  */
 export async function getAll(limit?: number, offset?: number) {
@@ -186,7 +191,9 @@ export async function getAll(limit?: number, offset?: number) {
   }
 }
 
-/** ¿Está registrado? */
+/**
+ * ¿Está registrado?
+ */
 export async function isRegistered(phoneNumber: string): Promise<boolean> {
   try {
     const contact = await findByPhone(phoneNumber);
@@ -201,7 +208,9 @@ export async function isRegistered(phoneNumber: string): Promise<boolean> {
  * CREAR / OBTENER
  * ------------------------------------------------- */
 
-/** Crea contacto NUEVO (lanza si ya existe) */
+/**
+ * Crea contacto NUEVO (lanza si ya existe)
+ */
 export async function create(phoneNumber: string, billysId?: string) {
   try {
     const phone = normalizePhone(phoneNumber);
@@ -286,8 +295,14 @@ export async function linkBillysId(phoneNumber: string, billysId: string) {
  * ACTUALIZACIONES DE IDENTIDAD / ESTADO
  * ------------------------------------------------- */
 
-/** Actualiza DNI y nombre; pasa a WAITING_RUC */
-export async function updateDNI(phoneNumber: string, dni: string, name: string) {
+/**
+ * Actualiza DNI y nombre; pasa a WAITING_RUC
+ */
+export async function updateDNI(
+  phoneNumber: string,
+  dni: string,
+  name: string
+) {
   try {
     const phone = normalizePhone(phoneNumber);
 
@@ -313,7 +328,11 @@ export async function updateDNI(phoneNumber: string, dni: string, name: string) 
  * Actualiza RUC y razón social; pasa a REGISTERED
  * Ahora también crea/relaciona Company y la marca como primaria.
  */
-export async function updateRUC(phoneNumber: string, ruc: string, companyName: string) {
+export async function updateRUC(
+  phoneNumber: string,
+  ruc: string,
+  companyName: string
+) {
   try {
     const phone = normalizePhone(phoneNumber);
 
@@ -352,9 +371,7 @@ export async function updateRUC(phoneNumber: string, ruc: string, companyName: s
     // 4. marcar esa empresa como primaria para este contacto
     await setPrimaryCompanyInternal(contact.id, company.id);
 
-    // 5. actualizar contacto:
-    //    - dejamos los campos legacy companyName/ruc por compatibilidad visual,
-    //    - marcamos state=REGISTERED
+    // 5. actualizar contacto legacy + estado
     return await prisma.contact.update({
       where: { phoneNumber: phone },
       data: {
@@ -369,7 +386,9 @@ export async function updateRUC(phoneNumber: string, ruc: string, companyName: s
   }
 }
 
-/** Cambia el estado (NEW / WAITING_DNI / WAITING_RUC / REGISTERED / etc.) */
+/**
+ * Cambia el estado (NEW / WAITING_DNI / WAITING_RUC / REGISTERED / etc.)
+ */
 export async function updateState(phoneNumber: string, state: string) {
   try {
     const phone = normalizePhone(phoneNumber);
@@ -391,13 +410,16 @@ export async function updateState(phoneNumber: string, state: string) {
  * - isBlocked
  * - humanTakeoverAt (forzado)
  */
-export async function updateContactInfo(contactId: string, patch: {
-  name?: string;
-  dni?: string;
-  state?: string;
-  isBlocked?: boolean;
-  humanTakeoverAt?: Date | null;
-}) {
+export async function updateContactInfo(
+  contactId: string,
+  patch: {
+    name?: string;
+    dni?: string;
+    state?: string;
+    isBlocked?: boolean;
+    humanTakeoverAt?: Date | null;
+  }
+) {
   try {
     const data: any = {};
 
@@ -410,7 +432,8 @@ export async function updateContactInfo(contactId: string, patch: {
     }
     if (patch.state !== undefined) data.state = patch.state;
     if (patch.isBlocked !== undefined) data.isBlocked = patch.isBlocked;
-    if (patch.humanTakeoverAt !== undefined) data.humanTakeoverAt = patch.humanTakeoverAt;
+    if (patch.humanTakeoverAt !== undefined)
+      data.humanTakeoverAt = patch.humanTakeoverAt;
 
     return await prisma.contact.update({
       where: { id: contactId },
@@ -430,12 +453,15 @@ export async function updateContactInfo(contactId: string, patch: {
  * Agrega o asegura una empresa en el contacto.
  * Si isPrimary = true, la deja como principal.
  */
-export async function addCompanyToContact(contactId: string, opts: {
-  ruc: string;
-  name: string;
-  role?: string;
-  isPrimary?: boolean;
-}) {
+export async function addCompanyToContact(
+  contactId: string,
+  opts: {
+    ruc: string;
+    name: string;
+    role?: string;
+    isPrimary?: boolean;
+  }
+) {
   try {
     if (!isValidRUC(opts.ruc)) {
       throw new Error(`RUC inválido: ${opts.ruc}`);
@@ -475,7 +501,7 @@ export async function addCompanyToContact(contactId: string, opts: {
     if (opts.isPrimary) {
       await setPrimaryCompanyInternal(contactId, company.id);
 
-      // también podemos reflejarla en legacy contact.companyName/ruc
+      // también reflejarla en legacy contact.companyName/ruc
       await prisma.contact.update({
         where: { id: contactId },
         data: {
@@ -492,8 +518,13 @@ export async function addCompanyToContact(contactId: string, opts: {
   }
 }
 
-/** Cambia la empresa principal del contacto */
-export async function setPrimaryCompany(contactId: string, companyId: string) {
+/**
+ * Cambia la empresa principal del contacto
+ */
+export async function setPrimaryCompany(
+  contactId: string,
+  companyId: string
+) {
   try {
     // 1. asegurar que la relación exista
     const pivot = await prisma.contactCompany.findFirst({
@@ -523,8 +554,13 @@ export async function setPrimaryCompany(contactId: string, companyId: string) {
   }
 }
 
-/** Quita una empresa del contacto */
-export async function removeCompanyFromContact(contactId: string, companyId: string) {
+/**
+ * Quita una empresa del contacto
+ */
+export async function removeCompanyFromContact(
+  contactId: string,
+  companyId: string
+) {
   try {
     // ver si era primaria
     const pivot = await prisma.contactCompany.findFirst({
@@ -620,7 +656,9 @@ export async function releaseHumanTakeover(phoneNumber: string) {
  *  - Si takeover > 1h → liberar y true
  *  - Si takeover vigente → false (pausado)
  */
-export async function shouldBotRespond(phoneNumber: string): Promise<boolean> {
+export async function shouldBotRespond(
+  phoneNumber: string
+): Promise<boolean> {
   try {
     const phone = normalizePhone(phoneNumber);
     const contact = await prisma.contact.findUnique({
@@ -640,12 +678,16 @@ export async function shouldBotRespond(phoneNumber: string): Promise<boolean> {
         data: { humanTakeoverAt: null },
       });
       logger.info(
-        `[CONTACT] Released human takeover for ${phone} after ${Math.round(diff / 60000)} minutes`
+        `[CONTACT] Released human takeover for ${phone} after ${Math.round(
+          diff / 60000
+        )} minutes`
       );
       return true;
     }
 
-    const remainingMinutes = Math.round((oneHourInMs - diff) / 60000);
+    const remainingMinutes = Math.round(
+      (oneHourInMs - diff) / 60000
+    );
     logger.info(
       `[CONTACT] Bot paused for ${phone} - ${remainingMinutes} minutes remaining`
     );
@@ -657,8 +699,13 @@ export async function shouldBotRespond(phoneNumber: string): Promise<boolean> {
   }
 }
 
-/** Bloquear contacto para que el bot no lo atienda más */
-export async function blockContact(phoneNumber: string, reason: string = 'Bloqueado') {
+/**
+ * Bloquear contacto para que el bot no lo atienda más
+ */
+export async function blockContact(
+  phoneNumber: string,
+  reason: string = 'Bloqueado'
+) {
   try {
     const phone = normalizePhone(phoneNumber);
 
@@ -689,7 +736,9 @@ export async function blockContact(phoneNumber: string, reason: string = 'Bloque
   }
 }
 
-/** Desbloquear contacto */
+/**
+ * Desbloquear contacto
+ */
 export async function unblockContact(phoneNumber: string) {
   try {
     const phone = normalizePhone(phoneNumber);
@@ -766,17 +815,6 @@ export async function exportContactsToExcelData() {
 
 /**
  * Importa contactos en lote desde un dataset ya parseado del Excel.
- * Cada row debe traer al menos phoneNumber (con código país).
- * row ejemplo:
- * {
- *   phoneNumber: '5192489...',
- *   name: 'ISIDRO',
- *   dni: '46028171',
- *   companies: [
- *     { ruc: '20XXXXXXXXXXX', name: 'COPIER COMPANY S.A.C.', role: 'TI', primary: true },
- *     { ruc: '20YYYYYYYYYYY', name: 'OTRA S.A.C.', role: 'Compras', primary: false },
- *   ]
- * }
  */
 export async function importContactsFromExcel(rows: Array<{
   phoneNumber: string;
@@ -860,8 +898,7 @@ export async function importContactsFromExcel(rows: Array<{
 
 /**
  * Elimina un contacto por ID.
- * Nota legal/operativa: esto borra el registro Contact y las relaciones ContactCompany.
- * NO borra ConversationHistory. Si quieres borrar historial, podrías hacerlo acá.
+ * Borra Contact, ContactCompany, y ConversationHistory asociado.
  */
 export async function deleteContact(contactId: string) {
   try {
@@ -870,8 +907,7 @@ export async function deleteContact(contactId: string) {
       where: { contactId },
     });
 
-    // opcional: borrar historiales de conversación asociados a su phoneNumber
-    // primero obtén el contacto para tener el phoneNumber
+    // obtener contacto para su phoneNumber antes de borrarlo
     const existing = await prisma.contact.findUnique({
       where: { id: contactId },
     });
