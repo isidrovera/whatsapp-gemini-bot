@@ -35,27 +35,42 @@ function normalizeReniec(data: any): { nombres: string; apellidoPaterno: string;
 }
 
 /** Normaliza respuesta de SUNAT (v2/sunat/ruc) aceptando snake/camel */
-function normalizeSunat(data: any): { razonSocial: string; estado: string } | null {
+function normalizeSunat(data: any): {
+  razonSocial: string;
+  estado: string;
+  condicion: string;
+  direccion: string;
+  distrito: string;
+  provincia: string;
+  departamento: string;
+} | null {
   if (!data || typeof data !== 'object') return null;
 
   const razonSocial =
     data.razon_social ??
     data.razonSocial ??
+    data.nombre ??
     data.nombre_o_razon_social ??
-    '';
-
-  const estado =
-    data.estado ??
-    data.condicion ??
     '';
 
   if (!razonSocial) return null;
 
+  const estado =
+    data.estado ??
+    data.condicion ?? // a veces "estado" viene vacío y "condicion" tiene HABIDO/NO HABIDO
+    '';
+
   return {
     razonSocial: String(razonSocial).trim(),
-    estado: String(estado || '').trim(),
+    estado: String(data.estado ?? '').trim(),
+    condicion: String(data.condicion ?? '').trim(),
+    direccion: String(data.direccion ?? '').trim(),
+    distrito: String(data.distrito ?? '').trim(),
+    provincia: String(data.provincia ?? '').trim(),
+    departamento: String(data.departamento ?? '').trim(),
   };
 }
+
 
 /**
  * Obtiene flags/token desde Settings (tabla configurations)
@@ -174,12 +189,15 @@ export async function validateRUC(
     logger.info(`RUC DEBUG -> status=${response.status} keys=${Object.keys(response.data || {}).join(',')}`);
 
     if (response.status === 200 && response.data) {
-      const normalized = normalizeSunat(response.data);
-      if (normalized) {
-        logger.info(`RUC validated: ${normalized.razonSocial} / ${normalized.estado}`);
-        return normalized;
-      }
+    const normalized = normalizeSunat(response.data);
+    if (normalized) {
+      logger.info(
+        `RUC validated: ${normalized.razonSocial} / ${normalized.estado} (${normalized.condicion})`
+      );
+      return normalized;
     }
+  }
+
 
     logger.warn('validateRUC: respuesta inesperada de apis.net.pe');
     return null;

@@ -12,7 +12,7 @@ const prisma = getPrismaClient();
 /** ========== Multer para media ========== **/
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB (ajusta si necesitas más)
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
   fileFilter: (_req, file, cb) => {
     const ok = [
       'image/', 'video/', 'audio/',
@@ -45,7 +45,8 @@ router.get('/', async (_req, res) => {
 
     res.render('conversations', {
       title: 'Conversaciones',
-      contacts
+      contacts,
+      page: 'conversations'
     });
   } catch (error) {
     logger.error('Error loading conversations:', error);
@@ -76,95 +77,330 @@ router.get('/api/:phoneNumber', async (req, res) => {
 
 /** ========== Envío de texto ========== **/
 router.post('/api/:phoneNumber/send', async (req, res) => {
+  const startTime = Date.now();
+  let normalizedPhone = '';
+  
   try {
+    // ============================================
+    // PASO 1: Validación de entrada
+    // ============================================
+    logger.info('[WEB-SEND] ========== STARTING MESSAGE SEND ==========');
+    
     const { phoneNumber } = req.params;
     const raw = (req.body?.message || '').toString();
     const message = raw.trim();
 
-    if (!message) {
-      return res.status(400).json({ error: 'El mensaje no puede estar vacío' });
-    }
+    logger.info('[WEB-SEND] Step 1: Input validation', {
+      phoneNumber,
+      messageLength: message.length,
+      hasMessage: !!message,
+      timestamp: new Date().toISOString()
+    });
 
-    if (!getConnectionStatus()) {
-      return res.status(503).json({
-        error: 'WhatsApp no está conectado. Por favor, escanea el código QR primero.',
-        notConnected: true
+    if (!message) {
+      logger.warn('[WEB-SEND] ❌ Empty message received');
+      return res.status(400).json({ 
+        success: false,
+        error: 'El mensaje no puede estar vacío' 
       });
     }
 
-    const normalizedPhone = normalizePhone(phoneNumber);
-    logger.info(`[WEB-SEND] Attempting to send message to ${normalizedPhone}`);
+    // ============================================
+    // PASO 2: Verificar conexión de WhatsApp
+    // ============================================
+    logger.info('[WEB-SEND] Step 2: Checking WhatsApp connection...');
+    
+    let isConnected = false;
+    let botNumber = null;
+    let statusInfo = { connected: false, hasQR: false, botNumber: null };
+    
+    try {
+      isConnected = getConnectionStatus();
+      logger.info('[WEB-SEND] Connection status obtained:', { isConnected });
+    } catch (err: any) {
+      logger.error('[WEB-SEND] ❌ Error getting connection status:', {
+        error: err?.message,
+        stack: err?.stack
+      });
+    }
 
-    // Bloqueo "interno"
-    const [contact, blocked] = await Promise.all([
-      prisma.contact.findUnique({ where: { phoneNumber: normalizedPhone } }),
-      prisma.blocked.findUnique({ where: { phoneNumber: normalizedPhone } })
-    ]);
+    try {
+      botNumber = getBotPhoneNumber();
+      logger.info('[WEB-SEND] Bot number obtained:', { botNumber });
+    } catch (err: any) {
+      logger.error('[WEB-SEND] ❌ Error getting bot number:', {
+        error: err?.message
+      });
+    }
+
+    try {
+      statusInfo = getStatusForDashboard();
+      logger.info('[WEB-SEND] Status info obtained:', statusInfo);
+    } catch (err: any) {
+      logger.error('[WEB-SEND] ❌ Error getting status info:', {
+        error: err?.message
+      });
+    }
+
+    logger.info('[WEB-SEND] Connection check complete:', {
+      isConnected,
+      botNumber,
+      hasQR: statusInfo.hasQR
+    });
+
+    if (!isConnected) {
+      logger.error('[WEB-SEND] ❌ WhatsApp not connected');
+      
+      return res.status(503).json({
+        success: false,
+        error: 'WhatsApp no está conectado. Por favor, escanea el código QR primero.',
+        notConnected: true,
+        debug: {
+          isConnected,
+          hasQR: statusInfo.hasQR,
+          botNumber
+        }
+      });
+    }
+
+    logger.info('[WEB-SEND] ✅ WhatsApp is connected, proceeding...');
+
+    // ============================================
+    // PASO 3: Normalizar teléfono
+    // ============================================
+    logger.info('[WEB-SEND] Step 3: Normalizing phone number...');
+    
+    try {
+      normalizedPhone = normalizePhone(phoneNumber);
+      
+      logger.info('[WEB-SEND] Phone normalization complete:', {
+        original: phoneNumber,
+        normalized: normalizedPhone,
+        length: normalizedPhone.length
+      });
+    } catch (err: any) {
+      logger.error('[WEB-SEND] ❌ Error normalizing phone:', {
+        error: err?.message,
+        phoneNumber
+      });
+      
+      return res.status(400).json({
+        success: false,
+        error: 'Error al procesar el número de teléfono'
+      });
+    }
+
+    if (!normalizedPhone || normalizedPhone.length < 10) {
+      logger.error('[WEB-SEND] ❌ Invalid phone number after normalization', {
+        original: phoneNumber,
+        normalized: normalizedPhone
+      });
+      
+      return res.status(400).json({
+        success: false,
+        error: 'Número de teléfono inválido'
+      });
+    }
+
+    // ============================================
+    // PASO 4: Verificar bloqueos
+    // ============================================
+    logger.info('[WEB-SEND] Step 4: Checking block status...');
+    
+    let contact = null;
+    let blocked = null;
+    
+    try {
+      [contact, blocked] = await Promise.all([
+        prisma.contact.findUnique({ where: { phoneNumber: normalizedPhone } }),
+        prisma.blocked.findUnique({ where: { phoneNumber: normalizedPhone } })
+      ]);
+
+      logger.info('[WEB-SEND] Block check complete:', {
+        contactFound: !!contact,
+        contactBlocked: contact?.isBlocked,
+        explicitlyBlocked: !!blocked
+      });
+    } catch (err: any) {
+      logger.error('[WEB-SEND] ⚠️ Error checking blocks (continuing):', {
+        error: err?.message
+      });
+    }
 
     if (contact?.isBlocked || blocked) {
-      logger.warn(`[WEB-SEND] Contact ${normalizedPhone} is blocked (internal user)`);
+      logger.warn('[WEB-SEND] ⚠️ Contact is blocked', {
+        phoneNumber: normalizedPhone
+      });
+      
       return res.status(403).json({
-        error: 'Este contacto está bloqueado. Es un usuario interno y no puede recibir mensajes del bot.',
+        success: false,
+        error: 'Este contacto está bloqueado.',
         isBlocked: true
       });
     }
 
-    // (Opcional) Verificar existencia en WhatsApp para dar error más claro
-    const exists = await onWhatsAppExists(normalizedPhone).catch(() => true);
-    if (!exists) {
-      return res.status(400).json({ error: 'El número no está registrado en WhatsApp.' });
+    // ============================================
+    // PASO 5: Verificar existencia en WhatsApp
+    // ============================================
+    logger.info('[WEB-SEND] Step 5: Verifying WhatsApp existence...');
+    
+    let exists = true;
+    try {
+      exists = await onWhatsAppExists(normalizedPhone);
+      logger.info('[WEB-SEND] WhatsApp existence verified:', {
+        phoneNumber: normalizedPhone,
+        exists
+      });
+    } catch (err: any) {
+      logger.warn('[WEB-SEND] ⚠️ Could not verify existence (continuing):', {
+        error: err?.message
+      });
     }
 
-    const jid = normalizedPhone.includes('@') ? normalizedPhone : `${normalizedPhone}@s.whatsapp.net`;
-    logger.info(`[WEB-SEND] Sending to JID: ${jid}`);
+    if (!exists) {
+      logger.warn('[WEB-SEND] ⚠️ Number may not be on WhatsApp', {
+        phoneNumber: normalizedPhone
+      });
+      
+      return res.status(400).json({ 
+        success: false,
+        error: 'El número no está registrado en WhatsApp.' 
+      });
+    }
 
-    await sendMessage(jid, message);
-    logger.info(`[WEB-SEND] ✅ Message sent successfully to ${normalizedPhone}`);
-
-    await prisma.conversationHistory.create({
-      data: {
-        phoneNumber: normalizedPhone,
-        role: 'ASSISTANT',
-        content: message,
-      },
+    // ============================================
+    // PASO 6: Construir JID
+    // ============================================
+    logger.info('[WEB-SEND] Step 6: Building JID...');
+    
+    const jid = normalizedPhone.includes('@') 
+      ? normalizedPhone 
+      : `${normalizedPhone}@s.whatsapp.net`;
+    
+    logger.info('[WEB-SEND] JID constructed:', {
+      normalizedPhone,
+      jid
     });
 
-    await prisma.contact.upsert({
-      where: { phoneNumber: normalizedPhone },
-      update: {
-        updatedAt: new Date(),
-        lastMessageAt: new Date(),
-      },
-      create: {
-        phoneNumber: normalizedPhone,
-        name: normalizedPhone,
-        lastMessageAt: new Date(),
-        isBlocked: false,
-      },
+    // ============================================
+    // PASO 7: Enviar mensaje
+    // ============================================
+    logger.info('[WEB-SEND] Step 7: Sending message...', {
+      jid,
+      messageLength: message.length,
+      messagePreview: message.substring(0, 50) + '...'
+    });
+
+    let result: any;
+    try {
+      result = await sendMessage(jid, message);
+      
+      logger.info('[WEB-SEND] ✅ Message sent successfully!', {
+        jid,
+        messageId: result?.key?.id
+      });
+
+    } catch (sendError: any) {
+      logger.error('[WEB-SEND] ❌ sendMessage() failed:', {
+        errorName: sendError?.name,
+        errorMessage: sendError?.message,
+        errorCode: sendError?.code,
+        errorStack: sendError?.stack?.split('\n').slice(0, 3).join('\n')
+      });
+
+      throw sendError;
+    }
+
+    // ============================================
+    // PASO 8: Guardar en BD
+    // ============================================
+    logger.info('[WEB-SEND] Step 8: Saving to database...');
+
+    try {
+      await prisma.conversationHistory.create({
+        data: {
+          phoneNumber: normalizedPhone,
+          role: 'ASSISTANT',
+          content: message,
+        },
+      });
+
+      await prisma.contact.upsert({
+        where: { phoneNumber: normalizedPhone },
+        update: {
+          updatedAt: new Date(),
+          lastMessageAt: new Date(),
+        },
+        create: {
+          phoneNumber: normalizedPhone,
+          name: normalizedPhone,
+          lastMessageAt: new Date(),
+          isBlocked: false,
+        },
+      });
+
+      logger.info('[WEB-SEND] ✅ Database updated');
+
+    } catch (dbError: any) {
+      logger.error('[WEB-SEND] ⚠️ Database error (message was sent):', {
+        error: dbError?.message
+      });
+    }
+
+    // ============================================
+    // PASO 9: Respuesta exitosa
+    // ============================================
+    const duration = Date.now() - startTime;
+    
+    logger.info('[WEB-SEND] ========== SUCCESS ==========', {
+      phoneNumber: normalizedPhone,
+      duration: `${duration}ms`
     });
 
     res.json({
       success: true,
-      message: 'Mensaje enviado correctamente'
+      message: 'Mensaje enviado correctamente',
+      messageId: result?.key?.id
     });
+
   } catch (error: any) {
-    logger.error('[WEB-SEND] Error sending message', {
-      name: error?.name,
-      code: error?.code || error?.status,
-      msg: error?.message,
-      stack: error?.stack,
+    const duration = Date.now() - startTime;
+    
+    logger.error('[WEB-SEND] ========== FAILED ==========', {
+      phoneNumber: normalizedPhone || 'unknown',
+      duration: `${duration}ms`,
+      errorName: error?.name,
+      errorMessage: error?.message,
+      errorCode: error?.code,
+      errorStack: error?.stack?.split('\n').slice(0, 5).join('\n')
     });
 
     let errorMessage = 'Error al enviar el mensaje';
-    if (error?.message?.includes('not ready')) errorMessage = 'WhatsApp no está conectado. Escanea el QR.';
-    else if (error?.message?.includes('Invalid')) errorMessage = 'Número de teléfono inválido.';
+    let statusCode = 500;
+    
+    const errMsg = error?.message?.toLowerCase() || '';
+    
+    if (errMsg.includes('not ready') || errMsg.includes('not connected')) {
+      errorMessage = 'WhatsApp no está conectado. Escanea el QR primero.';
+      statusCode = 503;
+    } else if (errMsg.includes('invalid')) {
+      errorMessage = 'Número de teléfono inválido.';
+      statusCode = 400;
+    } else if (errMsg.includes('timeout')) {
+      errorMessage = 'Tiempo de espera agotado. Intenta de nuevo.';
+      statusCode = 504;
+    } else if (error?.message) {
+      errorMessage = error.message;
+    }
 
-    res.status(500).json({
+    res.status(statusCode).json({
+      success: false,
       error: errorMessage,
       details: error?.message || 'Unknown error'
     });
   }
 });
+
 
 /** ========== Envío de MEDIA (foto / video / audio / archivo) ========== **/
 router.post('/api/:phoneNumber/send-media', upload.single('file'), async (req, res) => {
@@ -174,10 +410,15 @@ router.post('/api/:phoneNumber/send-media', upload.single('file'), async (req, r
     const file = req.file;
 
     if (!file) {
-      return res.status(400).json({ success: false, error: 'Falta archivo (campo "file").' });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Falta archivo (campo "file").' 
+      });
     }
 
-    if (!getConnectionStatus()) {
+    // Verificar conexión
+    const isConnected = getConnectionStatus();
+    if (!isConnected) {
       return res.status(503).json({
         success: false,
         error: 'WhatsApp no está conectado. Por favor, escanea el QR.',
@@ -186,8 +427,9 @@ router.post('/api/:phoneNumber/send-media', upload.single('file'), async (req, r
     }
 
     const normalizedPhone = normalizePhone(phoneNumber);
+    logger.info(`[WEB-SEND] Attempting to send media to ${normalizedPhone}`);
 
-    // Bloqueo "interno" (igual que en texto)
+    // Verificar bloqueo interno
     const [contact, blocked] = await Promise.all([
       prisma.contact.findUnique({ where: { phoneNumber: normalizedPhone } }),
       prisma.blocked.findUnique({ where: { phoneNumber: normalizedPhone } })
@@ -201,42 +443,92 @@ router.post('/api/:phoneNumber/send-media', upload.single('file'), async (req, r
       });
     }
 
-    // (Opcional) existencia en WhatsApp
-    const exists = await onWhatsAppExists(normalizedPhone).catch(() => true);
-    if (!exists) {
-      return res.status(400).json({ success: false, error: 'El número no está registrado en WhatsApp.' });
+    // Verificar existencia en WhatsApp
+    logger.info(`[WEB-SEND] Checking if ${normalizedPhone} exists on WhatsApp`);
+    let exists = true;
+    try {
+      exists = await onWhatsAppExists(normalizedPhone);
+    } catch (err) {
+      logger.warn(`[WEB-SEND] Could not verify WhatsApp existence for ${normalizedPhone}:`, err);
     }
 
-    const jid = normalizedPhone.includes('@') ? normalizedPhone : `${normalizedPhone}@s.whatsapp.net`;
+    if (!exists) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'El número no está registrado en WhatsApp.' 
+      });
+    }
+
+    // Construir JID
+    const jid = normalizedPhone.includes('@') 
+      ? normalizedPhone 
+      : `${normalizedPhone}@s.whatsapp.net`;
+    
     const mime = file.mimetype || 'application/octet-stream';
     const kind = (mime.split('/')[0] || 'application') as 'image' | 'video' | 'audio' | 'application';
 
-    logger.info(`[WEB-SEND] Sending media to ${normalizedPhone} (${mime}, ${file.originalname})`);
-
-    const resp = await sendMedia(jid, {
-      buffer: file.buffer,
+    logger.info(`[WEB-SEND] Sending media to ${normalizedPhone}`, {
       mime,
       fileName: file.originalname,
-      caption,
-      kind,
+      size: file.size,
+      kind
     });
 
-    // Historial luego de envío OK (solo contenido textual/filename por compatibilidad con tu DB actual)
-    await prisma.conversationHistory.create({
-      data: {
-        phoneNumber: normalizedPhone,
-        role: 'ASSISTANT',
-        content: caption || file.originalname,
-      },
-    });
+    // Intentar enviar
+    try {
+      const resp = await sendMedia(jid, {
+        buffer: file.buffer,
+        mime,
+        fileName: file.originalname,
+        caption,
+        kind,
+      });
 
-    await prisma.contact.upsert({
-      where: { phoneNumber: normalizedPhone },
-      update: { updatedAt: new Date(), lastMessageAt: new Date() },
-      create: { phoneNumber: normalizedPhone, name: normalizedPhone, isBlocked: false, lastMessageAt: new Date() },
-    });
+      logger.info(`[WEB-SEND] ✅ Media sent successfully to ${normalizedPhone}`, {
+        messageId: resp?.key?.id
+      });
 
-    res.json({ success: true, messageId: resp?.key?.id || null });
+      // Guardar en historial
+      await prisma.conversationHistory.create({
+        data: {
+          phoneNumber: normalizedPhone,
+          role: 'ASSISTANT',
+          content: caption || `📎 ${file.originalname}`,
+        },
+      });
+
+      // Actualizar contacto
+      await prisma.contact.upsert({
+        where: { phoneNumber: normalizedPhone },
+        update: { 
+          updatedAt: new Date(), 
+          lastMessageAt: new Date() 
+        },
+        create: { 
+          phoneNumber: normalizedPhone, 
+          name: normalizedPhone, 
+          isBlocked: false, 
+          lastMessageAt: new Date() 
+        },
+      });
+
+      res.json({ 
+        success: true, 
+        messageId: resp?.key?.id || null,
+        message: 'Archivo enviado correctamente'
+      });
+
+    } catch (sendError: any) {
+      logger.error('[WEB-SEND] Error in sendMedia:', {
+        error: sendError?.message,
+        stack: sendError?.stack,
+        code: sendError?.code,
+        data: sendError?.data
+      });
+
+      throw sendError;
+    }
+
   } catch (error: any) {
     logger.error('[WEB-SEND] Error sending media', {
       name: error?.name,
@@ -244,7 +536,22 @@ router.post('/api/:phoneNumber/send-media', upload.single('file'), async (req, r
       msg: error?.message,
       stack: error?.stack,
     });
-    res.status(500).json({ success: false, error: error?.message || 'Error al enviar archivo' });
+
+    let errorMessage = 'Error al enviar archivo';
+    
+    if (error?.message?.includes('not ready') || error?.message?.includes('Not connected')) {
+      errorMessage = 'WhatsApp no está conectado. Escanea el QR.';
+    } else if (error?.message?.includes('timeout')) {
+      errorMessage = 'Tiempo de espera agotado. Intenta de nuevo.';
+    } else if (error?.message) {
+      errorMessage = error.message;
+    }
+
+    res.status(500).json({ 
+      success: false, 
+      error: errorMessage,
+      details: error?.message || 'Unknown error'
+    });
   }
 });
 

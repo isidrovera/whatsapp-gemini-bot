@@ -579,6 +579,47 @@
         <div id="companiesList" class="space-y-4 mb-8">
           <!-- dinámico -->
         </div>
+        <!-- vincular empresa existente -->
+<div class="mb-8 border border-slate-200 dark:border-white/10 rounded-lg p-4">
+  <h3 class="text-sm font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+    <i data-lucide="link" class="w-4 h-4 text-primary"></i>
+    <span>Vincular empresa existente</span>
+  </h3>
+
+  <div class="mb-4">
+    <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Empresa</label>
+    <select
+      id="existingCompanySelect"
+      class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors cursor-pointer"
+    >
+      <option value="">-- Selecciona empresa --</option>
+    </select>
+  </div>
+
+  <div class="mb-4">
+    <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Rol / Área (opcional)</label>
+    <input
+      id="existingCompanyRole"
+      class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors"
+      placeholder="Compras, Sistemas, etc."
+    />
+  </div>
+
+  <div class="mb-4 flex items-center gap-2">
+    <input type="checkbox" id="existingCompanyPrimary" class="rounded border-slate-300 dark:border-slate-600" />
+    <label for="existingCompanyPrimary" class="text-slate-700 dark:text-slate-200 text-sm font-medium select-none">
+      Marcar como principal
+    </label>
+  </div>
+
+  <button
+    class="inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-2 shadow-soft transition"
+    type="button"
+    onclick="linkExistingCompany()"
+  >
+    Vincular seleccionada
+  </button>
+</div>
 
         <!-- agregar nueva empresa -->
         <form id="companyForm" onsubmit="return submitAddCompany()">
@@ -970,34 +1011,43 @@
      * ---------------------------------- */
 
     async function openCompanies(contactId) {
-      // guardamos el id en hidden
-      document.getElementById('companiesContactId').value = contactId;
+    document.getElementById('companiesContactId').value = contactId;
 
-      // necesitamos info del contacto para listar sus empresas
-      // igual truco que antes: necesito phone -> fetch /api/:phone
-      const tr = Array.from(document.querySelectorAll('#contactsTable tbody tr'))
-        .find(r => r.innerHTML.includes(contactId));
-      const phone = tr ? tr.getAttribute('data-phone') : null;
-      if (!phone) {
-        alert('No pude obtener el teléfono del contacto');
+    // sacar el teléfono desde la tabla (igual que antes)
+    const tr = Array.from(document.querySelectorAll('#contactsTable tbody tr'))
+      .find(r => r.innerHTML.includes(contactId));
+    const phone = tr ? tr.getAttribute('data-phone') : null;
+    if (!phone) {
+      alert('No pude obtener el teléfono del contacto');
+      return;
+    }
+
+    try {
+      // 1. datos del contacto (sus empresas actuales)
+      const resContact = await fetch(`/contacts/api/${phone}`);
+      const contact = await resContact.json();
+      if (contact.error) {
+        alert('No se encontró el contacto');
         return;
       }
+      renderCompaniesModalList(contact);
 
-      try {
-        const res = await fetch(`/contacts/api/${phone}`);
-        const contact = await res.json();
-        if (contact.error) {
-          alert('No se encontró el contacto');
-          return;
-        }
-
-        renderCompaniesModalList(contact);
-        showModal('companiesModal');
-      } catch (err) {
-        console.error(err);
-        alert('❌ Error cargando empresas');
+      // 2. lista global de empresas existentes
+      const resCompanies = await fetch('/contacts/api-companies');
+      const companiesJson = await resCompanies.json();
+      if (companiesJson.ok) {
+        fillExistingCompaniesSelect(companiesJson.companies);
+      } else {
+        fillExistingCompaniesSelect([]); // fallback vacío
       }
+
+      showModal('companiesModal');
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error cargando empresas');
     }
+  }
+
 
     function renderCompaniesModalList(contact) {
       const companiesListEl = document.getElementById('companiesList');
@@ -1047,6 +1097,58 @@
         </div>
       `).join('');
     }
+    function fillExistingCompaniesSelect(companies) {
+  const sel = document.getElementById('existingCompanySelect');
+  sel.innerHTML = '<option value="">-- Selecciona empresa --</option>';
+
+  (companies || []).forEach(co => {
+    const opt = document.createElement('option');
+    opt.value = co.id;
+    opt.textContent = `${co.name || '(sin nombre)'}  -  RUC: ${co.ruc || '-'}`;
+    sel.appendChild(opt);
+  });
+}
+
+/**
+ * Envía al backend request para vincular la empresa seleccionada en el combo
+ * al contacto actual.
+ */
+async function linkExistingCompany() {
+  const contactId = document.getElementById('companiesContactId').value.trim();
+  const companyId = document.getElementById('existingCompanySelect').value.trim();
+  const role      = document.getElementById('existingCompanyRole').value.trim();
+  const primary   = document.getElementById('existingCompanyPrimary').checked;
+
+  if (!contactId || !companyId) {
+    alert('Selecciona una empresa');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/contacts/api/${contactId}/company/link-existing`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        companyId,
+        role,
+        primary,
+      })
+    });
+
+    const data = await res.json();
+    if (data.error) {
+      alert('❌ Error vinculando empresa: ' + data.error);
+      return;
+    }
+
+    alert('✅ Empresa vinculada');
+    location.reload(); // mantenemos reload simple, igual que en submitAddCompany
+  } catch (err) {
+    console.error(err);
+    alert('❌ Error vinculando empresa');
+  }
+}
+
 
     async function submitAddCompany() {
       const contactId = document.getElementById('companiesContactId').value.trim();

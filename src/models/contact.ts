@@ -10,30 +10,19 @@ const prisma = getPrismaClient();
  * ------------------------------------------------- */
 
 /**
- * Busca la empresa (Company) por RUC. Si no existe, la crea.
+ * Valida un DNI peruano muy básico: 8 dígitos numéricos.
  */
-async function getOrCreateCompany(ruc: string, name: string) {
-  const cleanedRuc = ruc?.trim();
-  const cleanedName = name?.trim();
+function isValidDNI(dni: string) {
+  const onlyDigits = dni?.trim();
+  return !!onlyDigits && /^[0-9]{8}$/.test(onlyDigits);
+}
 
-  if (!cleanedRuc || !cleanedName) {
-    throw new Error('RUC y razón social requeridos para la empresa');
-  }
-
-  // Primero intentamos encontrar por RUC
-  const existing = await prisma.company.findUnique({
-    where: { ruc: cleanedRuc },
-  });
-
-  if (existing) return existing;
-
-  // Crear si no existe
-  return prisma.company.create({
-    data: {
-      ruc: cleanedRuc,
-      name: cleanedName,
-    },
-  });
+/**
+ * Valida RUC peruano muy básico: 11 dígitos.
+ */
+function isValidRUC(ruc: string) {
+  const onlyDigits = ruc?.trim();
+  return !!onlyDigits && /^[0-9]{11}$/.test(onlyDigits);
 }
 
 /**
@@ -55,48 +44,227 @@ async function setPrimaryCompanyInternal(contactId: string, companyId: string) {
 }
 
 /**
- * Retorna { companyName, ruc } para la empresa primaria del contacto.
- * Si no hay primaria, intenta la primera. Si no hay ninguna, cae a los campos legacy.
- *
- * ⚠ Esta función la usa whatsapp.ts (buildMainMenu, generateOdooLinkForContact)
- * así que debe ser exportada.
+ * Crea o retorna una empresa por RUC si NO existe.
+ * Usa campos más nuevos (company.numeroDoc / razonSocial)
+ * y también legacy (ruc / name) para compatibilidad.
  */
-export function resolvePrimaryCompany(contact: any) {
-  // contact.companies: ContactCompany[] con { isPrimary, role, company: { name, ruc } }
+async function getOrCreateCompany(ruc: string, name: string) {
+  const cleanedRuc = ruc?.trim();
+  const cleanedName = name?.trim();
 
-  if (contact?.companies && contact.companies.length > 0) {
-    // buscar la primary explícita
-    const primary = contact.companies.find((cc: any) => cc.isPrimary);
-    const chosen = primary || contact.companies[0];
-    if (chosen && chosen.company) {
-      return {
-        companyName: chosen.company.name,
-        ruc: chosen.company.ruc,
-      };
-    }
+  if (!cleanedRuc || !cleanedName) {
+    throw new Error('RUC y razón social requeridos para la empresa');
   }
 
-  // fallback legacy
-  return {
-    companyName: contact?.companyName ?? null,
-    ruc: contact?.ruc ?? null,
-  };
+  // buscamos empresa existente por ruc legacy o numeroDoc
+  let existing = await prisma.company.findFirst({
+    where: {
+      OR: [{ ruc: cleanedRuc }, { numeroDoc: cleanedRuc }],
+    },
+  });
+
+  if (existing) {
+    // merge defensivo por si faltan algunos campos
+    const patchData: Record<string, any> = {};
+
+    if (!existing.razonSocial && cleanedName) {
+      patchData.razonSocial = cleanedName;
+    }
+    if (!existing.name && cleanedName) {
+      patchData.name = cleanedName;
+    }
+    if (!existing.numeroDoc) {
+      patchData.numeroDoc = cleanedRuc;
+    }
+    if (!existing.ruc) {
+      patchData.ruc = cleanedRuc;
+    }
+
+    if (Object.keys(patchData).length > 0) {
+      existing = await prisma.company.update({
+        where: { id: existing.id },
+        data: patchData,
+      });
+    }
+
+    return existing;
+  }
+
+  // crear nueva empresa
+  return prisma.company.create({
+    data: {
+      tipoDoc: 'RUC',
+      numeroDoc: cleanedRuc,
+      razonSocial: cleanedName,
+
+      // legacy
+      ruc: cleanedRuc,
+      name: cleanedName,
+    },
+  });
+}
+
+/* -------------------------------------------------
+ * FUNCIONES EXPORTADAS DE APOYO MULTIEMPRESA
+ * ------------------------------------------------- */
+
+/**
+ * Vincula una empresa existente (companyId ya conocido) a un contacto.
+ * Opcionalmente la marca como principal.
+ */
+export async function linkExistingCompanyToContact(
+  contactId: string,
+  opts: {
+    companyId: string;
+    role?: string;
+    isPrimary?: boolean;
+  }
+) {
+  try {
+    // 1. asegurar que la empresa exista
+    const company = await prisma.company.findUnique({
+      where: { id: opts.companyId },
+    });
+    if (!company) {
+      throw new Error('Empresa no encontrada');
+    }
+
+    // 2. asegurar relación pivot
+    let pivot = await prisma.contactCompany.findFirst({
+      where: {
+        contactId,
+        companyId: opts.companyId,
+      },
+    });
+
+    if (!pivot) {
+      pivot = await prisma.contactCompany.create({
+        data: {
+          contactId,
+          companyId: opts.companyId,
+          role: opts.role || null,
+          isPrimary: false,
+        },
+      });
+    } else {
+      // si ya existe, podemos actualizar role
+      if (opts.role !== undefined) {
+        pivot = await prisma.contactCompany.update({
+          where: { id: pivot.id },
+          data: { role: opts.role || null },
+        });
+      }
+    }
+
+    // 3. si pidió "principal", marcamos esta como primary
+    if (opts.isPrimary) {
+      await setPrimaryCompanyInternal(contactId, opts.companyId);
+
+      // reflejar en contact.companyName;
+      // ⚠ ya NO seteamos contact.ruc porque contact.ruc es UNIQUE
+      await prisma.contact.update({
+        where: { id: contactId },
+        data: {
+          companyName:
+            company.name ||
+            company.razonSocial ||
+            'SIN RAZON SOCIAL',
+        },
+      });
+    }
+
+    return pivot;
+  } catch (error) {
+    logger.error('Error linking existing company:', error);
+    throw error;
+  }
 }
 
 /**
- * Valida un DNI peruano muy básico: 8 dígitos numéricos.
+ * Intenta:
+ *  - Buscar contacto por phoneNumber
+ *  - Buscar company existente por RUC/numeroDoc
+ *  - Vincular esa company al contacto si existe
+ *  - Marcarla primaria
+ *  - Actualizar contact.companyName y state='REGISTERED'
+ *
+ * Importante: ya NO escribimos contact.ruc
+ * porque ese campo es UNIQUE en Contact y rompe si varios contactos usan el mismo RUC.
  */
-function isValidDNI(dni: string) {
-  const onlyDigits = dni?.trim();
-  return !!onlyDigits && /^[0-9]{8}$/.test(onlyDigits);
-}
+export async function linkExistingCompanyByRucAndSetPrimary(
+  phoneNumber: string,
+  ruc: string
+): Promise<{ ok: boolean; reason?: string }> {
+  try {
+    const phone = normalizePhone(phoneNumber);
 
-/**
- * Valida RUC peruano muy básico: 11 dígitos.
- */
-function isValidRUC(ruc: string) {
-  const onlyDigits = ruc?.trim();
-  return !!onlyDigits && /^[0-9]{11}$/.test(onlyDigits);
+    if (!isValidRUC(ruc)) {
+      return { ok: false, reason: 'INVALID_RUC' };
+    }
+
+    // 1. asegurar contacto
+    const contact = await prisma.contact.findUnique({
+      where: { phoneNumber: phone },
+    });
+    if (!contact) {
+      return { ok: false, reason: 'CONTACT_NOT_FOUND' };
+    }
+
+    // 2. buscar empresa ya existente con ese RUC
+    const existingCompany = await prisma.company.findFirst({
+      where: {
+        OR: [{ ruc }, { numeroDoc: ruc }],
+      },
+    });
+
+    if (!existingCompany) {
+      // no hay empresa aún → necesitamos pedir razón social más adelante
+      logger.info(
+        `[RUC-LINK] Empresa con RUC ${ruc} no existe aún. Se pedirá razón social`
+      );
+      return { ok: false, reason: 'COMPANY_NOT_FOUND' };
+    }
+
+    // 3. asegurar pivot contact_company
+    let pivot = await prisma.contactCompany.findFirst({
+      where: {
+        contactId: contact.id,
+        companyId: existingCompany.id,
+      },
+    });
+
+    if (!pivot) {
+      pivot = await prisma.contactCompany.create({
+        data: {
+          contactId: contact.id,
+          companyId: existingCompany.id,
+          role: null,
+          isPrimary: false,
+        },
+      });
+    }
+
+    // 4. marcar como primaria
+    await setPrimaryCompanyInternal(contact.id, existingCompany.id);
+
+    // 5. reflejar SOLO companyName + state en el contacto
+    //    ⚠ NO seteamos contact.ruc porque es UNIQUE en Contact
+    await prisma.contact.update({
+      where: { id: contact.id },
+      data: {
+        companyName:
+          existingCompany.name ||
+          existingCompany.razonSocial ||
+          'SIN RAZON SOCIAL',
+        state: 'REGISTERED',
+      },
+    });
+
+    return { ok: true };
+  } catch (error) {
+    logger.error('linkExistingCompanyByRucAndSetPrimary error:', error);
+    return { ok: false, reason: 'EXCEPTION' };
+  }
 }
 
 /* -------------------------------------------------
@@ -202,6 +370,78 @@ export async function isRegistered(phoneNumber: string): Promise<boolean> {
     logger.error('Error checking registration:', error);
     return false;
   }
+}
+
+/**
+ * Devuelve TODAS las empresas asociadas a un contacto,
+ * con su RUC, rol y si es la principal.
+ */
+export async function getAllCompaniesForContact(contactId: string) {
+  try {
+    const contact = await prisma.contact.findUnique({
+      where: { id: contactId },
+      include: {
+        companies: {
+          include: {
+            company: true,
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+      },
+    });
+
+    if (!contact) return [];
+
+    return contact.companies.map((cc: any) => ({
+      companyId: cc.companyId,
+      name: cc.company?.name || cc.company?.razonSocial || null,
+      ruc: cc.company?.ruc || cc.company?.numeroDoc || null,
+      role: cc.role || null,
+      isPrimary: cc.isPrimary || false,
+    }));
+  } catch (error) {
+    logger.error('Error getting companies for contact:', error);
+    return [];
+  }
+}
+
+/**
+ * Retorna { companyName, ruc } para la empresa primaria del contacto.
+ * Si no hay primaria, intenta la primera. Si no hay ninguna, cae a los campos legacy.
+ *
+ * ⚠ Esta función la usa whatsapp.ts (buildMainMenu, generateOdooLinkForContact)
+ * así que debe ser exportada.
+ */
+export function resolvePrimaryCompany(contact: any) {
+  // contact.companies: ContactCompany[] con { isPrimary, role, company: { name, razonSocial, ruc, numeroDoc } }
+
+  if (contact?.companies && contact.companies.length > 0) {
+    // buscar la primary explícita
+    const primary = contact.companies.find((cc: any) => cc.isPrimary);
+    const chosen = primary || contact.companies[0];
+    if (chosen && chosen.company) {
+      return {
+        companyName:
+          chosen.company.name ||
+          chosen.company.razonSocial ||
+          contact?.companyName ||
+          null,
+        ruc:
+          chosen.company.ruc ||
+          chosen.company.numeroDoc ||
+          contact?.ruc ||
+          null,
+      };
+    }
+  }
+
+  // fallback legacy
+  return {
+    companyName: contact?.companyName ?? null,
+    ruc: contact?.ruc ?? null,
+  };
 }
 
 /* -------------------------------------------------
@@ -326,7 +566,14 @@ export async function updateDNI(
 
 /**
  * Actualiza RUC y razón social; pasa a REGISTERED
- * Ahora también crea/relaciona Company y la marca como primaria.
+ *
+ * - asegura/crea Company
+ * - asegura pivot ContactCompany
+ * - marca esa empresa como primaria
+ * - actualiza contact.companyName y state='REGISTERED'
+ *
+ * ⚠ YA NO escribe contact.ruc (para no violar UNIQUE si
+ * varios contactos usan el mismo RUC)
  */
 export async function updateRUC(
   phoneNumber: string,
@@ -346,7 +593,7 @@ export async function updateRUC(
     });
     if (!contact) throw new Error('Contacto no encontrado');
 
-    // 2. asegurar company
+    // 2. asegurar company (crea si no existe)
     const company = await getOrCreateCompany(ruc, companyName);
 
     // 3. asegurar pivot ContactCompany
@@ -375,8 +622,10 @@ export async function updateRUC(
     return await prisma.contact.update({
       where: { phoneNumber: phone },
       data: {
-        ruc,
-        companyName,
+        companyName:
+          company.name ||
+          company.razonSocial ||
+          companyName,
         state: 'REGISTERED',
       },
     });
@@ -452,6 +701,9 @@ export async function updateContactInfo(
 /**
  * Agrega o asegura una empresa en el contacto.
  * Si isPrimary = true, la deja como principal.
+ *
+ * ⚠ Cuando marcamos como primaria ya NO seteamos contact.ruc,
+ * solo contact.companyName (para evitar UNIQUE en Contact.ruc).
  */
 export async function addCompanyToContact(
   contactId: string,
@@ -501,12 +753,15 @@ export async function addCompanyToContact(
     if (opts.isPrimary) {
       await setPrimaryCompanyInternal(contactId, company.id);
 
-      // también reflejarla en legacy contact.companyName/ruc
+      // reflejar en contacto legacy SOLO companyName
       await prisma.contact.update({
         where: { id: contactId },
         data: {
-          companyName: company.name,
-          ruc: company.ruc,
+          companyName:
+            company.name ||
+            company.razonSocial ||
+            opts.name ||
+            null,
         },
       });
     }
@@ -519,7 +774,10 @@ export async function addCompanyToContact(
 }
 
 /**
- * Cambia la empresa principal del contacto
+ * Cambia la empresa principal del contacto.
+ *
+ * Ya NO seteamos contact.ruc aquí (por el UNIQUE),
+ * solo actualizamos companyName.
  */
 export async function setPrimaryCompany(
   contactId: string,
@@ -538,12 +796,14 @@ export async function setPrimaryCompany(
     // 2. marcar como primaria y desmarcar las demás
     await setPrimaryCompanyInternal(contactId, companyId);
 
-    // 3. reflejar en contacto legacy
+    // 3. reflejar en contacto legacy SOLO companyName
     await prisma.contact.update({
       where: { id: contactId },
       data: {
-        companyName: pivot.company.name,
-        ruc: pivot.company.ruc,
+        companyName:
+          pivot.company.name ||
+          pivot.company.razonSocial ||
+          'SIN RAZON SOCIAL',
       },
     });
 
@@ -555,7 +815,11 @@ export async function setPrimaryCompany(
 }
 
 /**
- * Quita una empresa del contacto
+ * Quita una empresa del contacto.
+ *
+ * Si borramos la empresa primaria, reasignamos otra como primaria
+ * y actualizamos SOLO companyName (sin tocar ruc).
+ * Si ya no queda ninguna empresa, limpiamos companyName.
  */
 export async function removeCompanyFromContact(
   contactId: string,
@@ -570,7 +834,7 @@ export async function removeCompanyFromContact(
 
     const wasPrimary = pivot.isPrimary;
 
-    // borrar
+    // borrar la relación
     await prisma.contactCompany.delete({
       where: { id: pivot.id },
     });
@@ -586,21 +850,22 @@ export async function removeCompanyFromContact(
       if (remaining) {
         await setPrimaryCompanyInternal(contactId, remaining.companyId);
 
-        // reflejar en contacto legacy
+        // reflejar en contacto legacy SOLO companyName
         await prisma.contact.update({
           where: { id: contactId },
           data: {
-            companyName: remaining.company.name,
-            ruc: remaining.company.ruc,
+            companyName:
+              remaining.company.name ||
+              remaining.company.razonSocial ||
+              'SIN RAZON SOCIAL',
           },
         });
       } else {
-        // si ya no tiene empresas, limpiamos legacy
+        // si ya no tiene empresas, limpiamos companyName
         await prisma.contact.update({
           where: { id: contactId },
           data: {
             companyName: null,
-            ruc: null,
           },
         });
       }
@@ -748,8 +1013,7 @@ export async function unblockContact(phoneNumber: string) {
       data: { isBlocked: false },
     });
 
-    // no eliminamos forzosamente el registro de BlockedNumber (auditoría),
-    // pero podrías hacerlo si quieres
+    // no eliminamos forzosamente el registro de BlockedNumber (auditoría)
     return updated;
   } catch (error) {
     logger.error('Error unblocking contact:', error);
@@ -782,15 +1046,27 @@ export async function exportContactsToExcelData() {
       const fallback = primary || c.companies[0] || null;
 
       const primaryCompanyName =
-        fallback?.company?.name ?? c.companyName ?? null;
+        fallback?.company?.name ||
+        fallback?.company?.razonSocial ||
+        c.companyName ||
+        null;
       const primaryCompanyRuc =
-        fallback?.company?.ruc ?? c.ruc ?? null;
+        fallback?.company?.ruc ||
+        fallback?.company?.numeroDoc ||
+        c.ruc || // ojo: legacy, puede estar seteado en algunos contactos viejos
+        null;
 
       const extraCompanies = c.companies
         .filter((cc: any) => !primary || cc.companyId !== primary.companyId)
         .map((cc: any) => ({
-          ruc: cc.company?.ruc || null,
-          name: cc.company?.name || null,
+          ruc:
+            cc.company?.ruc ||
+            cc.company?.numeroDoc ||
+            null,
+          name:
+            cc.company?.name ||
+            cc.company?.razonSocial ||
+            null,
           role: cc.role || null,
         }));
 
@@ -815,6 +1091,9 @@ export async function exportContactsToExcelData() {
 
 /**
  * Importa contactos en lote desde un dataset ya parseado del Excel.
+ *
+ * En este import seguimos usando addCompanyToContact(),
+ * que ya respeta la regla de NO pisar contact.ruc.
  */
 export async function importContactsFromExcel(rows: Array<{
   phoneNumber: string;
@@ -844,7 +1123,7 @@ export async function importContactsFromExcel(rows: Array<{
             phoneNumber: phone,
             name: row.name?.trim() || null,
             dni: row.dni && isValidDNI(row.dni) ? row.dni : null,
-            state: 'REGISTERED', // puedes ajustarlo si quieres otro estado para importados
+            state: 'REGISTERED', // o el estado que tú quieras para importados
           },
         });
       } else {
@@ -862,7 +1141,7 @@ export async function importContactsFromExcel(rows: Array<{
         }
       }
 
-      // manejar empresas
+      // manejar empresas declaradas en el Excel
       if (row.companies && row.companies.length > 0) {
         for (const comp of row.companies) {
           if (!comp.ruc || !comp.name) continue;
@@ -898,7 +1177,7 @@ export async function importContactsFromExcel(rows: Array<{
 
 /**
  * Elimina un contacto por ID.
- * Borra Contact, ContactCompany, y ConversationHistory asociado.
+ * Borra ContactCompany, ConversationHistory asociado y luego el Contact.
  */
 export async function deleteContact(contactId: string) {
   try {

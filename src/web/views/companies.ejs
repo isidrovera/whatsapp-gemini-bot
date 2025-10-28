@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title><%= title %> - WhatsApp Bot Admin</title>
 
-  <!-- Tailwind & fuente -->
+  <!-- Tailwind / Fuente / Icons -->
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -18,6 +18,7 @@
           fontFamily: { sans:['Inter','ui-sans-serif','system-ui'] },
           boxShadow: {
             soft:'0 10px 25px -10px rgba(0,0,0,.15)',
+            card:'0 25px 60px -10px rgba(0,0,0,.45)',
           },
           colors: {
             primary: { DEFAULT:'#1e3a8a', 700:'#1e40af' },
@@ -26,28 +27,23 @@
       }
     };
   </script>
-
-  <!-- Iconos -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
-    @media (prefers-reduced-motion: reduce){
-      *{
-        animation-duration:.001ms!important;
-        animation-iteration-count:1!important;
-        transition-duration:.001ms!important;
-        scroll-behavior:auto!important
-      }
-    }
+    .hidden-row { display: none; }
+    .modal-backdrop { display:none; }
+    .modal-backdrop.show { display:flex; }
   </style>
 </head>
 
 <body class="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 min-h-screen flex">
-  <!-- SIDEBAR (simplificada, igual que en metrics/dashboard; ajusta enlaces según tu layout real) -->
+
+  <!-- SIDEBAR -->
   <aside class="hidden md:flex w-[280px] flex-col bg-gradient-to-b from-primary to-primary-700 text-white shadow-soft">
     <div class="px-5 py-6 border-b border-white/10 bg-white/5 backdrop-blur flex items-center justify-between">
       <h2 class="text-xl font-semibold flex items-center gap-2">
-        <i data-lucide="bot" class="w-5 h-5"></i> Bot Admin
+        <i data-lucide="bot" class="w-5 h-5"></i>
+        Bot Admin
       </h2>
     </div>
 
@@ -96,13 +92,17 @@
       <div class="rounded-xl bg-white/10 p-3">
         <div class="text-[11px] uppercase tracking-wide opacity-80">Sesión activa</div>
         <div class="font-semibold text-sm mt-1 flex items-center gap-2">
-          <i data-lucide="user" class="w-4 h-4"></i> <%= user || 'Admin' %>
+          <i data-lucide="user" class="w-4 h-4"></i>
+          <%= user || 'Admin' %>
         </div>
       </div>
       <form method="POST" action="/auth/logout" class="mt-3">
-        <button type="submit"
-          class="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-red-500/20 hover:bg-red-500/30 text-white py-2.5 text-sm font-semibold transition">
-          <i data-lucide="log-out" class="w-4 h-4"></i> Cerrar sesión
+        <button
+          type="submit"
+          class="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-red-500/20 hover:bg-red-500/30 text-white py-2.5 text-sm font-semibold transition"
+        >
+          <i data-lucide="log-out" class="w-4 h-4"></i>
+          Cerrar sesión
         </button>
       </form>
     </div>
@@ -110,7 +110,7 @@
 
   <!-- MAIN -->
   <main class="flex-1 p-4 md:p-8">
-    <!-- Header -->
+    <!-- HEADER -->
     <header class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
       <div>
         <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
@@ -118,16 +118,42 @@
           Empresas
         </h1>
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Gestión de las empresas (RUC / Razón Social)
+          Gestión de clientes corporativos, sucursales y contactos
         </p>
       </div>
 
-      <button
-        class="inline-flex items-center gap-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 text-sm font-semibold transition shadow-soft"
-        onclick="openCreateModal()">
-        <i data-lucide="plus" class="w-4 h-4"></i>
-        Nueva Empresa
-      </button>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <!-- Nueva Empresa -->
+        <button
+          class="inline-flex items-center gap-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 text-sm font-semibold transition shadow-soft"
+          onclick="openCompanyModal()"
+        >
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          Nueva Empresa
+        </button>
+
+        <!-- Export -->
+        <button
+          class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold transition shadow-soft"
+          onclick="exportExcel()"
+        >
+          <i data-lucide="download" class="w-4 h-4"></i>
+          Exportar Excel
+        </button>
+
+        <!-- Import -->
+        <label class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-sm font-semibold transition shadow-soft cursor-pointer">
+          <i data-lucide="upload" class="w-4 h-4"></i>
+          <span>Importar Excel</span>
+          <input
+            type="file"
+            id="importFileInput"
+            accept=".xlsx,.xls,.csv"
+            class="hidden"
+            onchange="importExcel(event)"
+          />
+        </label>
+      </div>
     </header>
 
     <% if (error) { %>
@@ -136,7 +162,32 @@
       </div>
     <% } %>
 
-    <!-- Tabla -->
+    <!-- BUSCADOR -->
+    <section class="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-soft p-4 mb-6">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+        <div class="flex-1">
+          <label class="text-[13px] font-semibold text-slate-700 dark:text-slate-200 mb-1 block">
+            Buscar (RUC/DNI, Razón Social)
+          </label>
+          <div class="relative">
+            <input
+              id="searchInput"
+              type="text"
+              class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 pl-9 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-4 focus:ring-sky-200 dark:focus:ring-sky-900/40"
+              placeholder="Ej: 20601234567 / ACME / Pérez"
+              oninput="filterRows()"
+            />
+            <i data-lucide="search" class="absolute left-2 top-2.5 w-4 h-4 text-slate-400"></i>
+          </div>
+        </div>
+
+        <div class="text-xs text-slate-500 dark:text-slate-400 flex-shrink-0 sm:self-end">
+          Total: <span id="countVisible"><%= companies.length %></span> / <%= companies.length %> empresas
+        </div>
+      </div>
+    </section>
+
+    <!-- TABLA DE EMPRESAS -->
     <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-soft border border-slate-100/70 dark:border-white/5 overflow-x-auto">
       <div class="px-6 py-4 border-b border-slate-100/70 dark:border-white/5 flex items-center justify-between">
         <h2 class="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-white">
@@ -145,39 +196,95 @@
         </h2>
       </div>
 
-      <table class="min-w-full text-sm">
+      <table class="min-w-full text-sm" id="companiesTable">
         <thead class="bg-slate-50/60 dark:bg-white/5 text-slate-500 dark:text-slate-400 uppercase text-xs tracking-wide">
           <tr>
-            <th class="text-left px-6 py-3">RUC</th>
-            <th class="text-left px-6 py-3">Nombre</th>
+            <th class="text-left px-6 py-3">Doc</th>
+            <th class="text-left px-6 py-3">Número</th>
+            <th class="text-left px-6 py-3">Razón Social</th>
+            <th class="text-left px-6 py-3">Estado</th>
+            <th class="text-left px-6 py-3">Sucursales</th>
             <th class="text-left px-6 py-3">Creación</th>
-            <th class="text-left px-6 py-3">Últ. Actualización</th>
             <th class="text-left px-6 py-3">Acciones</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-slate-100/70 dark:divide-white/5">
+
+        <tbody class="divide-y divide-slate-100/70 dark:divide-white/5" id="companiesTbody">
           <% if (companies && companies.length > 0) { %>
             <% companies.forEach(c => { %>
-              <tr class="hover:bg-slate-50/50 dark:hover:bg-white/5 transition" data-row="<%= c.id %>">
-                <td class="px-6 py-3 font-semibold text-slate-800 dark:text-slate-100"><%= c.ruc %></td>
-                <td class="px-6 py-3 text-slate-700 dark:text-slate-200"><%= c.name %></td>
-                <td class="px-6 py-3 text-slate-500 dark:text-slate-400 text-xs">
+              <tr
+                class="hover:bg-slate-50/50 dark:hover:bg-white/5 transition"
+                data-row-id="<%= c.id %>"
+                data-search-text="<%- [
+                  c.tipoDoc || '',
+                  c.numeroDoc || '',
+                  c.razonSocial || '',
+                  c.estadoSunat || ''
+                ].join(' ').toLowerCase() %>"
+              >
+                <td class="px-6 py-3 font-semibold text-slate-800 dark:text-slate-100">
+                  <%= c.tipoDoc || '-' %>
+                </td>
+                <td class="px-6 py-3 text-slate-700 dark:text-slate-200">
+                  <%= c.numeroDoc || '-' %>
+                </td>
+                <td class="px-6 py-3 text-slate-700 dark:text-slate-200">
+                  <div class="font-semibold truncate max-w-[260px]"><%= c.razonSocial %></div>
+                </td>
+                <td class="px-6 py-3 text-slate-600 dark:text-slate-300 text-xs">
+                  <% if (c.estadoSunat) { %>
+                    <span class="inline-flex items-center rounded-md px-2 py-1 text-[11px] font-semibold
+                      <%= c.estadoSunat.toLowerCase().includes('activo') || c.estadoSunat.toLowerCase().includes('habido')
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                      %>">
+                      <%= c.estadoSunat %>
+                    </span>
+                  <% } else { %>
+                    <span class="inline-flex items-center rounded-md px-2 py-1 text-[11px] font-semibold bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      -
+                    </span>
+                  <% } %>
+                </td>
+                <td class="px-6 py-3 text-slate-700 dark:text-slate-200 text-center">
+                  <span class="inline-flex items-center rounded-md bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 px-2 py-1 text-[11px] font-semibold">
+                    <%= c.branches ? c.branches.length : 0 %>
+                  </span>
+                </td>
+                <td class="px-6 py-3 text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">
                   <%= new Date(c.createdAt).toLocaleString('es-PE') %>
                 </td>
-                <td class="px-6 py-3 text-slate-500 dark:text-slate-400 text-xs">
-                  <%= new Date(c.updatedAt).toLocaleString('es-PE') %>
-                </td>
                 <td class="px-6 py-3 text-sm">
-                  <div class="flex gap-2">
+                  <div class="flex flex-wrap gap-2">
+                    <!-- Ver detalle -->
+                    <a
+                      class="inline-flex items-center gap-1 rounded-md bg-indigo-500/20 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-2 py-1 text-xs font-semibold hover:bg-indigo-500/30"
+                      href="/companies/<%= c.id %>"
+                    >
+                      <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                      Ver
+                    </a>
+
+                    <!-- Editar (abre modal con preload simple) -->
                     <button
                       class="inline-flex items-center gap-1 rounded-md bg-amber-500/20 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-1 text-xs font-semibold hover:bg-amber-500/30"
-                      onclick="openEditModal('<%= c.id %>','<%- c.ruc %>','<%- c.name.replace(/"/g,'&quot;') %>')">
+                      onclick="openCompanyModal(
+                        '<%= c.id %>',
+                        '<%- c.tipoDoc || '' %>',
+                        '<%- c.numeroDoc || '' %>',
+                        '<%- (c.razonSocial||'').replace(/\"/g,'&quot;') %>',
+                        '<%- c.estadoSunat||'' %>'
+                      )"
+                    >
                       <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
                       Editar
                     </button>
+
+                    <!-- Eliminar -->
                     <button
                       class="inline-flex items-center gap-1 rounded-md bg-rose-500/20 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 px-2 py-1 text-xs font-semibold hover:bg-rose-500/30"
-                      onclick="deleteCompany('<%= c.id %>')">
+                      onclick="deleteCompany('<%= c.id %>')"
+                    >
                       <i data-lucide="trash" class="w-3.5 h-3.5"></i>
                       Eliminar
                     </button>
@@ -187,7 +294,7 @@
             <% }) %>
           <% } else { %>
             <tr>
-              <td colspan="5" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400 text-sm">
+              <td colspan="7" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400 text-sm">
                 No hay empresas registradas.
               </td>
             </tr>
@@ -195,119 +302,379 @@
         </tbody>
       </table>
     </section>
-
-    <!-- Modal Crear/Editar -->
-    <div id="company-modal" class="fixed inset-0 z-[999] hidden items-center justify-center bg-black/50 p-4">
-      <div class="w-full max-w-md rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-xl shadow-black/40 p-5">
-        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-          <i data-lucide="building" class="w-5 h-5 text-primary"></i>
-          <span id="modal-title">Nueva Empresa</span>
-        </h3>
-
-        <div class="space-y-4 text-sm">
-          <input type="hidden" id="companyId" />
-
-          <div>
-            <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">
-              RUC
-            </label>
-            <input
-              id="companyRuc"
-              type="text"
-              class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-4 focus:ring-sky-200 dark:focus:ring-sky-900/40"
-              placeholder="RUC empresa"
-            />
-          </div>
-
-          <div>
-            <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">
-              Nombre
-            </label>
-            <input
-              id="companyName"
-              type="text"
-              class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-4 focus:ring-sky-200 dark:focus:ring-sky-900/40"
-              placeholder="Razón social"
-            />
-          </div>
-        </div>
-
-        <div class="mt-6 flex items-center justify-end gap-2">
-          <button
-            class="inline-flex items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 text-xs font-semibold transition"
-            onclick="closeModal()">
-            Cancelar
-          </button>
-
-          <button
-            id="modal-save-btn"
-            class="inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 text-xs font-semibold transition shadow-soft"
-            onclick="saveCompany()">
-            Guardar
-          </button>
-        </div>
-      </div>
-    </div>
-
   </main>
 
+  <!-- ===========================
+       MODAL CREAR / EDITAR EMPRESA
+       =========================== -->
+  <div id="company-modal" class="modal-backdrop fixed inset-0 z-[999] items-center justify-center bg-black/50 p-4">
+    <div class="w-full max-w-lg rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-xl shadow-black/40 p-5 max-h-[90vh] overflow-y-auto">
+      <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+        <i data-lucide="building" class="w-5 h-5 text-primary"></i>
+        <span id="modal-title">Nueva Empresa</span>
+      </h3>
+
+      <input type="hidden" id="companyId" />
+
+      <div class="grid gap-4 text-sm md:grid-cols-2">
+        <!-- TipoDoc -->
+        <div class="md:col-span-1">
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">
+            Tipo Doc
+          </label>
+          <select
+            id="tipoDoc"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-4 focus:ring-sky-200 dark:focus:ring-sky-900/40"
+          >
+            <option value="RUC">RUC</option>
+            <option value="DNI">DNI</option>
+          </select>
+        </div>
+
+        <!-- NumeroDoc con lookup -->
+        <div class="md:col-span-1">
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">
+            Nº Documento
+          </label>
+          <div class="flex gap-2">
+            <input
+              id="numeroDoc"
+              type="text"
+              class="flex-1 rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-4 focus:ring-sky-200 dark:focus:ring-sky-900/40"
+              placeholder="RUC o DNI"
+            />
+            <button
+              class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 text-xs font-semibold transition"
+              type="button"
+              onclick="lookupDoc()"
+              title="Consultar SUNAT / RENIEC"
+            >
+              <i data-lucide="search" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Razon Social -->
+        <div class="md:col-span-2">
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">
+            Razón Social / Nombre
+          </label>
+          <input
+            id="razonSocial"
+            type="text"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-4 focus:ring-sky-200 dark:focus:ring-sky-900/40"
+            placeholder="ACME S.A.C. / Juan Perez"
+          />
+        </div>
+
+        <!-- Estado SUNAT -->
+        <div class="md:col-span-2">
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">
+            Estado SUNAT
+          </label>
+          <input
+            id="estadoSunat"
+            type="text"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-4 focus:ring-sky-200 dark:focus:ring-sky-900/40"
+            placeholder="ACTIVO / BAJA / PERSONA NATURAL"
+          />
+        </div>
+
+        <!-- Condición SUNAT -->
+        <div class="md:col-span-2">
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">
+            Condición SUNAT (HABIDO / NO HABIDO)
+          </label>
+          <input
+            id="condicionSunat"
+            type="text"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100"
+          />
+        </div>
+
+        <!-- Dirección Fiscal -->
+        <div class="md:col-span-2">
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">
+            Dirección Fiscal SUNAT
+          </label>
+          <input
+            id="direccionFiscal"
+            type="text"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100"
+            placeholder="AV. JOSE GALVEZ BARRENECHEA NRO 566 ..."
+          />
+        </div>
+
+        <!-- Distrito / Provincia -->
+        <div>
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">
+            Distrito Fiscal
+          </label>
+          <input
+            id="distritoFiscal"
+            type="text"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100"
+          />
+        </div>
+
+        <div>
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">
+            Provincia Fiscal
+          </label>
+          <input
+            id="provinciaFiscal"
+            type="text"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100"
+          />
+        </div>
+
+        <!-- Departamento -->
+        <div class="md:col-span-2">
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">
+            Departamento Fiscal
+          </label>
+          <input
+            id="departamentoFiscal"
+            type="text"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100"
+          />
+        </div>
+      </div>
+
+      <div class="mt-6 flex items-center justify-end gap-2">
+        <button
+          class="inline-flex items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 text-xs font-semibold transition"
+          onclick="closeCompanyModal()"
+        >
+          Cancelar
+        </button>
+
+        <button
+          id="modal-save-btn"
+          class="inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 text-xs font-semibold transition shadow-soft"
+          onclick="saveCompany()"
+        >
+          Guardar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
+    // Iconos
     window.lucide && lucide.createIcons();
 
-    const modal = document.getElementById('company-modal');
-    const companyIdEl = document.getElementById('companyId');
-    const companyRucEl = document.getElementById('companyRuc');
-    const companyNameEl = document.getElementById('companyName');
-    const modalTitleEl = document.getElementById('modal-title');
+    // Refs DOM
+    const modalEl        = document.getElementById('company-modal');
+    const modalTitleEl   = document.getElementById('modal-title');
 
-    function openCreateModal() {
-      companyIdEl.value = '';
-      companyRucEl.value = '';
-      companyNameEl.value = '';
-      modalTitleEl.textContent = 'Nueva Empresa';
-      modal.classList.remove('hidden');
-      modal.classList.add('flex');
+    const companyIdEl    = document.getElementById('companyId');
+    const tipoDocEl      = document.getElementById('tipoDoc');
+    const numeroDocEl    = document.getElementById('numeroDoc');
+    const razonSocialEl  = document.getElementById('razonSocial');
+    const estadoSunatEl  = document.getElementById('estadoSunat');
+
+    // nuevos campos fiscales
+    const condicionSunatEl     = document.getElementById('condicionSunat');
+    const direccionFiscalEl    = document.getElementById('direccionFiscal');
+    const distritoFiscalEl     = document.getElementById('distritoFiscal');
+    const provinciaFiscalEl    = document.getElementById('provinciaFiscal');
+    const departamentoFiscalEl = document.getElementById('departamentoFiscal');
+
+    const tbodyEl        = document.getElementById('companiesTbody');
+    const searchInputEl  = document.getElementById('searchInput');
+    const countVisibleEl = document.getElementById('countVisible');
+
+    // ---------------------------
+    // BUSCADOR FRONT
+    // ---------------------------
+    function filterRows() {
+      const q = searchInputEl.value.trim().toLowerCase();
+      const rows = tbodyEl.querySelectorAll('tr[data-row-id]');
+      let visible = 0;
+      rows.forEach(row => {
+        const hay = row.getAttribute('data-search-text') || '';
+        const match = !q || hay.includes(q);
+        row.classList.toggle('hidden-row', !match);
+        if (match) visible++;
+      });
+      countVisibleEl.textContent = visible.toString();
     }
 
-    function openEditModal(id, ruc, name) {
-      companyIdEl.value = id;
-      companyRucEl.value = ruc;
-      companyNameEl.value = name;
-      modalTitleEl.textContent = 'Editar Empresa';
-      modal.classList.remove('hidden');
-      modal.classList.add('flex');
+    // ---------------------------
+    // MODAL OPEN/CLOSE
+    // ---------------------------
+    function openCompanyModal(
+      id,
+      tipoDoc,
+      numeroDoc,
+      razonSocial,
+      estadoSunat,
+      condicionSunat,
+      direccionFiscal,
+      distritoFiscal,
+      provinciaFiscal,
+      departamentoFiscal
+    ) {
+      if (id) {
+        // Editar existente
+        modalTitleEl.textContent = 'Editar Empresa';
+        companyIdEl.value = id;
+        tipoDocEl.value = tipoDoc || 'RUC';
+        numeroDocEl.value = numeroDoc || '';
+        razonSocialEl.value = razonSocial || '';
+        estadoSunatEl.value = estadoSunat || '';
+
+        condicionSunatEl.value     = condicionSunat || '';
+        direccionFiscalEl.value    = direccionFiscal || '';
+        distritoFiscalEl.value     = distritoFiscal || '';
+        provinciaFiscalEl.value    = provinciaFiscal || '';
+        departamentoFiscalEl.value = departamentoFiscal || '';
+      } else {
+        // Nueva
+        modalTitleEl.textContent = 'Nueva Empresa';
+        companyIdEl.value = '';
+        tipoDocEl.value = 'RUC';
+        numeroDocEl.value = '';
+        razonSocialEl.value = '';
+        estadoSunatEl.value = '';
+
+        condicionSunatEl.value     = '';
+        direccionFiscalEl.value    = '';
+        distritoFiscalEl.value     = '';
+        provinciaFiscalEl.value    = '';
+        departamentoFiscalEl.value = '';
+      }
+      modalEl.classList.add('show');
     }
 
-    function closeModal() {
-      modal.classList.add('hidden');
-      modal.classList.remove('flex');
+    function closeCompanyModal() {
+      modalEl.classList.remove('show');
     }
 
+    // ---------------------------
+    // LOOKUP DOC (SUNAT / RENIEC)
+    // ---------------------------
+    async function lookupDoc() {
+      const tipo = tipoDocEl.value.trim();
+      const num  = numeroDocEl.value.trim();
+      if (!num) {
+        alert('Ingresa un número de documento');
+        return;
+      }
+      try {
+        let url = '';
+        if (tipo === 'RUC') {
+          url = '/companies/api/lookup-ruc/' + encodeURIComponent(num);
+        } else {
+          url = '/companies/api/lookup-dni/' + encodeURIComponent(num);
+        }
+
+        const res = await fetch(url);
+        if (!res.ok) {
+          alert('No encontrado en fuente externa');
+          return;
+        }
+        const info = await res.json();
+
+        if (tipo === 'RUC') {
+          // info extendido
+          if (info.razonSocial && !razonSocialEl.value) {
+            razonSocialEl.value = info.razonSocial;
+          }
+          if (info.estado && !estadoSunatEl.value) {
+            estadoSunatEl.value = info.estado;
+          }
+          if (info.condicion && !condicionSunatEl.value) {
+            condicionSunatEl.value = info.condicion;
+          }
+          if (info.direccion && !direccionFiscalEl.value) {
+            direccionFiscalEl.value = info.direccion;
+          }
+          if (info.distrito && !distritoFiscalEl.value) {
+            distritoFiscalEl.value = info.distrito;
+          }
+          if (info.provincia && !provinciaFiscalEl.value) {
+            provinciaFiscalEl.value = info.provincia;
+          }
+          if (info.departamento && !departamentoFiscalEl.value) {
+            departamentoFiscalEl.value = info.departamento;
+          }
+        } else {
+          // DNI
+          const fullName = [
+            info.nombres || '',
+            info.apellidoPaterno || '',
+            info.apellidoMaterno || ''
+          ].join(' ').trim();
+          if (fullName && !razonSocialEl.value) {
+            razonSocialEl.value = fullName;
+          }
+          if (!estadoSunatEl.value) {
+            estadoSunatEl.value = 'PERSONA NATURAL';
+          }
+          // Para DNI normalmente no hay dirección fiscal
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error consultando SUNAT/RENIEC');
+      }
+    }
+
+    // ---------------------------
+    // GUARDAR (CREATE/UPDATE)
+    // ---------------------------
     async function saveCompany() {
-      const id = companyIdEl.value.trim();
-      const ruc = companyRucEl.value.trim();
-      const name = companyNameEl.value.trim();
+      const id          = companyIdEl.value.trim();
+      const tipoDoc     = tipoDocEl.value.trim();
+      const numeroDoc   = numeroDocEl.value.trim();
+      const razonSocial = razonSocialEl.value.trim();
 
-      if (!ruc || !name) {
-        alert('RUC y Nombre son requeridos');
+      const estadoSunat        = estadoSunatEl.value.trim();
+      const condicionSunat     = condicionSunatEl.value.trim();
+      const direccionFiscal    = direccionFiscalEl.value.trim();
+      const distritoFiscal     = distritoFiscalEl.value.trim();
+      const provinciaFiscal    = provinciaFiscalEl.value.trim();
+      const departamentoFiscal = departamentoFiscalEl.value.trim();
+
+      if (!tipoDoc || !numeroDoc || !razonSocial) {
+        alert('TipoDoc, Nº Documento y Razón Social son obligatorios');
         return;
       }
 
       try {
         let res;
         if (id) {
-          // update
-          res = await fetch('/companies/api/' + encodeURIComponent(id), {
+          // UPDATE
+          res = await fetch('/companies/api/company/' + encodeURIComponent(id), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ruc, name })
+            body: JSON.stringify({
+              razonSocial,
+              estadoSunat,
+              condicionSunat,
+              direccionFiscal,
+              distritoFiscal,
+              provinciaFiscal,
+              departamentoFiscal,
+            })
           });
         } else {
-          // create
-          res = await fetch('/companies/api', {
+          // CREATE
+          res = await fetch('/companies/api/company', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ruc, name })
+            body: JSON.stringify({
+              tipoDoc,
+              numeroDoc,
+              razonSocial,
+              estadoSunat,
+              condicionSunat,
+              direccionFiscal,
+              distritoFiscal,
+              provinciaFiscal,
+              departamentoFiscal,
+            })
           });
         }
 
@@ -317,7 +684,6 @@
           return;
         }
 
-        // refrescar página para ver cambios
         window.location.reload();
       } catch (err) {
         console.error(err);
@@ -325,13 +691,16 @@
       }
     }
 
+    // ---------------------------
+    // ELIMINAR
+    // ---------------------------
     async function deleteCompany(id) {
-      if (!confirm('¿Eliminar esta empresa? Esta acción no se puede deshacer.')) {
+      if (!confirm('¿Eliminar esta empresa y TODAS sus sucursales/contactos?')) {
         return;
       }
 
       try {
-        const res = await fetch('/companies/api/' + encodeURIComponent(id), {
+        const res = await fetch('/companies/api/company/' + encodeURIComponent(id), {
           method: 'DELETE'
         });
         if (!res.ok) {
@@ -345,6 +714,87 @@
         alert('Error de red al eliminar empresa');
       }
     }
+
+    // ---------------------------
+    // EXPORT EXCEL
+    // ---------------------------
+    async function exportExcel() {
+      try {
+        const res = await fetch('/companies/api/export');
+        if (!res.ok) {
+          alert('No se pudo exportar');
+          return;
+        }
+        const blob = await res.blob();
+        const url  = window.URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = 'empresas.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } catch (err) {
+        console.error(err);
+        alert('Error exportando Excel');
+      }
+    }
+
+    // ---------------------------
+    // IMPORT EXCEL
+    // ---------------------------
+    async function importExcel(ev) {
+      const fileInput = ev.target;
+      if (!fileInput.files || !fileInput.files[0]) {
+        alert('Selecciona un archivo primero');
+        return;
+      }
+      const file = fileInput.files[0];
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const res = await fetch('/companies/api/import', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.ok) {
+          alert('Error importando Excel: ' + (data.error || res.statusText));
+          return;
+        }
+
+        alert(
+          'Importación OK:\n' +
+          `Empresas creadas: ${data.summary.companiesCreated}\n` +
+          `Empresas actualizadas: ${data.summary.companiesUpdated}\n` +
+          `Sucursales creadas: ${data.summary.branchesCreated}\n` +
+          `Sucursales actualizadas: ${data.summary.branchesUpdated}\n` +
+          `Contactos creados: ${data.summary.contactsCreated}\n` +
+          `Contactos actualizados: ${data.summary.contactsUpdated}\n`
+        );
+
+        window.location.reload();
+      } catch (err) {
+        console.error(err);
+        alert('Error de red al importar Excel');
+      } finally {
+        // reset input
+        fileInput.value = '';
+      }
+    }
+
+    // Exponer funciones globalmente
+    window.filterRows       = filterRows;
+    window.openCompanyModal = openCompanyModal;
+    window.closeCompanyModal= closeCompanyModal;
+    window.lookupDoc        = lookupDoc;
+    window.saveCompany      = saveCompany;
+    window.deleteCompany    = deleteCompany;
+    window.exportExcel      = exportExcel;
+    window.importExcel      = importExcel;
   </script>
 </body>
 </html>

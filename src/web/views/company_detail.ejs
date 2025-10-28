@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title><%= title %> - <%= company.razonSocial || 'Empresa' %></title>
+
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'media',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter','ui-sans-serif','system-ui'] },
+          colors: { primary: { DEFAULT:'#1e3a8a',600:'#1e3a8a',700:'#1e40af' } },
+          boxShadow: { soft: '0 20px 40px -12px rgba(0,0,0,.15)', card:'0 25px 60px -10px rgba(0,0,0,.45)' }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    .modal-backdrop { display:none; }
+    .modal-backdrop.show { display:flex; }
+  </style>
+</head>
+<body class="min-h-full bg-slate-100 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100">
+  <main class="max-w-6xl mx-auto py-8 px-4 space-y-8">
+
+    <!-- ENCABEZADO -->
+    <section class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+      <div>
+        <a href="/companies" class="text-sm text-primary-600 hover:text-primary-700 inline-flex items-center gap-2 font-medium">
+          <i data-lucide="arrow-left" class="w-4 h-4"></i>
+          Volver a Empresas
+        </a>
+
+        <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-3 mt-2">
+          <i data-lucide="building" class="w-7 h-7 text-primary"></i>
+          <span><%= company.razonSocial || 'Sin razón social' %></span>
+        </h1>
+
+        <div class="mt-2 text-sm text-slate-600 dark:text-slate-400 space-y-1">
+          <div>
+            <span class="font-medium"><%= company.tipoDoc %>:</span>
+            <%= company.numeroDoc || '—' %>
+          </div>
+
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-medium">Estado SUNAT:</span>
+            <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium
+              <%= company.estadoSunat &&
+                  (company.estadoSunat.toLowerCase().includes('activo') || company.estadoSunat.toLowerCase().includes('habido'))
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+              %>">
+              <%= company.estadoSunat || '—' %>
+            </span>
+          </div>
+
+          <div class="text-[12px] text-slate-500 dark:text-slate-400">
+            ID interno: <span class="font-mono"><%= company.id %></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row gap-2">
+        <button
+          class="inline-flex items-center gap-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 text-sm font-semibold shadow-soft"
+          onclick="openCompanyEditModal()"
+        >
+          <i data-lucide="edit-2" class="w-4 h-4"></i>
+          Editar Empresa
+        </button>
+
+        <button
+          class="inline-flex items-center gap-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 text-sm font-semibold shadow-soft"
+          onclick="deleteCompany('<%= company.id %>')"
+        >
+          <i data-lucide="trash" class="w-4 h-4"></i>
+          Eliminar Empresa
+        </button>
+      </div>
+    </section>
+
+    <!-- DATOS LEGALES -->
+    <section class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft border border-slate-200 dark:border-white/10 p-6">
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+        <i data-lucide="info" class="w-5 h-5 text-primary"></i>
+        Datos legales de la empresa
+      </h2>
+
+      <p class="text-[12px] text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+        Información proveniente de SUNAT / RENIEC. Aquí también se guardan los datos fiscales de SUNAT.
+      </p>
+
+      <div class="grid gap-4 text-sm md:grid-cols-2">
+        <div>
+          <div class="text-[11px] uppercase font-semibold tracking-wide text-slate-500 dark:text-slate-400">Tipo Doc</div>
+          <div class="text-slate-900 dark:text-slate-100 font-medium"><%= company.tipoDoc || '—' %></div>
+        </div>
+
+        <div>
+          <div class="text-[11px] uppercase font-semibold tracking-wide text-slate-500 dark:text-slate-400">Nº Documento</div>
+          <div class="text-slate-900 dark:text-slate-100 font-medium"><%= company.numeroDoc || '—' %></div>
+        </div>
+
+        <div class="md:col-span-2">
+          <div class="text-[11px] uppercase font-semibold tracking-wide text-slate-500 dark:text-slate-400">Razón Social / Nombre</div>
+          <div class="text-slate-900 dark:text-slate-100 font-semibold text-base"><%= company.razonSocial || '—' %></div>
+        </div>
+
+        <div>
+          <div class="text-[11px] uppercase font-semibold tracking-wide text-slate-500 dark:text-slate-400">Estado SUNAT</div>
+          <div class="text-slate-900 dark:text-slate-100 font-medium"><%= company.estadoSunat || '—' %></div>
+        </div>
+
+        <div>
+          <div class="text-[11px] uppercase font-semibold tracking-wide text-slate-500 dark:text-slate-400">Condición SUNAT</div>
+          <div class="text-slate-900 dark:text-slate-100 font-medium"><%= company.condicionSunat || '—' %></div>
+        </div>
+
+        <div class="md:col-span-2">
+          <div class="text-[11px] uppercase font-semibold tracking-wide text-slate-500 dark:text-slate-400">Dirección fiscal SUNAT</div>
+          <div class="text-slate-900 dark:text-slate-100 font-medium">
+            <%= company.direccionFiscal || '—' %>
+          </div>
+        </div>
+
+        <div>
+          <div class="text-[11px] uppercase font-semibold tracking-wide text-slate-500 dark:text-slate-400">Distrito fiscal</div>
+          <div class="text-slate-900 dark:text-slate-100 font-medium"><%= company.distritoFiscal || '—' %></div>
+        </div>
+
+        <div>
+          <div class="text-[11px] uppercase font-semibold tracking-wide text-slate-500 dark:text-slate-400">Provincia fiscal</div>
+          <div class="text-slate-900 dark:text-slate-100 font-medium"><%= company.provinciaFiscal || '—' %></div>
+        </div>
+
+        <div>
+          <div class="text-[11px] uppercase font-semibold tracking-wide text-slate-500 dark:text-slate-400">Departamento fiscal</div>
+          <div class="text-slate-900 dark:text-slate-100 font-medium"><%= company.departamentoFiscal || '—' %></div>
+        </div>
+
+        <div>
+          <div class="text-[11px] uppercase font-semibold tracking-wide text-slate-500 dark:text-slate-400">RUC (legacy)</div>
+          <div class="text-slate-900 dark:text-slate-100 font-medium"><%= company.ruc || '—' %></div>
+        </div>
+
+        <div>
+          <div class="text-[11px] uppercase font-semibold tracking-wide text-slate-500 dark:text-slate-400">Alias / name (legacy)</div>
+          <div class="text-slate-900 dark:text-slate-100 font-medium"><%= company.name || '—' %></div>
+        </div>
+
+        <div>
+          <div class="text-[11px] uppercase font-semibold tracking-wide text-slate-500 dark:text-slate-400">Creada</div>
+          <div class="text-slate-900 dark:text-slate-100 font-medium">
+            <%= new Date(company.createdAt).toLocaleString('es-PE') %>
+          </div>
+        </div>
+
+        <div>
+          <div class="text-[11px] uppercase font-semibold tracking-wide text-slate-500 dark:text-slate-400">Actualizada</div>
+          <div class="text-slate-900 dark:text-slate-100 font-medium">
+            <%= new Date(company.updatedAt).toLocaleString('es-PE') %>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SUCURSALES -->
+    <section class="space-y-4">
+      <div class="flex items-start justify-between flex-wrap gap-4">
+        <div class="flex items-center gap-2">
+          <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+            <i data-lucide="map-pin" class="w-5 h-5 text-primary"></i>
+            Sucursales
+          </h2>
+          <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            <%= (company.branches && company.branches.length) || 0 %>
+          </span>
+        </div>
+
+        <button
+          class="inline-flex items-center gap-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 text-xs font-semibold shadow-soft"
+          onclick="openBranchModal(null)"
+        >
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          Nueva Sucursal
+        </button>
+      </div>
+
+      <% if (!company.branches || company.branches.length === 0) { %>
+        <div class="bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-300 dark:border-white/10 p-6 text-center text-slate-500 dark:text-slate-400 text-sm">
+          No hay sucursales registradas.
+        </div>
+      <% } else { %>
+        <div class="grid md:grid-cols-2 gap-6">
+          <% company.branches.forEach(function(branch) { %>
+            <section class="bg-white dark:bg-slate-900 rounded-xl shadow-soft border border-slate-200 dark:border-white/10 p-5 space-y-4">
+
+              <!-- Cabecera sucursal -->
+              <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <div class="text-base font-semibold text-slate-900 dark:text-white">
+                      <%= branch.nombre || 'Sucursal sin nombre' %>
+                    </div>
+                    <span class="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                      <%= branch.isActive ? 'Activa' : 'Inactiva' %>
+                    </span>
+                  </div>
+
+                  <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                    ID sucursal:
+                    <span class="font-mono"><%= branch.id %></span>
+                  </div>
+
+                  <div class="text-xs text-slate-600 dark:text-slate-300 mt-2 leading-relaxed space-y-0.5">
+                    <div><span class="font-medium">Dirección:</span> <%= branch.direccion || '—' %></div>
+                    <div><span class="font-medium">Distrito:</span> <%= branch.distrito || '—' %></div>
+                    <div><span class="font-medium">Provincia:</span> <%= branch.provincia || '—' %></div>
+                    <div><span class="font-medium">Departamento:</span> <%= branch.departamento || '—' %></div>
+                    <% if (branch.referencia) { %>
+                      <div><span class="font-medium">Referencia:</span> <%= branch.referencia %></div>
+                    <% } %>
+                    <% if (branch.telefono) { %>
+                      <div><span class="font-medium">Tel.:</span> <%= branch.telefono %></div>
+                    <% } %>
+                    <% if (branch.email) { %>
+                      <div><span class="font-medium">Email:</span> <%= branch.email %></div>
+                    <% } %>
+                  </div>
+                </div>
+
+                <div class="flex flex-col gap-2 shrink-0">
+                  <button
+                    class="inline-flex items-center gap-1 rounded-md bg-amber-500/20 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-1 text-[11px] font-semibold hover:bg-amber-500/30"
+                    onclick="openBranchModal('<%= branch.id %>')"
+                  >
+                    <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                    Editar
+                  </button>
+
+                  <button
+                    class="inline-flex items-center gap-1 rounded-md bg-rose-500/20 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 px-2 py-1 text-[11px] font-semibold hover:bg-rose-500/30"
+                    onclick="deleteBranch('<%= branch.id %>')"
+                  >
+                    <i data-lucide="trash" class="w-3.5 h-3.5"></i>
+                    Eliminar
+                  </button>
+
+                  <button
+                    class="inline-flex items-center gap-1 rounded-md bg-indigo-500/20 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-2 py-1 text-[11px] font-semibold hover:bg-indigo-500/30"
+                    onclick="openContactModal('<%= branch.id %>', null)"
+                  >
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                    Nuevo contacto
+                  </button>
+                </div>
+              </div>
+
+              <!-- CONTACTOS -->
+              <div>
+                <div class="text-sm font-medium text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-2">
+                  Contactos
+                  <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900">
+                    <%= (branch.contacts && branch.contacts.length) || 0 %>
+                  </span>
+                </div>
+
+                <% if (!branch.contacts || branch.contacts.length === 0) { %>
+                  <div class="text-xs text-slate-500 dark:text-slate-400 border border-dashed border-slate-300 dark:border-slate-700 rounded-lg p-3 text-center">
+                    Ningún contacto asignado.
+                  </div>
+                <% } else { %>
+                  <ul class="space-y-2">
+                    <% branch.contacts.forEach(function(ct) { %>
+                      <li class="bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
+                        <div class="flex items-start justify-between gap-2">
+                          <div class="text-sm font-semibold text-slate-900 dark:text-white">
+                            <%= ct.nombre || 'Sin nombre' %>
+                          </div>
+
+                          <div class="flex flex-col gap-1 shrink-0">
+                            <button
+                              class="inline-flex items-center gap-1 rounded-md bg-amber-500/20 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-1 text-[11px] font-semibold hover:bg-amber-500/30"
+                              onclick="openContactModal('<%= branch.id %>', '<%= ct.id %>', <%- JSON.stringify(ct).replace(/<\/script/gi,'<\\/script') %>)"
+                            >
+                              <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                              Editar
+                            </button>
+
+                            <button
+                              class="inline-flex items-center gap-1 rounded-md bg-rose-500/20 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 px-2 py-1 text-[11px] font-semibold hover:bg-rose-500/30"
+                              onclick="deleteBranchContact('<%= ct.id %>')"
+                            >
+                              <i data-lucide="trash" class="w-3.5 h-3.5"></i>
+                              Eliminar
+                            </button>
+                          </div>
+                        </div>
+
+                        <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                          ID contacto:
+                          <span class="font-mono"><%= ct.id %></span>
+                        </div>
+
+                        <div class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                          <% if (ct.cargo) { %>
+                            <div><span class="font-medium">Cargo:</span> <%= ct.cargo %></div>
+                          <% } %>
+
+                          <% if (ct.celular) { %>
+                            <div><span class="font-medium">Celular:</span> <%= ct.celular %></div>
+                          <% } %>
+
+                          <% if (ct.whatsapp) { %>
+                            <div><span class="font-medium">WhatsApp:</span> <%= ct.whatsapp %></div>
+                          <% } %>
+
+                          <% if (ct.email) { %>
+                            <div><span class="font-medium">Email:</span> <%= ct.email %></div>
+                          <% } %>
+
+                          <div>
+                            <span class="font-medium">Activo:</span>
+                            <%= ct.isActive ? 'Sí' : 'No' %>
+                          </div>
+                        </div>
+                      </li>
+                    <% }) %>
+                  </ul>
+                <% } %>
+              </div>
+
+            </section>
+          <% }); %>
+        </div>
+      <% } %>
+    </section>
+  </main>
+
+  <!-- =============== MODAL EDITAR EMPRESA =============== -->
+  <div id="company-modal" class="modal-backdrop fixed inset-0 z-[999] items-center justify-center bg-black/50 p-4">
+    <div class="w-full max-w-lg rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-xl shadow-black/40 p-5 max-h-[90vh] overflow-y-auto">
+      <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+        <i data-lucide="building" class="w-5 h-5 text-primary"></i>
+        <span>Editar Empresa</span>
+      </h3>
+
+      <input type="hidden" id="companyId" value="<%= company.id %>" />
+
+      <div class="grid gap-4 text-sm md:grid-cols-2">
+
+        <!-- TipoDoc -->
+        <div class="md:col-span-1">
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">Tipo Doc</label>
+          <input
+            id="company_tipoDoc"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-500 dark:text-slate-400"
+            value="<%= company.tipoDoc || '' %>"
+            disabled
+          />
+        </div>
+
+        <!-- NumeroDoc -->
+        <div class="md:col-span-1">
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">Nº Documento</label>
+          <input
+            id="company_numeroDoc"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-slate-800 px-3 py-2 text-sm text-slate-500 dark:text-slate-400"
+            value="<%= company.numeroDoc || '' %>"
+            disabled
+          />
+        </div>
+
+        <!-- Razón Social -->
+        <div class="md:col-span-2">
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">Razón Social / Nombre</label>
+          <input
+            id="company_razonSocial"
+            type="text"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:ring-4 focus:ring-sky-200 dark:focus:ring-sky-900/40"
+            value="<%= company.razonSocial || '' %>"
+          />
+        </div>
+
+        <!-- Estado SUNAT -->
+        <div class="md:col-span-2">
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">Estado SUNAT</label>
+          <input
+            id="company_estadoSunat"
+            type="text"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100"
+            value="<%= company.estadoSunat || '' %>"
+          />
+        </div>
+
+        <!-- Condición SUNAT -->
+        <div class="md:col-span-2">
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">Condición SUNAT</label>
+          <input
+            id="company_condicionSunat"
+            type="text"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100"
+            value="<%= company.condicionSunat || '' %>"
+          />
+        </div>
+
+        <!-- Dirección fiscal -->
+        <div class="md:col-span-2">
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">Dirección fiscal SUNAT</label>
+          <input
+            id="company_direccionFiscal"
+            type="text"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100"
+            value="<%= company.direccionFiscal || '' %>"
+          />
+        </div>
+
+        <!-- Distrito / Provincia -->
+        <div>
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">Distrito fiscal</label>
+          <input
+            id="company_distritoFiscal"
+            type="text"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100"
+            value="<%= company.distritoFiscal || '' %>"
+          />
+        </div>
+
+        <div>
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">Provincia fiscal</label>
+          <input
+            id="company_provinciaFiscal"
+            type="text"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100"
+            value="<%= company.provinciaFiscal || '' %>"
+          />
+        </div>
+
+        <!-- Departamento -->
+        <div class="md:col-span-2">
+          <label class="block text-slate-700 dark:text-slate-200 font-medium text-xs uppercase tracking-wide mb-1">Departamento fiscal</label>
+          <input
+            id="company_departamentoFiscal"
+            type="text"
+            class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100"
+            value="<%= company.departamentoFiscal || '' %>"
+          />
+        </div>
+      </div>
+
+      <div class="mt-6 flex items-center justify-end gap-2">
+        <button
+          class="inline-flex items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 text-xs font-semibold"
+          onclick="closeCompanyEditModal()"
+        >
+          Cancelar
+        </button>
+
+        <button
+          class="inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 text-xs font-semibold shadow-soft"
+          onclick="saveCompany()"
+        >
+          Guardar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============== MODAL SUCURSAL (CREATE/EDIT) =============== -->
+  <div id="branch-modal" class="modal-backdrop fixed inset-0 z-[999] items-center justify-center bg-black/50 p-4">
+    <div class="w-full max-w-lg rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-xl shadow-black/40 p-5 max-h-[90vh] overflow-y-auto">
+      <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+        <i data-lucide="map-pin" class="w-5 h-5 text-primary"></i>
+        <span id="branch-modal-title">Nueva Sucursal</span>
+      </h3>
+
+      <input type="hidden" id="branch_id" />
+      <input type="hidden" id="branch_companyId" value="<%= company.id %>" />
+
+      <div class="grid gap-4 text-sm md:grid-cols-2">
+        <div class="md:col-span-2">
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-1">Nombre sucursal</label>
+          <input id="branch_nombre" type="text" class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:ring-4 focus:ring-sky-200 dark:focus:ring-sky-900/40" />
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-1">Dirección</label>
+          <input id="branch_direccion" type="text" class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:ring-4 focus:ring-sky-200 dark:focus:ring-sky-900/40" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-1">Distrito</label>
+          <input id="branch_distrito" type="text" class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-1">Provincia</label>
+          <input id="branch_provincia" type="text" class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-1">Departamento</label>
+          <input id="branch_departamento" type="text" class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-1">Referencia</label>
+          <input id="branch_referencia" type="text" class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-1">Teléfono</label>
+          <input id="branch_telefono" type="text" class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-1">Email</label>
+          <input id="branch_email" type="email" class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100" />
+        </div>
+
+        <div class="md:col-span-2 flex items-center gap-2">
+          <input id="branch_isActive" type="checkbox" class="w-4 h-4 rounded border-slate-300 dark:border-white/10 text-primary focus:ring-primary" checked />
+          <label for="branch_isActive" class="text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide">Sucursal Activa</label>
+        </div>
+      </div>
+
+      <div class="mt-6 flex items-center justify-end gap-2">
+        <button class="inline-flex items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 text-xs font-semibold" onclick="closeBranchModal()">
+          Cancelar
+        </button>
+
+        <button class="inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 text-xs font-semibold shadow-soft" onclick="saveBranch()">
+          Guardar Sucursal
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============== MODAL CONTACTO (CREATE/EDIT) =============== -->
+  <div id="contact-modal" class="modal-backdrop fixed inset-0 z-[999] items-center justify-center bg-black/50 p-4">
+    <div class="w-full max-w-lg rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-xl shadow-black/40 p-5 max-h-[90vh] overflow-y-auto">
+      <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+        <i data-lucide="user" class="w-5 h-5 text-primary"></i>
+        <span id="contact-modal-title">Nuevo Contacto</span>
+      </h3>
+
+      <input type="hidden" id="contact_id" />
+      <input type="hidden" id="contact_branchId" />
+
+      <div class="grid gap-4 text-sm md:grid-cols-2">
+        <div class="md:col-span-2">
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-1">Nombre</label>
+          <input id="contact_nombre" type="text" class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100" />
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-1">Cargo</label>
+          <input id="contact_cargo" type="text" class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-1">Celular</label>
+          <input id="contact_celular" type="text" class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-1">WhatsApp</label>
+          <input id="contact_whatsapp" type="text" class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100" />
+        </div>
+
+        <div class="md:col-span-2">
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide mb-1">Email</label>
+          <input id="contact_email" type="email" class="w-full rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-800 dark:text-slate-100" />
+        </div>
+
+        <div class="md:col-span-2 flex items-center gap-2">
+          <input id="contact_isActive" type="checkbox" class="w-4 h-4 rounded border-slate-300 dark:border-white/10 text-primary focus:ring-primary" checked />
+          <label for="contact_isActive" class="text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide">Contacto Activo</label>
+        </div>
+      </div>
+
+      <div class="mt-6 flex items-center justify-end gap-2">
+        <button class="inline-flex items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 text-xs font-semibold" onclick="closeContactModal()">
+          Cancelar
+        </button>
+
+        <button class="inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 text-xs font-semibold shadow-soft" onclick="saveContact()">
+          Guardar Contacto
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.lucide && lucide.createIcons();
+
+    // ----- MODAL refs -----
+    const companyModal   = document.getElementById('company-modal');
+    const branchModal    = document.getElementById('branch-modal');
+    const contactModal   = document.getElementById('contact-modal');
+
+    // ----- COMPANY EDIT -----
+    const companyIdEl                 = document.getElementById('companyId');
+    const companyRazonSocialEl        = document.getElementById('company_razonSocial');
+    const companyEstadoSunatEl        = document.getElementById('company_estadoSunat');
+    const companyCondicionSunatEl     = document.getElementById('company_condicionSunat');
+    const companyDireccionFiscalEl    = document.getElementById('company_direccionFiscal');
+    const companyDistritoFiscalEl     = document.getElementById('company_distritoFiscal');
+    const companyProvinciaFiscalEl    = document.getElementById('company_provinciaFiscal');
+    const companyDepartamentoFiscalEl = document.getElementById('company_departamentoFiscal');
+
+    function openCompanyEditModal() {
+      companyModal.classList.add('show');
+    }
+    function closeCompanyEditModal() {
+      companyModal.classList.remove('show');
+    }
+
+    async function saveCompany() {
+      const id          = companyIdEl.value.trim();
+      const razonSocial = companyRazonSocialEl.value.trim();
+      const estadoSunat = companyEstadoSunatEl.value.trim();
+
+      const condicionSunat     = companyCondicionSunatEl.value.trim();
+      const direccionFiscal    = companyDireccionFiscalEl.value.trim();
+      const distritoFiscal     = companyDistritoFiscalEl.value.trim();
+      const provinciaFiscal    = companyProvinciaFiscalEl.value.trim();
+      const departamentoFiscal = companyDepartamentoFiscalEl.value.trim();
+
+      if (!id || !razonSocial) {
+        alert('Razón social es obligatoria');
+        return;
+      }
+
+      try {
+        const res = await fetch('/companies/api/company/' + encodeURIComponent(id), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            razonSocial,
+            estadoSunat,
+            condicionSunat,
+            direccionFiscal,
+            distritoFiscal,
+            provinciaFiscal,
+            departamentoFiscal,
+          })
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          alert('Error guardando empresa: ' + (data.error || res.statusText));
+          return;
+        }
+
+        location.reload();
+      } catch (err) {
+        console.error(err);
+        alert('Error de red al guardar empresa');
+      }
+    }
+
+    async function deleteCompany(id) {
+      if (!confirm('¿Eliminar esta empresa y TODAS sus sucursales/contactos?')) return;
+      try {
+        const res = await fetch('/companies/api/company/' + encodeURIComponent(id), { method:'DELETE' });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          alert('Error eliminando empresa: ' + (data.error || res.statusText));
+          return;
+        }
+        window.location.href = '/companies';
+      } catch (err) {
+        console.error(err);
+        alert('Error de red al eliminar empresa');
+      }
+    }
+
+    // ----- BRANCH -----
+    const branchModalTitleEl = document.getElementById('branch-modal-title');
+    const branchIdEl         = document.getElementById('branch_id');
+    const branchCompanyIdEl  = document.getElementById('branch_companyId');
+
+    const branchNombreEl       = document.getElementById('branch_nombre');
+    const branchDireccionEl    = document.getElementById('branch_direccion');
+    const branchDistritoEl     = document.getElementById('branch_distrito');
+    const branchProvinciaEl    = document.getElementById('branch_provincia');
+    const branchDepartamentoEl = document.getElementById('branch_departamento');
+    const branchReferenciaEl   = document.getElementById('branch_referencia');
+    const branchTelefonoEl     = document.getElementById('branch_telefono');
+    const branchEmailEl        = document.getElementById('branch_email');
+    const branchIsActiveEl     = document.getElementById('branch_isActive');
+
+    function openBranchModal(branchId) {
+      // NOTA: Si quisieras precargar datos reales al editar, deberías tener un GET /companies/api/branch/:branchId.
+      // Por ahora abrimos limpio y asumimos que el usuario vuelve a llenar.
+      if (branchId) {
+        branchModalTitleEl.textContent = 'Editar Sucursal';
+        branchIdEl.value = branchId;
+      } else {
+        branchModalTitleEl.textContent = 'Nueva Sucursal';
+        branchIdEl.value = '';
+      }
+
+      branchNombreEl.value       = '';
+      branchDireccionEl.value    = '';
+      branchDistritoEl.value     = '';
+      branchProvinciaEl.value    = '';
+      branchDepartamentoEl.value = '';
+      branchReferenciaEl.value   = '';
+      branchTelefonoEl.value     = '';
+      branchEmailEl.value        = '';
+      branchIsActiveEl.checked   = true;
+
+      branchModal.classList.add('show');
+    }
+
+    function closeBranchModal() {
+      branchModal.classList.remove('show');
+    }
+
+    async function saveBranch() {
+      const companyId   = branchCompanyIdEl.value.trim();
+      const idBranch    = branchIdEl.value.trim();
+
+      const payload = {
+        nombre:        branchNombreEl.value.trim(),
+        direccion:     branchDireccionEl.value.trim(),
+        distrito:      branchDistritoEl.value.trim(),
+        provincia:     branchProvinciaEl.value.trim(),
+        departamento:  branchDepartamentoEl.value.trim(),
+        referencia:    branchReferenciaEl.value.trim(),
+        telefono:      branchTelefonoEl.value.trim(),
+        email:         branchEmailEl.value.trim(),
+        isActive:      branchIsActiveEl.checked,
+      };
+
+      try {
+        let res;
+        if (idBranch) {
+          res = await fetch('/companies/api/branch/' + encodeURIComponent(idBranch), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        } else {
+          res = await fetch('/companies/api/company/' + encodeURIComponent(companyId) + '/branch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        }
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          alert('Error guardando sucursal: ' + (data.error || res.statusText));
+          return;
+        }
+
+        location.reload();
+      } catch (err) {
+        console.error(err);
+        alert('Error de red al guardar sucursal');
+      }
+    }
+
+    async function deleteBranch(idBranch) {
+      if (!confirm('¿Eliminar esta sucursal y TODOS sus contactos?')) return;
+      try {
+        const res = await fetch('/companies/api/branch/' + encodeURIComponent(idBranch), { method: 'DELETE' });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          alert('Error eliminando sucursal: ' + (data.error || res.statusText));
+          return;
+        }
+        location.reload();
+      } catch (err) {
+        console.error(err);
+        alert('Error de red al eliminar sucursal');
+      }
+    }
+
+    // ----- CONTACTOS -----
+    const contactModalTitleEl = document.getElementById('contact-modal-title');
+    const contactIdEl         = document.getElementById('contact_id');
+    const contactBranchIdEl   = document.getElementById('contact_branchId');
+
+    const contactNombreEl   = document.getElementById('contact_nombre');
+    const contactCargoEl    = document.getElementById('contact_cargo');
+    const contactCelularEl  = document.getElementById('contact_celular');
+    const contactWhatsappEl = document.getElementById('contact_whatsapp');
+    const contactEmailEl    = document.getElementById('contact_email');
+    const contactIsActiveEl = document.getElementById('contact_isActive');
+
+    function openContactModal(branchId, contactId, existingData) {
+      contactBranchIdEl.value = branchId || '';
+      contactIdEl.value       = contactId || '';
+
+      if (contactId) {
+        contactModalTitleEl.textContent = 'Editar Contacto';
+
+        contactNombreEl.value   = existingData?.nombre   || '';
+        contactCargoEl.value    = existingData?.cargo    || '';
+        contactCelularEl.value  = existingData?.celular  || '';
+        contactWhatsappEl.value = existingData?.whatsapp || '';
+        contactEmailEl.value    = existingData?.email    || '';
+        contactIsActiveEl.checked = !!existingData?.isActive;
+      } else {
+        contactModalTitleEl.textContent = 'Nuevo Contacto';
+        contactNombreEl.value   = '';
+        contactCargoEl.value    = '';
+        contactCelularEl.value  = '';
+        contactWhatsappEl.value = '';
+        contactEmailEl.value    = '';
+        contactIsActiveEl.checked = true;
+      }
+
+      contactModal.classList.add('show');
+    }
+
+    function closeContactModal() {
+      contactModal.classList.remove('show');
+    }
+
+    async function saveContact() {
+      const branchId   = contactBranchIdEl.value.trim();
+      const contactId  = contactIdEl.value.trim();
+
+      const payload = {
+        nombre:   contactNombreEl.value.trim(),
+        cargo:    contactCargoEl.value.trim(),
+        celular:  contactCelularEl.value.trim(),
+        whatsapp: contactWhatsappEl.value.trim(),
+        email:    contactEmailEl.value.trim(),
+        isActive: contactIsActiveEl.checked,
+      };
+
+      try {
+        let res;
+        if (contactId) {
+          res = await fetch('/companies/api/branch-contact/' + encodeURIComponent(contactId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        } else {
+          res = await fetch('/companies/api/branch/' + encodeURIComponent(branchId) + '/contact', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        }
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          alert('Error guardando contacto: ' + (data.error || res.statusText));
+          return;
+        }
+
+        location.reload();
+      } catch (err) {
+        console.error(err);
+        alert('Error de red al guardar contacto');
+      }
+    }
+
+    async function deleteBranchContact(contactId) {
+      if (!confirm('¿Eliminar este contacto?')) return;
+      try {
+        const res = await fetch('/companies/api/branch-contact/' + encodeURIComponent(contactId), { method:'DELETE' });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          alert('Error eliminando contacto: ' + (data.error || res.statusText));
+          return;
+        }
+        location.reload();
+      } catch (err) {
+        console.error(err);
+        alert('Error de red al eliminar contacto');
+      }
+    }
+
+    // Exponer en window
+    window.openCompanyEditModal    = openCompanyEditModal;
+    window.closeCompanyEditModal   = closeCompanyEditModal;
+    window.saveCompany             = saveCompany;
+    window.deleteCompany           = deleteCompany;
+
+    window.openBranchModal         = openBranchModal;
+    window.closeBranchModal        = closeBranchModal;
+    window.saveBranch              = saveBranch;
+    window.deleteBranch            = deleteBranch;
+
+    window.openContactModal        = openContactModal;
+    window.closeContactModal       = closeContactModal;
+    window.saveContact             = saveContact;
+    window.deleteBranchContact     = deleteBranchContact;
+  </script>
+</body>
+</html>

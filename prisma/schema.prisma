@@ -32,6 +32,7 @@ model Contact {
   state           String           @default("NEW")
   isBlocked       Boolean          @default(false) @map("is_blocked")
   humanTakeoverAt DateTime?        @map("human_takeover_at")
+  nextAction      String?  @map("next_action") // "SERVICE" | "TONER" | null
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
 
@@ -45,33 +46,39 @@ model Contact {
 }
 
 model Company {
-  id          String   @id @default(uuid())
-  // Documento puede ser RUC (11) o DNI (8)
-  tipoDoc     String   @default("RUC") @map("tipo_doc") // "RUC" | "DNI"
-  numeroDoc   String   @unique @map("numero_doc")       // ruc o dni
-  razonSocial String   @map("razon_social")             // razón social o nombre completo
-  estadoSunat String?  @map("estado_sunat")             // "ACTIVO", "HABIDO", "BAJA", o "PERSONA NATURAL", etc.
+  id                  String   @id @default(uuid())
 
-  // Campos legacy que ya usas:
-  // - ruc: podemos mantenerlo como columna opcional por compatibilidad.
-  // - name: podemos mapearlo a razónSocial para no romper vistas viejas.
-  ruc         String?  @unique
-  name        String   @default("")  // <- deprecado, mantenlo vivo para no romper código antiguo
+  tipoDoc             String?   @map("tipo_doc")
+  numeroDoc           String?   @unique @map("numero_doc")
+  razonSocial         String?   @map("razon_social")
 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt      @map("updated_at")
+  estadoSunat         String?   @map("estado_sunat")
+  condicionSunat      String?   @map("condicion_sunat")
+  direccionFiscal     String?   @map("direccion_fiscal")
+  distritoFiscal      String?   @map("distrito_fiscal")
+  provinciaFiscal     String?   @map("provincia_fiscal")
+  departamentoFiscal  String?   @map("departamento_fiscal")
 
-  // Relaciones
-  contacts    ContactCompany[]  // EXISTENTE: contactos "del chat" asociados a la empresa
-  branches    Branch[]          // NUEVO: sucursales físicas
+  // legacy
+  ruc                 String?   @unique
+  name                String    @default("")
+
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt      @map("updated_at")
+
+  contacts            ContactCompany[]
+  branches            Branch[]
 
   @@map("companies")
 }
+
+
+
 model Branch {
   id            String   @id @default(uuid())
   companyId     String   @map("company_id")
 
-  nombre        String                          // "Sede Principal", "Sucursal Arequipa"
+  nombre        String                          // "Sede Principal", "Sucursal Arequipa", etc.
   direccion     String
   distrito      String?
   provincia     String?
@@ -90,6 +97,7 @@ model Branch {
   @@index([companyId])
   @@map("branches")
 }
+
 model BranchContact {
   id         String   @id @default(uuid())
   branchId   String   @map("branch_id")
@@ -110,7 +118,6 @@ model BranchContact {
   @@map("branch_contacts")
 }
 
-
 model ContactCompany {
   id         String   @id @default(uuid())
   contactId  String   @map("contact_id")
@@ -123,7 +130,7 @@ model ContactCompany {
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  @@unique([contactId, companyId]) // No repetir misma empresa con el mismo contacto
+  @@unique([contactId, companyId])
   @@index([contactId])
   @@index([companyId])
   @@map("contact_companies")

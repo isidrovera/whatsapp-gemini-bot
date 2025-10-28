@@ -39,6 +39,10 @@ import { replaceVariables } from '../utils/formatters.js';
 // 🔄 DNI/RUC externo (RENIEC / SUNAT)
 import * as external from './external.js';
 
+// ⭐ MOD: necesitamos acceso directo a prisma aquí para guardar RUC provisional
+import { getPrismaClient } from '../config/database.js';
+const prisma = getPrismaClient();
+
 // ==================================================
 // ESTADO INTERNO WHATSAPP
 // ==================================================
@@ -111,7 +115,7 @@ function buildMainMenu(contact: any): string {
     `2️⃣ Solicitud de *tóner / suministros*\n` +
     `3️⃣ *Asistencia remota* (AnyDesk / foto de pantalla)\n` +
     `4️⃣ *Cambiar empresa activa* (si trabajas con más de una)\n` +
-    `5️⃣ Hablar con un *técnico *`
+    `5️⃣ Hablar con un *Técnico*`
   );
 }
 
@@ -220,6 +224,18 @@ async function generateOdooLinkForContact(contact: any, phone: string) {
   if (!companyName) return null;
   const userName = contact.name || 'Usuario';
   return await getOdooServiceLink(companyName, userName, phone);
+}
+
+// ⭐ MOD: guarda el RUC provisional cuando el RUC no existe en BD aún
+async function saveProvisionalRUC(phoneE164: string, ruc: string) {
+  try {
+    await prisma.contact.update({
+      where: { phoneNumber: phoneE164 },
+      data: { ruc },
+    });
+  } catch (err) {
+    logger.warn('No se pudo guardar RUC provisional:', err);
+  }
 }
 
 // ==================================================
@@ -558,6 +574,7 @@ async function handleIncomingMessage(
     //   - NEW
     //   - WAITING_DNI
     //   - WAITING_RUC
+    //   - WAITING_COMPANY_NAME  ⭐ MOD (nuevo estado intermedio)
     //   - SELECTING_COMPANY
     //   - MENU / REGISTERED
     //   - WAITING_REMOTE_INFO
@@ -617,13 +634,27 @@ async function handleIncomingMessage(
     }
 
     //
-    // 2.c) WAITING_RUC -> validar RUC con SUNAT vía external.validateRUC
+    // 2.c) WAITING_RUC
+    //
+    // ⭐ MOD IMPORTANTE:
+    // Antes tú SIEMPRE ibas directo a SUNAT y luego a updateRUC().
+    // Problema: si el RUC YA EXISTE en BD, igual intentabas recrear todo
+    // y el flujo se trababa.
+    //
+    // Ahora:
+    //   1. Intentamos vincular a una empresa EXISTENTE con ese RUC
+    //      contactModel.linkExistingCompanyByRucAndSetPrimary()
+    //      - esto solo linkea, no crea
+    //   2. Si ok === true => contacto queda REGISTERED / MENU
+    //   3. Si no existe esa empresa todavía:
+    //         hacemos la validación SUNAT, pedimos razón social (o la tomamos),
+    //         pero si SUNAT falla igual pedimos razón social manual
     //
     if (state === 'WAITING_RUC') {
       const rucCandidate = finalMessageText.trim();
-      const isRucValid = /^\d{11}$/.test(rucCandidate);
+      const isRucBasicValid = /^\d{11}$/.test(rucCandidate);
 
-      if (!isRucValid) {
+      if (!isRucBasicValid) {
         await sendMessage(
           senderJid,
           'El RUC debe tener exactamente 11 dígitos numéricos. Inténtalo nuevamente 🙌'
@@ -631,30 +662,77 @@ async function handleIncomingMessage(
         return;
       }
 
-      // 🔎 Consultamos SUNAT
+      // 2.c.1: intentar linkear con empresa YA existente
+      const linkRes =
+        await contactModel.linkExistingCompanyByRucAndSetPrimary(
+          normalizedPhone,
+          rucCandidate
+        );
+
+      if (linkRes.ok === true) {
+        // ya quedó asociada la empresa primaria, y contacto.state pasa a REGISTERED internamente
+        // recargamos contacto
+        contact = await contactModel.findByPhone(normalizedPhone);
+
+        // si tiene varias empresas → seleccionar
+        if (contact?.companies && contact.companies.length > 1) {
+          await contactModel.updateState(normalizedPhone, 'SELECTING_COMPANY');
+
+          await sendMessage(
+            senderJid,
+            `He verificado tu empresa con RUC ${rucCandidate} ✅`
+          );
+          await sendMessage(senderJid, buildCompanySelectionMenu(contact));
+          return;
+        }
+
+        // si tiene 1 sola → vamos directo a MENU
+        await contactModel.updateState(normalizedPhone, 'MENU');
+
+        contact = await contactModel.findByPhone(normalizedPhone);
+
+        await sendMessage(
+          senderJid,
+          `¡Excelente! Quedaste registrado con ${contact.companyName} ✅`
+        );
+        await sendMessage(senderJid, buildMainMenu(contact));
+        return;
+      }
+
+      // 2.c.2: si NO existe la empresa con ese RUC en BD todavía,
+      // consultamos SUNAT para traer razón social automática.
       const infoRuc = await external.validateRUC(rucCandidate);
 
       if (!infoRuc) {
+        // No pudimos validar SUNAT tampoco.
+        // Pedimos razón social manual.
+        await contactModel.updateState(
+          normalizedPhone,
+          'WAITING_COMPANY_NAME'
+        );
+
+        await saveProvisionalRUC(normalizedPhone, rucCandidate);
+
         await sendMessage(
           senderJid,
-          'No pude validar el RUC en SUNAT. Por favor confirma que esté correcto.'
+          'No pude validar el RUC en SUNAT. Por favor envíame el *nombre o razón social de tu empresa* tal como debería figurar.'
         );
         return;
       }
 
-      const razonSocial = infoRuc.razonSocial || `Empresa ${rucCandidate}`;
+      // Si sí tenemos info SUNAT, ya podemos registrar directo usando updateRUC()
+      const razonSocial =
+        infoRuc.razonSocial || `Empresa ${rucCandidate}`.trim();
 
-      // crea/relaciona Company y la marca como primaria internamente
       await contactModel.updateRUC(
         normalizedPhone,
         rucCandidate,
         razonSocial
       );
 
-      // recargar contacto ya actualizado
       contact = await contactModel.findByPhone(normalizedPhone);
 
-      // Si tiene varias empresas -> pasamos a SELECTING_COMPANY
+      // ¿tiene más de una empresa asociada?
       if (contact?.companies && contact.companies.length > 1) {
         await contactModel.updateState(normalizedPhone, 'SELECTING_COMPANY');
 
@@ -666,17 +744,76 @@ async function handleIncomingMessage(
         return;
       }
 
-      // Si solo tiene una empresa → directo a MENÚ
+      // si sólo tiene una → listo, pasa a MENU
       await contactModel.updateState(normalizedPhone, 'MENU');
 
-      // recargamos otra vez con la empresa primaria ya reflejada
       contact = await contactModel.findByPhone(normalizedPhone);
 
       await sendMessage(
         senderJid,
         `¡Excelente! Quedaste registrado con ${contact.companyName} ✅`
       );
+      await sendMessage(senderJid, buildMainMenu(contact));
+      return;
+    }
 
+    //
+    // ⭐ MOD NUEVO ESTADO:
+    // 2.c.bis) WAITING_COMPANY_NAME
+    //
+    // Entramos acá cuando:
+    //  - El usuario ya dio RUC válido
+    //  - Esa empresa NO existía en BD
+    //  - SUNAT tampoco devolvió datos
+    //  - Le pedimos manualmente la razón social
+    //
+    if (state === 'WAITING_COMPANY_NAME') {
+      const razonSocialManual = finalMessageText.trim();
+
+      // leemos el contacto actual para extraer el RUC provisional que guardamos
+      contact = await contactModel.findByPhone(normalizedPhone);
+      const provisionalRuc = contact?.ruc || '';
+
+      if (!provisionalRuc || provisionalRuc.length !== 11) {
+        // si por algún motivo no tenemos el ruc, pedimos de nuevo
+        await contactModel.updateState(normalizedPhone, 'WAITING_RUC');
+        await sendMessage(
+          senderJid,
+          'Necesito nuevamente el RUC (11 dígitos) para poder registrar tu empresa. 🙏'
+        );
+        return;
+      }
+
+      // ahora sí creamos esa empresa con (RUC provisional + razón social manual)
+      await contactModel.updateRUC(
+        normalizedPhone,
+        provisionalRuc,
+        razonSocialManual
+      );
+
+      contact = await contactModel.findByPhone(normalizedPhone);
+
+      // ¿tiene varias empresas?
+      if (contact?.companies && contact.companies.length > 1) {
+        await contactModel.updateState(normalizedPhone, 'SELECTING_COMPANY');
+
+        await sendMessage(
+          senderJid,
+          `He registrado la empresa: ${razonSocialManual} ✅`
+        );
+        await sendMessage(senderJid, buildCompanySelectionMenu(contact));
+        return;
+      }
+
+      // si sólo tiene una → pasa a MENU
+      await contactModel.updateState(normalizedPhone, 'MENU');
+
+      contact = await contactModel.findByPhone(normalizedPhone);
+
+      await sendMessage(
+        senderJid,
+        `¡Excelente! Quedaste registrado con ${contact.companyName} ✅`
+      );
       await sendMessage(senderJid, buildMainMenu(contact));
       return;
     }
@@ -806,7 +943,7 @@ async function handleIncomingMessage(
         return;
       }
 
-      // opción 5: hablar con técnico 
+      // opción 5: hablar con técnico
       if (finalMessageText.trim() === '5') {
         await contactModel.setHumanTakeover(normalizedPhone);
         await sendMessage(
@@ -1004,7 +1141,7 @@ export async function sendMedia(
 ) {
   if (!sock || !isReady) {
     logger.error('WhatsApp client not ready (sendMedia)');
-    throw new Error('WhatsApp client not ready');
+    throw new Error('WhatsApp client not ready (sendMedia)');
   }
 
   const { buffer, mime, fileName, caption } = payload;
@@ -1073,7 +1210,7 @@ export async function sendMediaToPhone(
 ) {
   if (!sock || !isReady) {
     logger.error('WhatsApp client not ready (sendMediaToPhone)');
-    throw new Error('WhatsApp client not ready');
+    throw new Error('WhatsApp client not ready (sendMediaToPhone)');
   }
 
   const clean = phoneE164.replace(/\D/g, '');

@@ -3,7 +3,8 @@ import express from 'express';
 import ExcelJS from 'exceljs';
 import * as contactModel from '../../models/contact.js';
 import { logger } from '../../utils/logger.js';
-
+import { getPrismaClient } from '../../config/database.js';
+const prisma = getPrismaClient();
 const router = express.Router();
 
 /* -------------------------
@@ -21,6 +22,30 @@ router.get('/', async (req, res) => {
   } catch (error) {
     logger.error('Error loading contacts:', error);
     res.status(500).send('Error loading contacts');
+  }
+});
+// Vincular una empresa ya existente por companyId
+router.post('/api/:contactId/company/link-existing', async (req, res) => {
+  try {
+    const { companyId, role, primary } = req.body;
+
+    if (!companyId) {
+      return res.status(400).json({ error: 'companyId requerido' });
+    }
+
+    const pivot = await contactModel.linkExistingCompanyToContact(
+      req.params.contactId,
+      {
+        companyId,
+        role,
+        isPrimary: !!primary,
+      }
+    );
+
+    res.json({ success: true, pivot });
+  } catch (error) {
+    logger.error('Error linking existing company to contact:', error);
+    res.status(500).json({ error: 'Error linking existing company to contact' });
   }
 });
 
@@ -266,5 +291,27 @@ router.post('/api-import', async (req, res) => {
     res.status(500).json({ error: 'Error importing contacts' });
   }
 });
+
+// 👇 debajo de las otras rutas API en contacts.ts
+
+// Listar todas las empresas existentes (para selector en modal)
+router.get('/api-companies', async (_req, res) => {
+  try {
+    const companies = await prisma.company.findMany({
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        ruc: true,
+      },
+    });
+
+    res.json({ ok: true, companies });
+  } catch (error) {
+    logger.error('Error listing companies:', error);
+    res.status(500).json({ error: 'Error listing companies' });
+  }
+});
+
 
 export default router;
