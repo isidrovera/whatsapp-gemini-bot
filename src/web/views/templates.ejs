@@ -5,10 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title><%= title %> - WhatsApp Bot Admin</title>
 
-  <!-- Fuente / Tailwind -->
+  <!-- Fuente -->
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Tailwind (misma config del otro archivo) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -16,20 +18,23 @@
         extend: {
           fontFamily: { sans: ['Inter','ui-sans-serif','system-ui'] },
           colors: {
-            primary: { DEFAULT:'#1e3a8a', 600:'#1e3a8a', 700:'#1e40af' },
+            primary:   { DEFAULT:'#667eea', 600:'#667eea', 700:'#5a67d8' },
+            secondary: { DEFAULT:'#764ba2', 600:'#764ba2', 700:'#6b3fa0' },
           },
           boxShadow: {
-            soft: '0 10px 25px -10px rgba(0,0,0,.15)',
-            overlay: '0 30px 80px rgba(0,0,0,.45)'
-          },
+            soft:'0 4px 6px -1px rgba(0,0,0,.08), 0 2px 4px -1px rgba(0,0,0,.04)',
+            card:'0 10px 30px -5px rgba(0,0,0,.10)'
+          }
         }
       },
       darkMode:'media'
     }
   </script>
 
-  <!-- Motion + Lucide -->
-  <script src="https://unpkg.com/@motionone/dom/dist/motion.min.js"></script>
+  <!-- Utilidades externas del dashboard -->
+  <link rel="stylesheet" href="/css/ui.css">
+
+  <!-- Iconos -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
@@ -41,18 +46,27 @@
         scroll-behavior:auto !important;
       }
     }
+
     .sidebar-link-active{
       background-color:rgba(255,255,255,.12);
       color:#fff !important;
       font-weight:600;
     }
+
+    .gradient-text {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
     .scrollbar-thin::-webkit-scrollbar{height:4px;width:4px}
     .scrollbar-thin::-webkit-scrollbar-thumb{background:#47556933;border-radius:9999px}
     .scrollbar-thin::-webkit-scrollbar-track{background:transparent}
   </style>
 </head>
 
-<body class="h-full bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100">
+<body class="h-full bg-gradient-to-br from-slate-50 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 text-slate-800 dark:text-slate-100">
 <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-3 focus:py-2 focus:rounded-lg shadow">
   Saltar al contenido
 </a>
@@ -80,7 +94,7 @@
 
   <!-- SIDEBAR -->
   <aside id="sidebar"
-         class="w-[280px] flex flex-col bg-gradient-to-b from-primary to-primary-700 text-white shadow-soft
+         class="w-[280px] flex flex-col bg-gradient-to-b from-primary to-secondary text-white shadow-card
                 fixed inset-y-0 left-0 z-50 -translate-x-full transition-transform
                 md:translate-x-0 md:relative md:flex"
          role="navigation"
@@ -247,10 +261,9 @@
   <main id="main-content" class="flex-1 p-4 md:p-8 w-full md:w-auto md:ml-0 ml-0">
 
     <!-- HEADER PAGE -->
-    <header class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-
+    <header class="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
       <div class="flex items-start justify-between w-full md:w-auto">
-        <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
+        <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight gradient-text flex items-center gap-3">
           <i data-lucide="file-text" class="w-7 h-7 text-primary"></i>
           Plantillas de Mensajes
         </h1>
@@ -265,7 +278,7 @@
 
       <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-end w-full md:w-auto">
         <button
-          class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-sm font-semibold shadow-soft transition"
+          class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft transition"
           onclick="openNewTemplateModal()">
           <i data-lucide="plus-circle" class="w-4 h-4"></i>
           Nueva Plantilla
@@ -275,7 +288,7 @@
 
     <!-- TIP -->
     <section class="mb-6">
-      <div class="rounded-2xl bg-blue-50 text-blue-900 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-200 dark:border-blue-900/40 px-4 py-3 text-sm font-medium flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 shadow-soft">
+      <div class="rounded-2xl bg-blue-50 text-blue-900 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-200 dark:border-blue-900/40 px-4 py-3 text-sm font-medium flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 shadow-card">
         <div class="flex items-start gap-2">
           <i data-lucide="info" class="w-5 h-5 text-blue-600 dark:text-blue-300 flex-shrink-0"></i>
           <div>
@@ -291,7 +304,7 @@
     </section>
 
     <!-- SEARCH + LIST CARD -->
-    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-soft border border-slate-100/70 dark:border-white/5 p-6 mb-10">
+    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/50 dark:border-white/5 p-6 mb-10">
 
       <!-- search row -->
       <div class="flex flex-col lg:flex-row lg:items-center gap-3 mb-5">
@@ -300,17 +313,17 @@
             id="searchInput"
             type="text"
             placeholder="🔍 Buscar por nombre, categoría o contenido..."
-            class="flex-1 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-3 py-2.5 text-slate-700 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
+            class="flex-1 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-4 py-2.5 text-slate-700 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
             oninput="filterTemplates()"
           />
           <button
-            class="inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-3 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 shadow-soft"
+            class="inline-flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-3 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 shadow-soft"
             onclick="clearSearch()">
             Limpiar
           </button>
         </div>
 
-        <div class="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
+        <div class="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2">
           <input id="prettyFormatToggle" type="checkbox" class="accent-indigo-600">
           <label for="prettyFormatToggle" class="cursor-pointer select-none flex items-center gap-1">
             <i data-lucide="align-left" class="w-4 h-4"></i>
@@ -320,7 +333,9 @@
       </div>
 
       <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
-        <i data-lucide="list" class="w-5 h-5 text-primary"></i>
+        <div class="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+          <i data-lucide="list" class="w-5 h-5 text-blue-600 dark:text-blue-400"></i>
+        </div>
         Plantillas disponibles
       </h2>
 
@@ -330,7 +345,7 @@
         <% if (templates && templates.length > 0) { %>
           <% templates.forEach(t => { const vars = parseVars(t.variables); %>
             <div
-              class="group relative rounded-xl border border-slate-200 dark:border-white/5 bg-white dark:bg-slate-900 shadow-soft p-4 flex flex-col"
+              class="group relative rounded-xl border border-slate-200/50 dark:border-white/5 bg-white dark:bg-slate-900 shadow-card p-4 flex flex-col"
               data-name="<%= (t.name||'').toLowerCase() %>"
               data-cat ="<%= (t.category||'').toLowerCase() %>"
               data-card
@@ -410,7 +425,7 @@
             </div>
           <% }) %>
         <% } else { %>
-          <div class="col-span-full text-center text-slate-500 dark:text-slate-400 py-16 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 shadow-soft">
+          <div class="col-span-full text-center text-slate-500 dark:text-slate-400 py-16 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 shadow-card">
             <div class="text-base font-semibold text-slate-700 dark:text-white mb-1">No hay plantillas aún</div>
             <div class="text-sm">Crea tu primera respuesta rápida para WhatsApp.</div>
           </div>
@@ -426,9 +441,9 @@
   <!-- fondo blur oscurecido -->
   <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
 
-  <div class="relative w-full max-w-2xl rounded-2xl bg-white dark:bg-slate-900 shadow-overlay border border-slate-200 dark:border-white/5 flex flex-col max-h-[85vh]">
+  <div class="relative w-full max-w-2xl rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/70 dark:border-white/10 flex flex-col max-h-[85vh]">
     <!-- header -->
-    <div class="px-5 py-4 border-b border-slate-200 dark:border-white/5 flex items-start justify-between">
+    <div class="px-5 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-start justify-between">
       <div>
         <div id="modalTitle" class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
           Nueva Plantilla
@@ -470,7 +485,7 @@
               id="templateName"
               required
               placeholder="Bienvenida, Seguimiento, Despedida"
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] px-3 py-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
+              class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] px-4 py-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
               type="text">
           </div>
 
@@ -480,7 +495,7 @@
               id="templateCategory"
               required
               placeholder="greeting / followup / soporte / ventas / ..."
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] px-3 py-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
+              class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] px-4 py-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
               type="text">
           </div>
         </div>
@@ -503,7 +518,7 @@
             rows="6"
             required
             placeholder="Hola {{nombre}}, gracias por contactarnos..."
-            class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] leading-relaxed px-3 py-2.5 text-slate-800 dark:text-slate-100 font-mono outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
+            class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] leading-relaxed px-4 py-2.5 text-slate-800 dark:text-slate-100 font-mono outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
             oninput="updatePreview();updateCounter();detectVariables();">
           </textarea>
 
@@ -516,7 +531,7 @@
           <label class="text-[13px] font-medium text-slate-700 dark:text-slate-200">Estado</label>
           <select
             id="templateActive"
-            class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] px-3 py-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition">
+            class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] px-4 py-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition">
             <option value="true">Activo</option>
             <option value="false">Inactivo</option>
           </select>
@@ -528,7 +543,7 @@
             Vista previa
           </div>
 
-          <div class="rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 p-3 text-[14px] leading-relaxed text-slate-800 dark:text-slate-100"
+          <div class="rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 p-3 text-[14px] leading-relaxed text-slate-800 dark:text-slate-100"
                id="templatePreview">
             Escribe contenido arriba para ver la vista previa...
           </div>
@@ -537,17 +552,17 @@
     </div>
 
     <!-- footer -->
-    <div class="px-5 py-4 border-t border-slate-200 dark:border-white/5 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
+    <div class="px-5 py-4 border-t border-slate-200/70 dark:border-white/10 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
       <button
         type="button"
-        class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-4 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 shadow-soft w-full sm:w-auto"
+        class="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-4 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 shadow-soft w-full sm:w-auto"
         onclick="closeTemplateModal()">
         <i data-lucide="x" class="w-4 h-4"></i> Cancelar
       </button>
 
       <button
         type="button"
-        class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold shadow-soft w-full sm:w-auto"
+        class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold shadow-soft w-full sm:w-auto"
         onclick="submitTemplateForm()">
         <i data-lucide="save" class="w-4 h-4"></i> Guardar
       </button>
@@ -560,8 +575,8 @@
      class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4">
   <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
 
-  <div class="relative w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-overlay border border-slate-200 dark:border-white/5 flex flex-col">
-    <div class="px-5 py-4 border-b border-slate-200 dark:border-white/5 flex items-start justify-between">
+  <div class="relative w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/70 dark:border-white/10 flex flex-col">
+    <div class="px-5 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-start justify-between">
       <div class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
         <i data-lucide="alert-triangle" class="w-5 h-5 text-rose-500"></i>
         ¿Confirmar?
@@ -577,16 +592,16 @@
       Esta acción no se puede deshacer.
     </div>
 
-    <div class="px-5 py-4 border-t border-slate-200 dark:border-white/5 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
+    <div class="px-5 py-4 border-t border-slate-200/70 dark:border-white/10 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
       <button
-        class="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-4 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 shadow-soft w-full sm:w-auto"
+        class="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-4 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 shadow-soft w-full sm:w-auto"
         onclick="closeConfirmModal()">
         <i data-lucide="x" class="w-4 h-4"></i> Cancelar
       </button>
 
       <button
         id="confirmOkBtn"
-        class="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 text-sm font-semibold shadow-soft w-full sm:w-auto">
+        class="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 text-sm font-semibold shadow-soft w-full sm:w-auto">
         <i data-lucide="trash-2" class="w-4 h-4"></i> Aceptar
       </button>
     </div>
@@ -778,7 +793,7 @@
           alert('No se pudo eliminar la plantilla');
         }
       } catch(err){
-        alert('Error: ' + err.message);
+        alert('Error: ' + err.message');
       }
     };
     openConfirmModal();
@@ -819,25 +834,6 @@
     if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
     if (overlay)  overlay.addEventListener('click', closeSidebar);
   })();
-
-  // ================== ANIMACIONES (igual dashboard) ==================
-  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (!prefersReduced && window.motion) {
-    const cards = document.querySelectorAll('[data-card]');
-    cards.forEach((el, i) => {
-      motion.animate(
-        el,
-        { opacity:[0,1], transform:['translateY(8px)','translateY(0)'] },
-        { duration:.4, delay:i*0.04, easing:'ease-out' }
-      );
-      el.addEventListener('pointerenter', () =>
-        motion.animate(el, { transform:['translateY(0)','translateY(-2px)'] }, { duration:.18, easing:'ease-out' })
-      );
-      el.addEventListener('pointerleave', () =>
-        motion.animate(el, { transform:['translateY(-2px)','translateY(0)'] }, { duration:.18, easing:'ease-out' })
-      );
-    });
-  }
 
   // ================== INIT ICONS ==================
   window.lucide && lucide.createIcons();

@@ -5,68 +5,69 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title><%= title %> - WhatsApp Bot Admin</title>
 
-  <!-- Fuente + Tailwind -->
+  <!-- Fuente -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
+  <!-- Tailwind (misma config del dashboard) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] },
+          fontFamily: { sans: ['Inter','ui-sans-serif','system-ui'] },
           colors: {
-            primary: { DEFAULT: '#1e3a8a', 600: '#1e3a8a', 700:'#1e40af' },
+            primary:   { DEFAULT:'#667eea', 600:'#667eea', 700:'#5a67d8' },
+            secondary: { DEFAULT:'#764ba2', 600:'#764ba2', 700:'#6b3fa0' },
           },
           boxShadow: {
-            soft: '0 10px 25px -10px rgba(0,0,0,.15)',
+            soft:'0 4px 6px -1px rgba(0,0,0,.08), 0 2px 4px -1px rgba(0,0,0,.04)',
+            card:'0 10px 30px -5px rgba(0,0,0,.10)'
           }
         }
       },
-      darkMode: 'media'
+      darkMode:'media'
     }
   </script>
 
-  <!-- Motion / Icons -->
-  <script src="https://unpkg.com/@motionone/dom/dist/motion.min.js"></script>
+  <!-- Utilidades externas del dashboard -->
+  <link rel="stylesheet" href="/css/ui.css">
+
+  <!-- Iconos -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
-    .sidebar-link-active {
-      background-color: rgba(255,255,255,.12);
-      color:#fff !important;
-      font-weight:600;
+    @media (prefers-reduced-motion: reduce){
+      *{
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
     }
-    .modal {
-      display: none;
-      position: fixed;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 1000;
-      background: rgba(0,0,0,0.6);
-      backdrop-filter: blur(4px);
-      overflow-y: auto;
-      padding: 1rem;
+
+    /* Gradient text */
+    .gradient-text {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
-    .modal.show {
-      display: flex;
-      align-items: flex-start;
-      justify-content: center;
-    }
+
+    /* Icon sizes */
+    .icon { width: 1.25rem; height: 1.25rem; }
+    .icon-lg { width: 1.75rem; height: 1.75rem; }
   </style>
 </head>
-<body class="h-full bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100">
-  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-3 focus:py-2 focus:rounded-lg shadow">
+
+<body class="h-full bg-gradient-to-br from-slate-50 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 text-slate-800 dark:text-slate-100">
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-4 focus:py-2 focus:rounded-lg shadow-lg">
     Saltar al contenido
   </a>
 
   <%
     const list = Array.isArray(contacts) ? contacts : [];
-    function isActive(p){
-      return (page === p) ? 'sidebar-link-active' : '';
-    }
 
     function stateBadgeClasses(state){
       if(state === 'REGISTERED') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300';
@@ -82,222 +83,56 @@
     }
   %>
 
-  <div class="min-h-screen w-full flex relative">
+  <main id="main-content" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
-    <!-- Overlay móvil sidebar -->
-    <div id="mobile-sidebar-overlay"
-         class="fixed inset-0 bg-black/40 z-40 opacity-0 pointer-events-none transition-opacity md:hidden">
+    <!-- Volver al Dashboard + breadcrumb -->
+    <div class="flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <a href="/"
+           class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
+          <i data-lucide="arrow-left" class="icon"></i>
+          <span>Volver al Dashboard</span>
+        </a>
+      </div>
+
+      <nav aria-label="Breadcrumb" class="text-xs text-slate-500 dark:text-slate-400">
+        <ol class="flex items-center gap-2">
+          <li class="inline-flex items-center gap-1">
+            <a href="/" class="hover:underline inline-flex items-center gap-1">
+              <i data-lucide="home" class="w-3.5 h-3.5"></i> Inicio
+            </a>
+          </li>
+          <li class="select-none">/</li>
+          <li class="inline-flex items-center gap-1">
+            <i data-lucide="users" class="w-3.5 h-3.5"></i>
+            <span class="font-medium">Contactos</span>
+          </li>
+        </ol>
+      </nav>
     </div>
 
-    <!-- Sidebar -->
-    <aside id="sidebar"
-           class="w-[280px] flex flex-col bg-gradient-to-b from-primary to-primary-700 text-white shadow-soft
-                  fixed inset-y-0 left-0 z-50 -translate-x-full transition-transform md:translate-x-0 md:relative md:flex"
-           role="navigation"
-           aria-label="Menú principal">
-
-      <div class="px-5 py-6 border-b border-white/10 bg-white/5 backdrop-blur flex items-center justify-between">
-        <h2 class="text-xl font-semibold flex items-center gap-2">
-          <i data-lucide="bot" class="w-5 h-5"></i> Bot Admin
-        </h2>
-
-        <button id="close-sidebar-btn"
-                class="md:hidden inline-flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 p-2"
-                aria-label="Cerrar menú">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
-
-      <nav class="py-4 flex-1 overflow-y-auto">
-        <ul class="px-2 space-y-1 text-[15px] leading-5">
-          <li>
-            <a href="/"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('dashboard') %>">
-              <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
-              <span>Dashboard</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/contacts"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('contacts') %>">
-              <i data-lucide="users" class="w-5 h-5"></i>
-              <span>Contactos</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/conversations"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('conversations') %>">
-              <i data-lucide="message-circle" class="w-5 h-5"></i>
-              <span>Conversaciones</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/blocked"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('blocked') %>">
-              <i data-lucide="ban" class="w-5 h-5"></i>
-              <span>Bloqueados</span>
-            </a>
-          </li>
-
-          <li><div class="my-3 h-px bg-white/10"></div></li>
-
-          <li>
-            <a href="/calendar"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('calendar') %>">
-              <i data-lucide="calendar" class="w-5 h-5"></i>
-              <span>Calendario</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/working-hours"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('working-hours') %>">
-              <i data-lucide="clock" class="w-5 h-5"></i>
-              <span>Horarios</span>
-            </a>
-          </li>
-
-          <li><div class="my-3 h-px bg-white/10"></div></li>
-
-          <li>
-            <a href="/departments"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('departments') %>">
-              <i data-lucide="building-2" class="w-5 h-5"></i>
-              <span>Departamentos</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/products"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('products') %>">
-              <i data-lucide="package" class="w-5 h-5"></i>
-              <span>Productos</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/auto-responses"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('auto-responses') %>">
-              <i data-lucide="robot" class="w-5 h-5"></i>
-              <span>Auto-respuestas</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/tags"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('tags') %>">
-              <i data-lucide="tags" class="w-5 h-5"></i>
-              <span>Tags</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/templates"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('templates') %>">
-              <i data-lucide="file-text" class="w-5 h-5"></i>
-              <span>Plantillas</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/metrics"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('metrics') %>">
-              <i data-lucide="line-chart" class="w-5 h-5"></i>
-              <span>Métricas</span>
-            </a>
-          </li>
-
-          <li><div class="my-3 h-px bg-white/10"></div></li>
-
-          <li>
-            <a href="/admin-users"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('admin-users') %>">
-              <i data-lucide="shield" class="w-5 h-5"></i>
-              <span>Usuarios Admin</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/settings"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('settings') %>">
-              <i data-lucide="settings" class="w-5 h-5"></i>
-              <span>Configuración</span>
-            </a>
-          </li>
-        </ul>
-      </nav>
-
-      <div class="mt-auto p-4 bg-white/5 border-t border-white/10">
-        <div class="rounded-xl bg-white/10 p-3">
-          <div class="text-[11px] uppercase tracking-wide opacity-80">Sesión activa</div>
-          <div class="font-semibold text-sm mt-1 flex items-center gap-2">
-            <i data-lucide="user" class="w-4 h-4"></i>
-            <span><%= user || 'Admin' %></span>
-          </div>
-        </div>
-
-        <form method="POST" action="/auth/logout" class="mt-3">
-          <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
-            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <% } %>
-          <button type="submit"
-            class="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-red-500/20 hover:bg-red-500/30 text-white py-2.5 text-sm font-medium transition">
-            <i data-lucide="log-out" class="w-4 h-4"></i> Cerrar sesión
-          </button>
-        </form>
-      </div>
-    </aside>
-
-    <!-- Main Content -->
-    <main id="main-content" class="flex-1 p-4 md:p-8 md:ml-0 ml-0 w-full md:w-auto">
-      <!-- Header -->
-      <header class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div class="flex items-start justify-between w-full md:w-auto">
-          <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
-            <i data-lucide="users" class="w-7 h-7 text-primary"></i>
-            <span>Contactos</span>
+    <!-- Header -->
+    <header class="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 px-6 py-5">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 class="text-3xl font-bold tracking-tight gradient-text flex items-center gap-3">
+            <i data-lucide="users" class="icon-lg text-primary"></i>
+            Contactos
           </h1>
-
-          <!-- botón abrir sidebar móvil -->
-          <button id="open-sidebar-btn"
-                  class="md:hidden inline-flex items-center justify-center rounded-lg text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 p-2 shadow-soft"
-                  aria-label="Abrir menú">
-            <i data-lucide="menu" class="w-6 h-6"></i>
-          </button>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestión de contactos y empresas asociadas</p>
         </div>
 
-        <!-- Acciones globales -->
-        <div class="flex flex-wrap gap-2">
-          <!-- Nuevo contacto -->
+        <div class="flex flex-wrap items-center gap-3">
           <button
-            class="inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3 py-2 shadow-soft transition"
-            onclick="openCreateContact()"
-            title="Crear contacto manual"
-          >
-            <i data-lucide="plus" class="w-4 h-4 mr-1"></i>
-            Nuevo
+            class="inline-flex items-center gap-2 rounded-xl bg-slate-600 hover:bg-slate-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft transition"
+            onclick="exportExcel()">
+            <i data-lucide="download" class="icon"></i>
+            <span>Exportar</span>
           </button>
 
-          <!-- Exportar -->
-          <button
-            class="inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-2 shadow-soft transition"
-            onclick="exportExcel()"
-            title="Exportar contactos y empresas"
-          >
-            <i data-lucide="download" class="w-4 h-4 mr-1"></i>
-            Exportar
-          </button>
-
-          <!-- Importar -->
-          <label
-            class="inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-2 shadow-soft transition cursor-pointer"
-            title="Importar contactos desde Excel"
-          >
-            <i data-lucide="upload" class="w-4 h-4 mr-1"></i>
-            Importar
+          <label class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft transition cursor-pointer">
+            <i data-lucide="upload" class="icon"></i>
+            <span>Importar</span>
             <input
               id="importFileInput"
               type="file"
@@ -306,178 +141,194 @@
               onchange="importExcelFile(this)"
             />
           </label>
-        </div>
-      </header>
 
-      <!-- Content Card -->
-      <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-soft border border-slate-100/70 dark:border-white/5">
-        <!-- Search -->
-        <div class="px-6 pt-6 pb-3">
-          <label for="searchInput" class="sr-only">Buscar contacto</label>
-          <div class="relative">
-            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
-            <input
-              id="searchInput"
-              type="text"
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0"
-              placeholder="🔍 Buscar por teléfono, nombre o empresa..."
-              onkeyup="filterTable()"
-            />
+          <button
+            class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft transition"
+            onclick="openCreateContact()">
+            <i data-lucide="plus-circle" class="icon"></i>
+            <span>Nuevo Contacto</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Buscador -->
+    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/50 dark:border-white/5 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-white/5 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50">
+        <h2 class="text-lg font-bold flex items-center gap-2.5 text-slate-800 dark:text-white">
+          <div class="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+            <i data-lucide="search" class="icon text-indigo-600 dark:text-indigo-400"></i>
           </div>
-        </div>
+          Buscar Contactos
+        </h2>
+      </div>
 
-        <!-- Tabla -->
-        <div class="px-6 pb-6">
-          <% if (list.length > 0) { %>
-            <div class="overflow-x-auto rounded-xl border border-slate-100 dark:border-white/5 mt-4">
-              <table id="contactsTable" class="min-w-full text-sm text-left">
-                <thead class="bg-slate-50/60 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 uppercase text-[11px] tracking-wide font-medium border-b border-slate-100 dark:border-white/5">
-                  <tr>
-                    <th class="px-4 py-3 font-semibold">Teléfono</th>
-                    <th class="px-4 py-3 font-semibold">Nombre</th>
-                    <th class="px-4 py-3 font-semibold">DNI</th>
-                    <th class="px-4 py-3 font-semibold">Empresa</th>
-                    <th class="px-4 py-3 font-semibold">Estado</th>
-                    <th class="px-4 py-3 font-semibold text-right">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 dark:divide-white/5 bg-white dark:bg-slate-900">
-                  <% list.forEach(contact => { %>
-                    <tr class="hover:bg-slate-50/50 dark:hover:bg-white/5 transition" data-phone="<%= contact.phoneNumber %>">
-                      <td class="px-4 py-3 font-semibold text-slate-900 dark:text-white align-top whitespace-nowrap">
-                        <%= contact.phoneNumber %>
-                      </td>
-                      <td class="px-4 py-3 text-slate-700 dark:text-slate-200 align-top">
-                        <%= contact.name || '-' %>
-                      </td>
-                      <td class="px-4 py-3 text-slate-700 dark:text-slate-200 align-top">
-                        <%= contact.dni || '-' %>
-                      </td>
-                      <td class="px-4 py-3 text-slate-700 dark:text-slate-200 align-top">
-                        <%= contact.companyName || '-' %>
-                      </td>
-                      <td class="px-4 py-3 text-slate-700 dark:text-slate-200 align-top">
-                        <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold <%= stateBadgeClasses(contact.state) %>">
-                          <%= stateLabel(contact.state) %>
+      <div class="p-6">
+        <input
+          id="searchInput"
+          type="text"
+          class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 transition"
+          placeholder="🔍 Buscar por teléfono, nombre o empresa..."
+          onkeyup="filterTable()"
+        />
+      </div>
+    </section>
+
+    <!-- Tabla de Contactos -->
+    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/50 dark:border-white/5 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-white/5 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50">
+        <h2 class="text-lg font-bold flex items-center gap-2.5 text-slate-800 dark:text-white">
+          <div class="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+            <i data-lucide="list" class="icon text-blue-600 dark:text-blue-400"></i>
+          </div>
+          Lista de Contactos
+        </h2>
+      </div>
+
+      <% if (list.length > 0) { %>
+        <div class="overflow-x-auto">
+          <table id="contactsTable" class="min-w-full text-sm">
+            <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 uppercase text-xs tracking-wider font-semibold">
+              <tr>
+                <th class="text-left px-6 py-4">Teléfono</th>
+                <th class="text-left px-6 py-4">Nombre</th>
+                <th class="text-left px-6 py-4">DNI</th>
+                <th class="text-left px-6 py-4">Empresa</th>
+                <th class="text-left px-6 py-4">Estado</th>
+                <th class="text-left px-6 py-4">Acciones</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+              <% list.forEach(contact => { %>
+                <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors" data-phone="<%= contact.phoneNumber %>">
+                  <td class="px-6 py-4 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
+                    <%= contact.phoneNumber %>
+                  </td>
+                  <td class="px-6 py-4 text-slate-700 dark:text-slate-300">
+                    <%= contact.name || '-' %>
+                  </td>
+                  <td class="px-6 py-4 text-slate-700 dark:text-slate-300">
+                    <%= contact.dni || '-' %>
+                  </td>
+                  <td class="px-6 py-4 text-slate-700 dark:text-slate-300">
+                    <%= contact.companyName || '-' %>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="flex flex-wrap gap-1">
+                      <span class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold leading-none <%= stateBadgeClasses(contact.state) %>">
+                        <%= stateLabel(contact.state) %>
+                      </span>
+
+                      <% if (contact.humanTakeoverAt) { %>
+                        <span class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold leading-none bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                          🙋 Humano
                         </span>
+                      <% } %>
 
-                        <% if (contact.humanTakeoverAt) { %>
-                          <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 ml-1">
-                            🙋 Humano
-                          </span>
-                        <% } %>
+                      <% if (contact.isBlocked) { %>
+                        <span class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold leading-none bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
+                          🚫 Bloqueado
+                        </span>
+                      <% } %>
+                    </div>
+                  </td>
 
-                        <% if (contact.isBlocked) { %>
-                          <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300 ml-1">
-                            🚫 Bloqueado
-                          </span>
-                        <% } %>
-                      </td>
+                  <td class="px-6 py-4">
+                    <div class="flex flex-wrap gap-2">
+                      <!-- Ver -->
+                      <button
+                        class="inline-flex items-center gap-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                        onclick="viewContact('<%= contact.phoneNumber %>')">
+                        <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                        <span>Ver</span>
+                      </button>
 
-                      <td class="px-4 py-3 text-right align-top">
-                        <div class="flex flex-wrap gap-2 justify-end">
+                      <!-- Editar -->
+                      <button
+                        class="inline-flex items-center gap-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                        onclick="openEditContact('<%= contact.id %>')">
+                        <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                        <span>Editar</span>
+                      </button>
 
-                          <!-- Ver -->
-                          <button
-                            class="inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-2.5 py-1.5 shadow-soft transition"
-                            onclick="viewContact('<%= contact.phoneNumber %>')"
-                          >
-                            Ver
-                          </button>
+                      <!-- Empresas -->
+                      <button
+                        class="inline-flex items-center gap-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                        onclick="openCompanies('<%= contact.id %>')">
+                        <i data-lucide="building-2" class="w-3.5 h-3.5"></i>
+                        <span>Empresas</span>
+                      </button>
 
-                          <!-- Editar -->
-                          <button
-                            class="inline-flex items-center justify-center rounded-lg bg-slate-600 hover:bg-slate-700 text-white text-xs font-semibold px-2.5 py-1.5 shadow-soft transition"
-                            onclick="openEditContact('<%= contact.id %>')"
-                          >
-                            Editar
-                          </button>
+                      <!-- takeover / release -->
+                      <% if (!contact.humanTakeoverAt) { %>
+                        <button
+                          class="inline-flex items-center gap-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                          onclick="takeover('<%= contact.phoneNumber %>')">
+                          <i data-lucide="hand" class="w-3.5 h-3.5"></i>
+                          <span>Tomar</span>
+                        </button>
+                      <% } else { %>
+                        <button
+                          class="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                          onclick="release('<%= contact.phoneNumber %>')">
+                          <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                          <span>Liberar</span>
+                        </button>
+                      <% } %>
 
-                          <!-- Empresas -->
-                          <button
-                            class="inline-flex items-center justify-center rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-2.5 py-1.5 shadow-soft transition"
-                            onclick="openCompanies('<%= contact.id %>')"
-                          >
-                            Empresas
-                          </button>
+                      <!-- bloquear / desbloquear -->
+                      <% if (!contact.isBlocked) { %>
+                        <button
+                          class="inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                          onclick="blockContact('<%= contact.phoneNumber %>')">
+                          <i data-lucide="ban" class="w-3.5 h-3.5"></i>
+                          <span>Bloquear</span>
+                        </button>
+                      <% } else { %>
+                        <button
+                          class="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                          onclick="unblockContact('<%= contact.phoneNumber %>')">
+                          <i data-lucide="unlock" class="w-3.5 h-3.5"></i>
+                          <span>Desbloquear</span>
+                        </button>
+                      <% } %>
 
-                          <!-- takeover / release -->
-                          <% if (!contact.humanTakeoverAt) { %>
-                            <button
-                              class="inline-flex items-center justify-center rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-2.5 py-1.5 shadow-soft transition"
-                              onclick="takeover('<%= contact.phoneNumber %>')"
-                            >
-                              Tomar
-                            </button>
-                          <% } else { %>
-                            <button
-                              class="inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-2.5 py-1.5 shadow-soft transition"
-                              onclick="release('<%= contact.phoneNumber %>')"
-                            >
-                              Liberar
-                            </button>
-                          <% } %>
-
-                          <!-- bloquear / desbloquear -->
-                          <% if (!contact.isBlocked) { %>
-                            <button
-                              class="inline-flex items-center justify-center rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-2.5 py-1.5 shadow-soft transition"
-                              onclick="blockContact('<%= contact.phoneNumber %>')"
-                            >
-                              Bloquear
-                            </button>
-                          <% } else { %>
-                            <button
-                              class="inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-2.5 py-1.5 shadow-soft transition"
-                              onclick="unblockContact('<%= contact.phoneNumber %>')"
-                            >
-                              Desbloquear
-                            </button>
-                          <% } %>
-
-                          <!-- Eliminar -->
-                          <button
-                            class="inline-flex items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-2.5 py-1.5 shadow-soft transition"
-                            onclick="deleteContact('<%= contact.id %>')"
-                          >
-                            Eliminar
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  <% }) %>
-                </tbody>
-              </table>
-            </div>
-          <% } else { %>
-            <div class="text-center text-slate-500 dark:text-slate-400 py-16">
-              <div class="text-4xl mb-3">😌</div>
-              <p class="text-base font-semibold text-slate-700 dark:text-white mb-1">
-                Sin contactos
-              </p>
-              <p class="text-sm text-slate-500 dark:text-slate-400">
-                Los contactos aparecerán aquí cuando hablen con el bot
-              </p>
-            </div>
-          <% } %>
+                      <!-- Eliminar -->
+                      <button
+                        class="inline-flex items-center gap-1 rounded-lg bg-red-600 hover:bg-red-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                        onclick="deleteContact('<%= contact.id %>')">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        <span>Eliminar</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
         </div>
-      </section>
-    </main>
-  </div>
+      <% } else { %>
+        <div class="px-6 py-16 text-center">
+          <div class="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
+            <i data-lucide="inbox" class="icon-lg text-slate-400"></i>
+          </div>
+          <p class="text-sm text-slate-500 dark:text-slate-400 font-medium">Sin contactos</p>
+          <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Los contactos aparecerán aquí cuando hablen con el bot</p>
+        </div>
+      <% } %>
+    </section>
+  </main>
 
   <!-- Modal Ver Contacto -->
-  <div id="viewModal" class="modal">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft w-full max-w-lg border border-slate-200 dark:border-white/10 max-h-[90vh] overflow-y-auto">
-      <div class="px-6 py-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
-        <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-          <i data-lucide="info" class="w-5 h-5 text-primary"></i>
+  <div id="viewModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-lg w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden max-h-[90vh] overflow-y-auto">
+      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="info" class="icon text-primary"></i>
           <span>Información del Contacto</span>
         </h2>
-        <button
-          class="text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white text-xl leading-none"
-          onclick="hideModal('viewModal')"
-        >
-          &times;
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="hideModal('viewModal')">
+          <i data-lucide="x" class="icon"></i>
         </button>
       </div>
 
@@ -487,44 +338,41 @@
     </div>
   </div>
 
-  <!-- Modal Editar Contacto / Crear Contacto -->
-  <div id="editModal" class="modal">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft w-full max-w-lg border border-slate-200 dark:border-white/10 max-h-[90vh] overflow-y-auto">
-      <div class="px-6 py-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
-        <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2" id="editModalTitle">
-          <i data-lucide="edit" class="w-5 h-5 text-primary"></i>
+  <!-- Modal Editar/Crear Contacto -->
+  <div id="editModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-lg w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden max-h-[90vh] overflow-y-auto">
+      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white" id="editModalTitle">
+          <i data-lucide="edit" class="icon text-primary"></i>
           <span>Editar contacto</span>
         </h2>
-        <button
-          class="text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white text-xl leading-none"
-          onclick="hideModal('editModal')"
-        >
-          &times;
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="hideModal('editModal')">
+          <i data-lucide="x" class="icon"></i>
         </button>
       </div>
 
-      <div class="p-6 text-sm leading-6">
+      <div class="p-6">
         <form id="editContactForm" onsubmit="return submitEditContact()">
           <input type="hidden" id="editContactId" />
 
           <div class="mb-4">
-            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Teléfono</label>
-            <input id="editPhoneNumber" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors" disabled />
+            <label class="block text-sm font-semibold mb-2">Teléfono</label>
+            <input id="editPhoneNumber" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" disabled />
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Nombre</label>
-            <input id="editName" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors" placeholder="Nombre completo" />
+            <label class="block text-sm font-semibold mb-2">Nombre</label>
+            <input id="editName" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" placeholder="Nombre completo" />
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">DNI</label>
-            <input id="editDni" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors" placeholder="8 dígitos" maxlength="8" />
+            <label class="block text-sm font-semibold mb-2">DNI</label>
+            <input id="editDni" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" placeholder="8 dígitos" maxlength="8" />
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Estado</label>
-            <select id="editState" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors cursor-pointer">
+            <label class="block text-sm font-semibold mb-2">Estado</label>
+            <select id="editState" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 cursor-pointer">
               <option value="NEW">Nuevo</option>
               <option value="WAITING_DNI">Esperando DNI</option>
               <option value="WAITING_RUC">Esperando RUC</option>
@@ -534,23 +382,21 @@
 
           <div class="mb-4 flex items-center gap-2">
             <input type="checkbox" id="editBlocked" class="rounded border-slate-300 dark:border-slate-600" />
-            <label for="editBlocked" class="text-slate-700 dark:text-slate-200 text-sm font-medium select-none">Bloqueado</label>
+            <label for="editBlocked" class="text-sm font-medium select-none">Bloqueado</label>
           </div>
 
-          <div class="mt-6 flex flex-wrap gap-2">
+          <div class="flex justify-end gap-2 pt-2">
             <button
-              class="inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3 py-2 shadow-soft transition"
-              type="submit"
-            >
-              Guardar
+              type="button"
+              class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition"
+              onclick="hideModal('editModal')">
+              Cancelar
             </button>
 
             <button
-              class="inline-flex items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-white text-xs font-semibold px-3 py-2 shadow-soft transition"
-              type="button"
-              onclick="hideModal('editModal')"
-            >
-              Cancelar
+              type="submit"
+              class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition">
+              Guardar
             </button>
           </div>
         </form>
@@ -559,105 +405,106 @@
   </div>
 
   <!-- Modal Empresas del contacto -->
-  <div id="companiesModal" class="modal">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft w-full max-w-xl border border-slate-200 dark:border-white/10 max-h-[90vh] overflow-y-auto">
-      <div class="px-6 py-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
-        <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-          <i data-lucide="building-2" class="w-5 h-5 text-primary"></i>
+  <div id="companiesModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-xl w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden max-h-[90vh] overflow-y-auto">
+      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="building-2" class="icon text-primary"></i>
           <span>Empresas del Contacto</span>
         </h2>
-        <button
-          class="text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white text-xl leading-none"
-          onclick="hideModal('companiesModal')"
-        >
-          &times;
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="hideModal('companiesModal')">
+          <i data-lucide="x" class="icon"></i>
         </button>
       </div>
 
-      <div class="p-6 text-sm leading-6">
+      <div class="p-6">
         <!-- lista empresas actuales -->
         <div id="companiesList" class="space-y-4 mb-8">
           <!-- dinámico -->
         </div>
+
         <!-- vincular empresa existente -->
-<div class="mb-8 border border-slate-200 dark:border-white/10 rounded-lg p-4">
-  <h3 class="text-sm font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
-    <i data-lucide="link" class="w-4 h-4 text-primary"></i>
-    <span>Vincular empresa existente</span>
-  </h3>
+        <div class="mb-8 border border-slate-200 dark:border-white/10 rounded-xl p-4">
+          <h3 class="text-sm font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+            <i data-lucide="link" class="w-4 h-4 text-primary"></i>
+            <span>Vincular empresa existente</span>
+          </h3>
 
-  <div class="mb-4">
-    <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Empresa</label>
-    <select
-      id="existingCompanySelect"
-      class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors cursor-pointer"
-    >
-      <option value="">-- Selecciona empresa --</option>
-    </select>
-  </div>
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">Empresa</label>
+            <select
+              id="existingCompanySelect"
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 cursor-pointer">
+              <option value="">-- Selecciona empresa --</option>
+            </select>
+          </div>
 
-  <div class="mb-4">
-    <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Rol / Área (opcional)</label>
-    <input
-      id="existingCompanyRole"
-      class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors"
-      placeholder="Compras, Sistemas, etc."
-    />
-  </div>
+          <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">Rol / Área (opcional)</label>
+            <input
+              id="existingCompanyRole"
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
+              placeholder="Compras, Sistemas, etc."
+            />
+          </div>
 
-  <div class="mb-4 flex items-center gap-2">
-    <input type="checkbox" id="existingCompanyPrimary" class="rounded border-slate-300 dark:border-slate-600" />
-    <label for="existingCompanyPrimary" class="text-slate-700 dark:text-slate-200 text-sm font-medium select-none">
-      Marcar como principal
-    </label>
-  </div>
+          <div class="mb-4 flex items-center gap-2">
+            <input type="checkbox" id="existingCompanyPrimary" class="rounded border-slate-300 dark:border-slate-600" />
+            <label for="existingCompanyPrimary" class="text-sm font-medium select-none">
+              Marcar como principal
+            </label>
+          </div>
 
-  <button
-    class="inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-2 shadow-soft transition"
-    type="button"
-    onclick="linkExistingCompany()"
-  >
-    Vincular seleccionada
-  </button>
-</div>
+          <button
+            class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition"
+            type="button"
+            onclick="linkExistingCompany()">
+            <i data-lucide="link" class="w-4 h-4"></i>
+            <span>Vincular seleccionada</span>
+          </button>
+        </div>
 
         <!-- agregar nueva empresa -->
         <form id="companyForm" onsubmit="return submitAddCompany()">
           <input type="hidden" id="companiesContactId" />
+
+          <h3 class="text-sm font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+            <i data-lucide="plus-circle" class="w-4 h-4 text-primary"></i>
+            <span>Agregar nueva empresa</span>
+          </h3>
+
           <div class="mb-4">
-            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">RUC</label>
-            <input id="companyRuc" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors" placeholder="11 dígitos" maxlength="11" required />
+            <label class="block text-sm font-semibold mb-2">RUC</label>
+            <input id="companyRuc" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" placeholder="11 dígitos" maxlength="11" required />
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Razón Social</label>
-            <input id="companyName" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors" placeholder="Ej. COPIER COMPANY S.A.C." required />
+            <label class="block text-sm font-semibold mb-2">Razón Social</label>
+            <input id="companyName" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" placeholder="Ej. COPIER COMPANY S.A.C." required />
           </div>
 
           <div class="mb-4">
-            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Rol / Área (opcional)</label>
-            <input id="companyRole" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm px-3 py-2.5 outline-none focus:border-indigo-500 transition-colors" placeholder="Compras, Sistemas, etc." />
+            <label class="block text-sm font-semibold mb-2">Rol / Área (opcional)</label>
+            <input id="companyRole" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" placeholder="Compras, Sistemas, etc." />
           </div>
 
           <div class="mb-4 flex items-center gap-2">
             <input type="checkbox" id="companyPrimary" class="rounded border-slate-300 dark:border-slate-600" />
-            <label for="companyPrimary" class="text-slate-700 dark:text-slate-200 text-sm font-medium select-none">Marcar como principal</label>
+            <label for="companyPrimary" class="text-sm font-medium select-none">Marcar como principal</label>
           </div>
 
-          <div class="mt-6 flex flex-wrap gap-2">
+          <div class="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
             <button
-              class="inline-flex items-center justify-center rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3 py-2 shadow-soft transition"
-              type="submit"
-            >
-              Agregar empresa
+              type="button"
+              class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition"
+              onclick="hideModal('companiesModal')">
+              Cerrar
             </button>
 
             <button
-              class="inline-flex items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-white text-xs font-semibold px-3 py-2 shadow-soft transition"
-              type="button"
-              onclick="hideModal('companiesModal')"
-            >
-              Cerrar
+              type="submit"
+              class="rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition">
+              Agregar empresa
             </button>
           </div>
         </form>
@@ -666,44 +513,28 @@
   </div>
 
   <script>
-    // Iconos lucide
-    window.lucide && lucide.createIcons();
+    // Iconos
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
+    });
 
-    // Sidebar móvil
-    (function(){
-      const sidebar   = document.getElementById('sidebar');
-      const overlay   = document.getElementById('mobile-sidebar-overlay');
-      const openBtn   = document.getElementById('open-sidebar-btn');
-      const closeBtn  = document.getElementById('close-sidebar-btn');
+    /* Helpers UI */
+    function showModal(id){ 
+      const el = document.getElementById(id);
+      el.classList.remove('hidden');
+      el.classList.add('flex');
+    }
+    function hideModal(id){ 
+      const el = document.getElementById(id);
+      el.classList.remove('flex');
+      el.classList.add('hidden');
+    }
 
-      function openSidebar(){
-        sidebar.classList.remove('-translate-x-full');
-        overlay.classList.remove('opacity-0','pointer-events-none');
-      }
-      function closeSidebar(){
-        sidebar.classList.add('-translate-x-full');
-        overlay.classList.add('opacity-0','pointer-events-none');
-      }
-
-      if (openBtn)  openBtn.addEventListener('click', openSidebar);
-      if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
-      if (overlay)  overlay.addEventListener('click', closeSidebar);
-    })();
-
-    /* ----------------------------------
-     * Helpers UI
-     * ---------------------------------- */
-    function showModal(id){ document.getElementById(id).classList.add('show'); }
-    function hideModal(id){ document.getElementById(id).classList.remove('show'); }
-
-    window.onclick = function(event) {
-      const modals = document.getElementsByClassName('modal');
-      for (let modal of modals) {
-        if (event.target === modal) {
-          modal.classList.remove('show');
-        }
-      }
-    };
+    window.addEventListener('click', (e) => {
+      document.querySelectorAll('#viewModal,#editModal,#companiesModal').forEach(m => {
+        if (e.target === m) hideModal(m.id);
+      });
+    });
 
     function filterTable() {
       const input = document.getElementById('searchInput');
@@ -725,9 +556,7 @@
       }
     }
 
-    /* ----------------------------------
-     * Render info de empresas en modal VER
-     * ---------------------------------- */
+    /* Render empresas en modal VER */
     function renderCompaniesSection(contact) {
       const companies = Array.isArray(contact.companies) ? contact.companies : [];
 
@@ -786,9 +615,7 @@
       return primaryHTML + extrasHTML;
     }
 
-    /* ----------------------------------
-     * VIEW CONTACT
-     * ---------------------------------- */
+    /* VIEW CONTACT */
     async function viewContact(phoneNumber) {
       try {
         const res = await fetch(`/contacts/api/${phoneNumber}`);
@@ -855,15 +682,10 @@
       }
     }
 
-    /* ----------------------------------
-     * EDIT / CREATE CONTACT
-     * ---------------------------------- */
-
-    // Abre modal "Nuevo contacto"
+    /* EDIT / CREATE CONTACT */
     function openCreateContact() {
-      // limpiamos el formulario
       document.getElementById('editModalTitle').innerText = 'Nuevo contacto';
-      document.getElementById('editContactId').value = ''; // vacío = crear
+      document.getElementById('editContactId').value = '';
       document.getElementById('editPhoneNumber').value = '';
       document.getElementById('editPhoneNumber').disabled = false;
       document.getElementById('editName').value = '';
@@ -873,18 +695,8 @@
       showModal('editModal');
     }
 
-    // Abre modal "Editar contacto"
     async function openEditContact(contactId) {
       try {
-        // necesitamos info fresh: buscamos el contacto con /contacts/api?limit... NO,
-        // mejor: primero vemos si tenemos el phone en tabla y lo traemos por phone.
-        const row = document.querySelector(`tr td button[onclick*="${contactId}"]`)?.closest('tr')
-          || document.querySelector(`tr[data-id="${contactId}"]`)
-        ;
-
-        // fallback: hacemos una query general getAll y filtramos
-        // pero es más seguro pedirlo al backend; necesitamos phone -> then GET /api/:phone
-        // truco: buscamos la fila que tiene el botón con ese contactId y leemos la 1ra celda (teléfono)
         const tr = Array.from(document.querySelectorAll('#contactsTable tbody tr'))
           .find(r => r.innerHTML.includes(contactId));
         const phone = tr ? tr.getAttribute('data-phone') : null;
@@ -901,11 +713,10 @@
           return;
         }
 
-        // rellenar form
         document.getElementById('editModalTitle').innerText = 'Editar contacto';
         document.getElementById('editContactId').value = contact.id;
         document.getElementById('editPhoneNumber').value = contact.phoneNumber;
-        document.getElementById('editPhoneNumber').disabled = true; // no editamos phone
+        document.getElementById('editPhoneNumber').disabled = true;
         document.getElementById('editName').value = contact.name || '';
         document.getElementById('editDni').value = contact.dni || '';
         document.getElementById('editState').value = contact.state || 'NEW';
@@ -918,7 +729,6 @@
       }
     }
 
-    // submit para crear/editar
     async function submitEditContact() {
       const contactId = document.getElementById('editContactId').value.trim();
       const phone     = document.getElementById('editPhoneNumber').value.trim();
@@ -929,7 +739,6 @@
 
       try {
         if (!contactId) {
-          // crear contacto nuevo
           if (!phone) {
             alert('Teléfono requerido');
             return false;
@@ -939,14 +748,12 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              rows: [
-                {
-                  phoneNumber: phone,
-                  name,
-                  dni,
-                  companies: [],
-                }
-              ]
+              rows: [{
+                phoneNumber: phone,
+                name,
+                dni,
+                companies: [],
+              }]
             })
           });
 
@@ -956,7 +763,6 @@
             return false;
           }
         } else {
-          // editar contacto existente
           const updateRes = await fetch(`/contacts/api/contact/${contactId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -981,18 +787,14 @@
         alert('❌ Error al guardar');
       }
 
-      return false; // prevenimos submit real
+      return false;
     }
 
-    /* ----------------------------------
-     * DELETE CONTACT
-     * ---------------------------------- */
+    /* DELETE CONTACT */
     async function deleteContact(contactId) {
       if (!confirm('¿Eliminar este contacto y su historial? Esta acción no se puede deshacer.')) return;
       try {
-        const res = await fetch(`/contacts/api/contact/${contactId}`, {
-          method: 'DELETE'
-        });
+        const res = await fetch(`/contacts/api/contact/${contactId}`, { method: 'DELETE' });
         const data = await res.json();
         if (data.success) {
           alert('✅ Contacto eliminado');
@@ -1006,48 +808,41 @@
       }
     }
 
-    /* ----------------------------------
-     * COMPANIES (multiempresa)
-     * ---------------------------------- */
-
+    /* COMPANIES */
     async function openCompanies(contactId) {
-    document.getElementById('companiesContactId').value = contactId;
+      document.getElementById('companiesContactId').value = contactId;
 
-    // sacar el teléfono desde la tabla (igual que antes)
-    const tr = Array.from(document.querySelectorAll('#contactsTable tbody tr'))
-      .find(r => r.innerHTML.includes(contactId));
-    const phone = tr ? tr.getAttribute('data-phone') : null;
-    if (!phone) {
-      alert('No pude obtener el teléfono del contacto');
-      return;
-    }
-
-    try {
-      // 1. datos del contacto (sus empresas actuales)
-      const resContact = await fetch(`/contacts/api/${phone}`);
-      const contact = await resContact.json();
-      if (contact.error) {
-        alert('No se encontró el contacto');
+      const tr = Array.from(document.querySelectorAll('#contactsTable tbody tr'))
+        .find(r => r.innerHTML.includes(contactId));
+      const phone = tr ? tr.getAttribute('data-phone') : null;
+      if (!phone) {
+        alert('No pude obtener el teléfono del contacto');
         return;
       }
-      renderCompaniesModalList(contact);
 
-      // 2. lista global de empresas existentes
-      const resCompanies = await fetch('/contacts/api-companies');
-      const companiesJson = await resCompanies.json();
-      if (companiesJson.ok) {
-        fillExistingCompaniesSelect(companiesJson.companies);
-      } else {
-        fillExistingCompaniesSelect([]); // fallback vacío
+      try {
+        const resContact = await fetch(`/contacts/api/${phone}`);
+        const contact = await resContact.json();
+        if (contact.error) {
+          alert('No se encontró el contacto');
+          return;
+        }
+        renderCompaniesModalList(contact);
+
+        const resCompanies = await fetch('/contacts/api-companies');
+        const companiesJson = await resCompanies.json();
+        if (companiesJson.ok) {
+          fillExistingCompaniesSelect(companiesJson.companies);
+        } else {
+          fillExistingCompaniesSelect([]);
+        }
+
+        showModal('companiesModal');
+      } catch (err) {
+        console.error(err);
+        alert('❌ Error cargando empresas');
       }
-
-      showModal('companiesModal');
-    } catch (err) {
-      console.error(err);
-      alert('❌ Error cargando empresas');
     }
-  }
-
 
     function renderCompaniesModalList(contact) {
       const companiesListEl = document.getElementById('companiesList');
@@ -1080,16 +875,14 @@
               ${cc.isPrimary ? '' : `
                 <button
                   class="inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-semibold px-2 py-1 shadow-soft transition"
-                  onclick="makePrimary('${contact.id}','${cc.companyId}')"
-                >
+                  onclick="makePrimary('${contact.id}','${cc.companyId}')">
                   Hacer principal
                 </button>
               `}
 
               <button
                 class="inline-flex items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 text-white text-[11px] font-semibold px-2 py-1 shadow-soft transition"
-                onclick="removeCompany('${contact.id}','${cc.companyId}')"
-              >
+                onclick="removeCompany('${contact.id}','${cc.companyId}')">
                 Quitar
               </button>
             </div>
@@ -1097,58 +890,50 @@
         </div>
       `).join('');
     }
+
     function fillExistingCompaniesSelect(companies) {
-  const sel = document.getElementById('existingCompanySelect');
-  sel.innerHTML = '<option value="">-- Selecciona empresa --</option>';
+      const sel = document.getElementById('existingCompanySelect');
+      sel.innerHTML = '<option value="">-- Selecciona empresa --</option>';
 
-  (companies || []).forEach(co => {
-    const opt = document.createElement('option');
-    opt.value = co.id;
-    opt.textContent = `${co.name || '(sin nombre)'}  -  RUC: ${co.ruc || '-'}`;
-    sel.appendChild(opt);
-  });
-}
-
-/**
- * Envía al backend request para vincular la empresa seleccionada en el combo
- * al contacto actual.
- */
-async function linkExistingCompany() {
-  const contactId = document.getElementById('companiesContactId').value.trim();
-  const companyId = document.getElementById('existingCompanySelect').value.trim();
-  const role      = document.getElementById('existingCompanyRole').value.trim();
-  const primary   = document.getElementById('existingCompanyPrimary').checked;
-
-  if (!contactId || !companyId) {
-    alert('Selecciona una empresa');
-    return;
-  }
-
-  try {
-    const res = await fetch(`/contacts/api/${contactId}/company/link-existing`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        companyId,
-        role,
-        primary,
-      })
-    });
-
-    const data = await res.json();
-    if (data.error) {
-      alert('❌ Error vinculando empresa: ' + data.error);
-      return;
+      (companies || []).forEach(co => {
+        const opt = document.createElement('option');
+        opt.value = co.id;
+        opt.textContent = `${co.name || '(sin nombre)'}  -  RUC: ${co.ruc || '-'}`;
+        sel.appendChild(opt);
+      });
     }
 
-    alert('✅ Empresa vinculada');
-    location.reload(); // mantenemos reload simple, igual que en submitAddCompany
-  } catch (err) {
-    console.error(err);
-    alert('❌ Error vinculando empresa');
-  }
-}
+    async function linkExistingCompany() {
+      const contactId = document.getElementById('companiesContactId').value.trim();
+      const companyId = document.getElementById('existingCompanySelect').value.trim();
+      const role      = document.getElementById('existingCompanyRole').value.trim();
+      const primary   = document.getElementById('existingCompanyPrimary').checked;
 
+      if (!contactId || !companyId) {
+        alert('Selecciona una empresa');
+        return;
+      }
+
+      try {
+        const res = await fetch(`/contacts/api/${contactId}/company/link-existing`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ companyId, role, primary })
+        });
+
+        const data = await res.json();
+        if (data.error) {
+          alert('❌ Error vinculando empresa: ' + data.error);
+          return;
+        }
+
+        alert('✅ Empresa vinculada');
+        location.reload();
+      } catch (err) {
+        console.error(err);
+        alert('❌ Error vinculando empresa');
+      }
+    }
 
     async function submitAddCompany() {
       const contactId = document.getElementById('companiesContactId').value.trim();
@@ -1166,12 +951,7 @@ async function linkExistingCompany() {
         const res = await fetch(`/contacts/api/${contactId}/company`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ruc,
-            name,
-            role,
-            primary,
-          })
+          body: JSON.stringify({ ruc, name, role, primary })
         });
 
         const data = await res.json();
@@ -1181,7 +961,7 @@ async function linkExistingCompany() {
         }
 
         alert('✅ Empresa agregada');
-        location.reload(); // más simple por ahora
+        location.reload();
       } catch (err) {
         console.error(err);
         alert('❌ Error agregando empresa');
@@ -1192,9 +972,7 @@ async function linkExistingCompany() {
 
     async function makePrimary(contactId, companyId) {
       try {
-        const res = await fetch(`/contacts/api/${contactId}/company/${companyId}/primary`, {
-          method: 'POST'
-        });
+        const res = await fetch(`/contacts/api/${contactId}/company/${companyId}/primary`, { method: 'POST' });
         const data = await res.json();
         if (data.error) {
           alert('❌ Error marcando como principal: ' + data.error);
@@ -1211,9 +989,7 @@ async function linkExistingCompany() {
     async function removeCompany(contactId, companyId) {
       if (!confirm('¿Quitar esta empresa del contacto?')) return;
       try {
-        const res = await fetch(`/contacts/api/${contactId}/company/${companyId}`, {
-          method: 'DELETE'
-        });
+        const res = await fetch(`/contacts/api/${contactId}/company/${companyId}`, { method: 'DELETE' });
         const data = await res.json();
         if (data.error) {
           alert('❌ Error quitando empresa: ' + data.error);
@@ -1227,9 +1003,7 @@ async function linkExistingCompany() {
       }
     }
 
-    /* ----------------------------------
-     * TAKEOVER / BLOCK
-     * ---------------------------------- */
+    /* TAKEOVER / BLOCK */
     async function takeover(phoneNumber) {
       if (!confirm('¿Activar intervención humana para este contacto?')) return;
       try {
@@ -1303,59 +1077,32 @@ async function linkExistingCompany() {
       }
     }
 
-    /* ----------------------------------
-     * IMPORT / EXPORT
-     * ---------------------------------- */
+    /* IMPORT / EXPORT */
     async function exportExcel() {
       try {
-        // Mostrar loading en el botón
-        const btn = event.target.closest('button');
-        const originalHTML = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 mr-1 animate-spin"></i>Exportando...';
-        lucide.createIcons();
-
         const res = await fetch('/contacts/api-export');
         
         if (!res.ok) {
           throw new Error('Error al exportar contactos');
         }
 
-        // Convertir la respuesta a blob (archivo binario Excel)
         const blob = await res.blob();
-        
-        // Crear URL temporal del blob
         const url = URL.createObjectURL(blob);
 
-        // Crear enlace temporal y hacer click para descargar
         const a = document.createElement('a');
         a.href = url;
         a.download = `contactos-${new Date().toISOString().split('T')[0]}.xlsx`;
         document.body.appendChild(a);
         a.click();
         
-        // Limpiar
         setTimeout(() => {
           a.remove();
           URL.revokeObjectURL(url);
         }, 100);
 
-        // Restaurar botón
-        btn.disabled = false;
-        btn.innerHTML = originalHTML;
-        lucide.createIcons();
-
         alert('✅ Contactos exportados exitosamente como archivo Excel');
       } catch (err) {
         console.error(err);
-        
-        // Restaurar botón en caso de error
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = originalHTML;
-          lucide.createIcons();
-        }
-        
         alert('❌ Error al exportar contactos');
       }
     }
@@ -1364,14 +1111,11 @@ async function linkExistingCompany() {
       const file = inputEl.files && inputEl.files[0];
       if (!file) return;
 
-      // Este front no está usando SheetJS todavía.
-      // Vamos a soportar .json directo para pruebas rápidas.
       if (file.type === 'application/json' || file.name.endsWith('.json')) {
         try {
           const text = await file.text();
           const parsed = JSON.parse(text);
 
-          // esperamos rows: [...] como pide /api-import
           const rows = Array.isArray(parsed) ? parsed : parsed.rows;
           if (!Array.isArray(rows)) {
             alert('El JSON no tiene "rows" válidos');

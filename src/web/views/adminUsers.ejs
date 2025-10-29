@@ -3,400 +3,221 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title><%= title %> - WhatsApp Bot Admin</title>
+  <title><%= title || 'Usuarios Admin' %> - WhatsApp Bot Admin</title>
 
-  <!-- Fuente + Tailwind -->
+  <!-- Fuente -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Tailwind (misma config del dashboard) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] },
+          fontFamily: { sans: ['Inter','ui-sans-serif','system-ui'] },
           colors: {
-            primary: { DEFAULT: '#1e3a8a', 600: '#1e3a8a', 700:'#1e40af' },
+            primary:   { DEFAULT:'#667eea', 600:'#667eea', 700:'#5a67d8' },
+            secondary: { DEFAULT:'#764ba2', 600:'#764ba2', 700:'#6b3fa0' },
           },
           boxShadow: {
-            soft: '0 10px 25px -10px rgba(0,0,0,.15)',
+            soft:'0 4px 6px -1px rgba(0,0,0,.08), 0 2px 4px -1px rgba(0,0,0,.04)',
+            card:'0 10px 30px -5px rgba(0,0,0,.10)'
           }
         }
       },
-      darkMode: 'media'
+      darkMode:'media'
     }
   </script>
 
-  <!-- Animaciones / icons (mantenemos mismos assets globales para consistencia visual) -->
-  <script src="https://unpkg.com/@motionone/dom/dist/motion.min.js"></script>
+  <!-- Utilidades externas del dashboard (card-link, gradient-text, pulse-ring, icon, etc.) -->
+  <link rel="stylesheet" href="/css/ui.css">
+
+  <!-- Iconos -->
   <script src="https://unpkg.com/lucide@latest"></script>
-
-  <style>
-    @media (prefers-reduced-motion: reduce){
-      *{
-        animation-duration: 0.001ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.001ms !important;
-        scroll-behavior: auto !important;
-      }
-    }
-
-    /* Link activo del sidebar */
-    .sidebar-link-active {
-      background-color: rgba(255,255,255,.12);
-      color:#fff !important;
-      font-weight:600;
-    }
-
-    /* Modal base (mantenemos display:none para que tu JS funcione igual) */
-    .modal {
-      display: none;
-      position: fixed;
-      z-index: 1000;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.6);
-      backdrop-filter: blur(4px);
-    }
-  </style>
 </head>
-<body class="h-full bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100">
-  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-3 focus:py-2 focus:rounded-lg shadow">
+<body class="h-full bg-gradient-to-br from-slate-50 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 text-slate-800 dark:text-slate-100">
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-4 focus:py-2 focus:rounded-lg shadow-lg">
     Saltar al contenido
   </a>
 
-  <% /* Helpers / defaults */ %>
   <%
+    // ===== Helpers / defaults =====
     const adminsList = Array.isArray(admins) ? admins : [];
-    const currentId = typeof currentUserId !== 'undefined' ? currentUserId : null;
-
-    function isActive(p){
-      return (page === p) ? 'sidebar-link-active' : '';
-    }
+    const currentId  = typeof currentUserId !== 'undefined' ? currentUserId : null;
+    const nf = new Intl.NumberFormat('es-PE');
+    const df = new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' });
+    function fmtDate(d){ try { return df.format(new Date(d)); } catch { return '-'; } }
   %>
 
-  <div class="min-h-screen w-full flex relative">
+  <main id="main-content" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
-    <!-- Overlay móvil -->
-    <div id="mobile-sidebar-overlay"
-         class="fixed inset-0 bg-black/40 z-40 opacity-0 pointer-events-none transition-opacity md:hidden">
+    <!-- Volver al Dashboard + breadcrumb -->
+    <div class="flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <a href="/"
+           class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
+          <i data-lucide="arrow-left" class="icon"></i>
+          <span>Volver al Dashboard</span>
+        </a>
+      </div>
+
+      <nav aria-label="Breadcrumb" class="text-xs text-slate-500 dark:text-slate-400">
+        <ol class="flex items-center gap-2">
+          <li class="inline-flex items-center gap-1">
+            <a href="/" class="hover:underline inline-flex items-center gap-1">
+              <i data-lucide="home" class="w-3.5 h-3.5"></i> Inicio
+            </a>
+          </li>
+          <li class="select-none">/</li>
+          <li class="inline-flex items-center gap-1">
+            <i data-lucide="shield" class="w-3.5 h-3.5"></i>
+            <span class="font-medium">Usuarios Admin</span>
+          </li>
+        </ol>
+      </nav>
     </div>
 
-    <!-- Sidebar -->
-    <aside id="sidebar"
-           class="w-[280px] flex flex-col bg-gradient-to-b from-primary to-primary-700 text-white shadow-soft
-                  fixed inset-y-0 left-0 z-50 -translate-x-full transition-transform md:translate-x-0 md:relative md:flex"
-           role="navigation"
-           aria-label="Menú principal">
-
-      <div class="px-5 py-6 border-b border-white/10 bg-white/5 backdrop-blur flex items-center justify-between">
-        <h2 class="text-xl font-semibold flex items-center gap-2">
-          <i data-lucide="bot" class="w-5 h-5"></i> Bot Admin
-        </h2>
-
-        <!-- Botón cerrar sidebar móvil -->
-        <button id="close-sidebar-btn"
-                class="md:hidden inline-flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 p-2"
-                aria-label="Cerrar menú">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
-
-      <nav class="py-4 flex-1 overflow-y-auto">
-        <ul class="px-2 space-y-1 text-[15px] leading-5">
-          <li>
-            <a href="/"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('dashboard') %>">
-              <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
-              <span>Dashboard</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/contacts"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('contacts') %>">
-              <i data-lucide="users" class="w-5 h-5"></i>
-              <span>Contactos</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/conversations"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('conversations') %>">
-              <i data-lucide="message-circle" class="w-5 h-5"></i>
-              <span>Conversaciones</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/blocked"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('blocked') %>">
-              <i data-lucide="ban" class="w-5 h-5"></i>
-              <span>Bloqueados</span>
-            </a>
-          </li>
-
-          <li><div class="my-3 h-px bg-white/10"></div></li>
-
-          <li>
-            <a href="/calendar"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('calendar') %>">
-              <i data-lucide="calendar" class="w-5 h-5"></i>
-              <span>Calendario</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/working-hours"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('working-hours') %>">
-              <i data-lucide="clock" class="w-5 h-5"></i>
-              <span>Horarios</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/admin-users"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('admin-users') %>">
-              <i data-lucide="shield" class="w-5 h-5"></i>
-              <span>Usuarios Admin</span>
-            </a>
-          </li>
-
-          <li><div class="my-3 h-px bg-white/10"></div></li>
-
-          <li>
-            <a href="/settings"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('settings') %>">
-              <i data-lucide="settings" class="w-5 h-5"></i>
-              <span>Configuración</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/departments"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('departments') %>">
-              <i data-lucide="building-2" class="w-5 h-5"></i>
-              <span>Departamentos</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/products"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('products') %>">
-              <i data-lucide="package" class="w-5 h-5"></i>
-              <span>Productos</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/auto-responses"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('auto-responses') %>">
-              <i data-lucide="robot" class="w-5 h-5"></i>
-              <span>Auto-respuestas</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/tags"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('tags') %>">
-              <i data-lucide="tags" class="w-5 h-5"></i>
-              <span>Tags</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/templates"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('templates') %>">
-              <i data-lucide="file-text" class="w-5 h-5"></i>
-              <span>Plantillas</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/metrics"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('metrics') %>">
-              <i data-lucide="line-chart" class="w-5 h-5"></i>
-              <span>Métricas</span>
-            </a>
-          </li>
-        </ul>
-      </nav>
-
-      <div class="mt-auto p-4 bg-white/5 border-t border-white/10">
-        <div class="rounded-xl bg-white/10 p-3">
-          <div class="text-[11px] uppercase tracking-wide opacity-80">Sesión activa</div>
-          <div class="font-semibold text-sm mt-1 flex items-center gap-2">
-            <i data-lucide="user" class="w-4 h-4"></i>
-            <span><%= user || 'Admin' %></span>
-          </div>
-        </div>
-
-        <form method="POST" action="/auth/logout" class="mt-3">
-          <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
-            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <% } %>
-          <button type="submit"
-            class="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-red-500/20 hover:bg-red-500/30 text-white py-2.5 text-sm font-medium transition">
-            <i data-lucide="log-out" class="w-4 h-4"></i> Cerrar sesión
-          </button>
-        </form>
-      </div>
-    </aside>
-
-    <!-- Main -->
-    <main id="main-content" class="flex-1 p-4 md:p-8 md:ml-0 ml-0 w-full md:w-auto">
-      <!-- Header -->
-      <header class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div class="flex items-start justify-between w-full md:w-auto">
-          <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
-            <i data-lucide="shield" class="w-7 h-7 text-primary"></i>
-            <span>Usuarios Admin</span>
+    <!-- Header -->
+    <header class="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 px-6 py-5">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 class="text-3xl font-bold tracking-tight gradient-text flex items-center gap-3">
+            <i data-lucide="shield" class="icon-lg text-primary"></i>
+            Usuarios Admin
           </h1>
-
-          <!-- Sidebar móvil -->
-          <button id="open-sidebar-btn"
-                  class="md:hidden inline-flex items-center justify-center rounded-lg text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 p-2 shadow-soft"
-                  aria-label="Abrir menú">
-            <i data-lucide="menu" class="w-6 h-6"></i>
-          </button>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestión de administradores del sistema</p>
         </div>
 
-        <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-end w-full md:w-auto">
-          <button class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-sm font-semibold shadow-soft transition"
+        <div class="flex flex-wrap items-center gap-3">
+          <button class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft"
                   onclick="showModal('addModal')">
-            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+            <i data-lucide="plus-circle" class="icon"></i>
             <span>Agregar Usuario</span>
           </button>
         </div>
-      </header>
+      </div>
+    </header>
 
-      <!-- Contenido principal -->
-      <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-soft border border-slate-100/70 dark:border-white/5 mb-6">
-        <div class="px-6 py-4 border-b border-slate-100/70 dark:border-white/5 flex items-center justify-between">
-          <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <i data-lucide="users" class="w-5 h-5 text-primary"></i>
-            <span>Lista de Administradores</span>
-          </h2>
-        </div>
-
-        <% if (adminsList.length > 0) { %>
-          <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
-              <thead class="bg-slate-50/60 dark:bg-white/5 text-slate-500 dark:text-slate-400 uppercase text-[11px] tracking-wide font-semibold">
-                <tr>
-                  <th class="text-left px-6 py-3">Usuario</th>
-                  <th class="text-left px-6 py-3">Nombre</th>
-                  <th class="text-left px-6 py-3">Fecha de Registro</th>
-                  <th class="text-left px-6 py-3">Acciones</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100/70 dark:divide-white/5 text-slate-700 dark:text-slate-200">
-                <% adminsList.forEach(admin => { %>
-                  <tr class="hover:bg-slate-50/50 dark:hover:bg-white/5 transition">
-                    <td class="px-6 py-4 font-semibold text-slate-900 dark:text-white">
-                      <span><%= admin.username %></span>
-                      <% if (admin.id === currentId) { %>
-                        <span class="ml-2 inline-flex items-center rounded-md bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 px-2 py-0.5 text-[11px] font-semibold leading-none">
-                          Tú
-                        </span>
-                      <% } %>
-                    </td>
-                    <td class="px-6 py-4"><%= admin.name || '-' %></td>
-                    <td class="px-6 py-4">
-                      <%= new Date(admin.createdAt).toLocaleDateString('es-PE') %>
-                    </td>
-                    <td class="px-6 py-4">
-                      <div class="flex flex-wrap gap-2">
-                        <!-- Editar -->
-                        <button
-                          class="inline-flex items-center gap-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
-                          onclick="editAdmin('<%= admin.id %>')">
-                          ✏️ <span>Editar</span>
-                        </button>
-
-                        <% if (admin.id === currentId) { %>
-                          <!-- Cambiar mi contraseña -->
-                          <button
-                            class="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
-                            onclick="changeMyPassword('<%= admin.id %>')">
-                            🔑 <span>Cambiar Contraseña</span>
-                          </button>
-                        <% } else { %>
-                          <!-- Resetear contraseña -->
-                          <button
-                            class="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
-                            onclick="resetPassword('<%= admin.id %>')">
-                            🔄 <span>Resetear Contraseña</span>
-                          </button>
-
-                          <!-- Eliminar -->
-                          <button
-                            class="inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
-                            onclick="deleteAdmin('<%= admin.id %>')">
-                            🗑️ <span>Eliminar</span>
-                          </button>
-                        <% } %>
-                      </div>
-                    </td>
-                  </tr>
-                <% }) %>
-              </tbody>
-            </table>
+    <!-- Tabla -->
+    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/50 dark:border-white/5 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-white/5 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50">
+        <h2 class="text-lg font-bold flex items-center gap-2.5 text-slate-800 dark:text-white">
+          <div class="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+            <i data-lucide="users" class="icon text-indigo-600 dark:text-indigo-400"></i>
           </div>
-        <% } else { %>
-          <div class="px-6 py-16 text-center text-slate-500 dark:text-slate-400">
-            <div class="text-4xl mb-3">😶</div>
-            <h3 class="text-base font-semibold text-slate-700 dark:text-white mb-1">Sin usuarios</h3>
-            <p class="text-sm text-slate-500 dark:text-slate-400">Agrega el primer administrador</p>
-          </div>
-        <% } %>
-      </section>
-    </main>
-  </div>
-
-  <!-- Modal Agregar Usuario -->
-  <div id="addModal" class="modal">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft max-w-md w-[90%] mx-auto my-20 border border-slate-200 dark:border-white/10 overflow-hidden">
-      <div class="px-6 py-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-          <span>➕</span> <span>Agregar Usuario Admin</span>
+          Lista de Administradores
         </h2>
-        <button class="text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white text-xl leading-none"
-                onclick="hideModal('addModal')">
-          &times;
-        </button>
       </div>
 
+      <% if (adminsList.length > 0) { %>
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 uppercase text-xs tracking-wider font-semibold">
+              <tr>
+                <th class="text-left px-6 py-4">Usuario</th>
+                <th class="text-left px-6 py-4">Nombre</th>
+                <th class="text-left px-6 py-4">Registro</th>
+                <th class="text-left px-6 py-4">Acciones</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+              <% adminsList.forEach(admin => { %>
+                <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                  <td class="px-6 py-4 font-semibold text-slate-900 dark:text-white">
+                    <span><%= admin.username %></span>
+                    <% if (admin.id === currentId) { %>
+                      <span class="ml-2 inline-flex items-center rounded-md bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 px-2 py-0.5 text-[11px] font-semibold leading-none">Tú</span>
+                    <% } %>
+                  </td>
+                  <td class="px-6 py-4 text-slate-700 dark:text-slate-300"><%= admin.name || '-' %></td>
+                  <td class="px-6 py-4 text-slate-600 dark:text-slate-400">
+                    <time datetime="<%= new Date(admin.createdAt).toISOString() %>"><%= fmtDate(admin.createdAt) %></time>
+                  </td>
+                  <td class="px-6 py-4">
+                    <div class="flex flex-wrap gap-2">
+                      <!-- Editar -->
+                      <button
+                        class="inline-flex items-center gap-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                        onclick="editAdmin('<%= admin.id %>')">
+                        ✏️ <span>Editar</span>
+                      </button>
+
+                      <% if (admin.id === currentId) { %>
+                        <!-- Cambiar mi contraseña -->
+                        <button
+                          class="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                          onclick="changeMyPassword('<%= admin.id %>')">
+                          🔑 <span>Cambiar Contraseña</span>
+                        </button>
+                      <% } else { %>
+                        <!-- Resetear contraseña -->
+                        <button
+                          class="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                          onclick="resetPassword('<%= admin.id %>')">
+                          🔄 <span>Resetear Contraseña</span>
+                        </button>
+
+                        <!-- Eliminar -->
+                        <button
+                          class="inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                          onclick="deleteAdmin('<%= admin.id %>')">
+                          🗑️ <span>Eliminar</span>
+                        </button>
+                      <% } %>
+                    </div>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } else { %>
+        <div class="px-6 py-16 text-center">
+          <div class="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
+            <i data-lucide="inbox" class="icon-lg text-slate-400"></i>
+          </div>
+          <p class="text-sm text-slate-500 dark:text-slate-400 font-medium">Sin usuarios</p>
+          <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Agrega el primer administrador</p>
+        </div>
+      <% } %>
+    </section>
+  </main>
+
+  <!-- Modales (mismos estilos que dashboard: sin CSS inline extra) -->
+  <div id="addModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="user-plus" class="icon text-primary"></i> Agregar Usuario Admin
+        </h2>
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="hideModal('addModal')">
+          <i data-lucide="x" class="icon"></i>
+        </button>
+      </div>
       <div class="p-6">
         <form onsubmit="addAdmin(event)" class="space-y-4">
           <div>
-            <label for="username" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Usuario *</label>
-            <input type="text" id="username" required placeholder="Ej: admin2"
-                   class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0">
+            <label for="username" class="block text-sm font-semibold mb-2">Usuario *</label>
+            <input id="username" type="text" required placeholder="Ej: admin2"
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
           </div>
-
           <div>
-            <label for="name" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Nombre Completo</label>
-            <input type="text" id="name" placeholder="Ej: Juan Pérez"
-                   class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0">
+            <label for="name" class="block text-sm font-semibold mb-2">Nombre Completo</label>
+            <input id="name" type="text" placeholder="Ej: Juan Pérez"
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
           </div>
-
           <div>
-            <label for="password" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Contraseña *</label>
-            <input type="password" id="password" required minlength="6" placeholder="Mínimo 6 caracteres"
-                   class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0">
+            <label for="password" class="block text-sm font-semibold mb-2">Contraseña *</label>
+            <input id="password" type="password" required minlength="6" placeholder="Mínimo 6 caracteres"
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
           </div>
-
-          <div class="flex justify-end gap-2 pt-4">
-            <button type="button"
-                    class="inline-flex items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition"
-                    onclick="hideModal('addModal')">
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white" onclick="hideModal('addModal')">
               Cancelar
             </button>
-            <button type="submit"
-                    class="inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition">
+            <button type="submit" class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-3 py-2 shadow-soft">
               Crear Usuario
             </button>
           </div>
@@ -405,43 +226,34 @@
     </div>
   </div>
 
-  <!-- Modal Editar Usuario -->
-  <div id="editModal" class="modal">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft max-w-md w-[90%] mx-auto my-20 border border-slate-200 dark:border-white/10 overflow-hidden">
-      <div class="px-6 py-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-          <span>✏️</span> <span>Editar Usuario</span>
+  <div id="editModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="pencil" class="icon text-amber-600"></i> Editar Usuario
         </h2>
-        <button class="text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white text-xl leading-none"
-                onclick="hideModal('editModal')">
-          &times;
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="hideModal('editModal')">
+          <i data-lucide="x" class="icon"></i>
         </button>
       </div>
-
       <div class="p-6">
         <form onsubmit="updateAdmin(event)" class="space-y-4">
-          <input type="hidden" id="edit-id">
-
+          <input id="edit-id" type="hidden">
           <div>
-            <label for="edit-username" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Usuario</label>
-            <input type="text" id="edit-username" required
-                   class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0">
+            <label for="edit-username" class="block text-sm font-semibold mb-2">Usuario</label>
+            <input id="edit-username" type="text" required
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
           </div>
-
           <div>
-            <label for="edit-name" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Nombre Completo</label>
-            <input type="text" id="edit-name"
-                   class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0">
+            <label for="edit-name" class="block text-sm font-semibold mb-2">Nombre Completo</label>
+            <input id="edit-name" type="text"
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
           </div>
-
-          <div class="flex justify-end gap-2 pt-4">
-            <button type="button"
-                    class="inline-flex items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition"
-                    onclick="hideModal('editModal')">
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white" onclick="hideModal('editModal')">
               Cancelar
             </button>
-            <button type="submit"
-                    class="inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition">
+            <button type="submit" class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-3 py-2 shadow-soft">
               Actualizar
             </button>
           </div>
@@ -450,53 +262,42 @@
     </div>
   </div>
 
-  <!-- Modal Cambiar MI Contraseña -->
-  <div id="changePasswordModal" class="modal">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft max-w-md w-[90%] mx-auto my-20 border border-slate-200 dark:border-white/10 overflow-hidden">
-      <div class="px-6 py-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-          <span>🔑</span> <span>Cambiar Mi Contraseña</span>
+  <div id="changePasswordModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="key-round" class="icon text-emerald-600"></i> Cambiar Mi Contraseña
         </h2>
-        <button class="text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white text-xl leading-none"
-                onclick="hideModal('changePasswordModal')">
-          &times;
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="hideModal('changePasswordModal')">
+          <i data-lucide="x" class="icon"></i>
         </button>
       </div>
-
       <div class="p-6">
         <form onsubmit="changePassword(event)" class="space-y-4">
-          <input type="hidden" id="change-id">
-
+          <input id="change-id" type="hidden">
           <div class="rounded-lg border border-sky-300/40 bg-sky-50 text-sky-800 text-sm px-3 py-2 dark:bg-sky-900/30 dark:text-sky-200 dark:border-sky-700/40">
             💡 Debes ingresar tu contraseña actual para confirmar el cambio
           </div>
-
           <div>
-            <label for="currentPassword" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Contraseña Actual *</label>
-            <input type="password" id="currentPassword" required
-                   class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0">
+            <label for="currentPassword" class="block text-sm font-semibold mb-2">Contraseña Actual *</label>
+            <input id="currentPassword" type="password" required
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
           </div>
-
           <div>
-            <label for="newPassword" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Nueva Contraseña *</label>
-            <input type="password" id="newPassword" required minlength="6" placeholder="Mínimo 6 caracteres"
-                   class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0">
+            <label for="newPassword" class="block text-sm font-semibold mb-2">Nueva Contraseña *</label>
+            <input id="newPassword" type="password" required minlength="6" placeholder="Mínimo 6 caracteres"
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
           </div>
-
           <div>
-            <label for="confirmPassword" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Confirmar Nueva Contraseña *</label>
-            <input type="password" id="confirmPassword" required minlength="6"
-                   class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0">
+            <label for="confirmPassword" class="block text-sm font-semibold mb-2">Confirmar Nueva Contraseña *</label>
+            <input id="confirmPassword" type="password" required minlength="6"
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
           </div>
-
-          <div class="flex justify-end gap-2 pt-4">
-            <button type="button"
-                    class="inline-flex items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition"
-                    onclick="hideModal('changePasswordModal')">
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white" onclick="hideModal('changePasswordModal')">
               Cancelar
             </button>
-            <button type="submit"
-                    class="inline-flex items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition">
+            <button type="submit" class="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3 py-2 shadow-soft">
               Cambiar Contraseña
             </button>
           </div>
@@ -505,41 +306,32 @@
     </div>
   </div>
 
-  <!-- Modal Resetear Contraseña -->
-  <div id="resetPasswordModal" class="modal">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft max-w-md w-[90%] mx-auto my-20 border border-slate-200 dark:border-white/10 overflow-hidden">
-      <div class="px-6 py-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-          <span>🔄</span> <span>Resetear Contraseña</span>
+  <div id="resetPasswordModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="rotate-ccw" class="icon text-amber-600"></i> Resetear Contraseña
         </h2>
-        <button class="text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white text-xl leading-none"
-                onclick="hideModal('resetPasswordModal')">
-          &times;
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="hideModal('resetPasswordModal')">
+          <i data-lucide="x" class="icon"></i>
         </button>
       </div>
-
       <div class="p-6">
         <form onsubmit="resetPasswordSubmit(event)" class="space-y-4">
-          <input type="hidden" id="reset-id">
-
+          <input id="reset-id" type="hidden">
           <div class="rounded-lg border border-amber-300/40 bg-amber-50 text-amber-800 text-sm px-3 py-2 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-700/40">
             ⚠️ Estás reseteando la contraseña de otro usuario. Asegúrate de comunicarle la nueva contraseña.
           </div>
-
           <div>
-            <label for="resetNewPassword" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Nueva Contraseña *</label>
-            <input type="password" id="resetNewPassword" required minlength="6" placeholder="Mínimo 6 caracteres"
-                   class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0">
+            <label for="resetNewPassword" class="block text-sm font-semibold mb-2">Nueva Contraseña *</label>
+            <input id="resetNewPassword" type="password" required minlength="6" placeholder="Mínimo 6 caracteres"
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
           </div>
-
-          <div class="flex justify-end gap-2 pt-4">
-            <button type="button"
-                    class="inline-flex items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition"
-                    onclick="hideModal('resetPasswordModal')">
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white" onclick="hideModal('resetPasswordModal')">
               Cancelar
             </button>
-            <button type="submit"
-                    class="inline-flex items-center justify-center rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold px-3 py-2 shadow-soft transition">
+            <button type="submit" class="rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold px-3 py-2 shadow-soft">
               Resetear Contraseña
             </button>
           </div>
@@ -548,115 +340,55 @@
     </div>
   </div>
 
+  <!-- Scripts -->
   <script>
     // Iconos
-    window.lucide && lucide.createIcons();
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
+    });
 
-    // Sidebar móvil
-    (function(){
-      const sidebar   = document.getElementById('sidebar');
-      const overlay   = document.getElementById('mobile-sidebar-overlay');
-      const openBtn   = document.getElementById('open-sidebar-btn');
-      const closeBtn  = document.getElementById('close-sidebar-btn');
-
-      function openSidebar(){
-        sidebar.classList.remove('-translate-x-full');
-        overlay.classList.remove('opacity-0','pointer-events-none');
-      }
-      function closeSidebar(){
-        sidebar.classList.add('-translate-x-full');
-        overlay.classList.add('opacity-0','pointer-events-none');
-      }
-
-      if (openBtn)  openBtn.addEventListener('click', openSidebar);
-      if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
-      if (overlay)  overlay.addEventListener('click', closeSidebar);
-    })();
-
-    // =============================
-    // Lógica existente (CRUD Admin)
-    // =============================
-
-    // Agregar admin
+    // ====== Lógica CRUD (sin cambios) ======
     async function addAdmin(e) {
       e.preventDefault();
-
       const data = {
         username: document.getElementById('username').value,
         name: document.getElementById('name').value,
         password: document.getElementById('password').value
       };
-
       try {
-        const res = await fetch('/admin-users/api', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-
+        const res = await fetch('/admin-users/api', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
         const result = await res.json();
-
-        if (result.success) {
-          alert('✅ Usuario creado exitosamente');
-          location.reload();
-        } else {
-          alert('❌ Error: ' + (result.error || 'No se pudo crear'));
-        }
-      } catch (error) {
-        alert('❌ Error al crear usuario');
-        console.error(error);
-      }
+        if (result.success) { alert('✅ Usuario creado exitosamente'); location.reload(); }
+        else { alert('❌ Error: ' + (result.error || 'No se pudo crear')); }
+      } catch (err) { alert('❌ Error al crear usuario'); console.error(err); }
     }
 
-    // Editar admin (carga modal con datos)
     async function editAdmin(id) {
       try {
         const res = await fetch(`/admin-users/api/${id}`);
         const admin = await res.json();
-
         document.getElementById('edit-id').value = admin.id;
         document.getElementById('edit-username').value = admin.username;
         document.getElementById('edit-name').value = admin.name || '';
-
         showModal('editModal');
-      } catch (error) {
-        alert('❌ Error al cargar usuario');
-        console.error(error);
-      }
+      } catch (err) { alert('❌ Error al cargar usuario'); console.error(err); }
     }
 
-    // Actualizar admin
     async function updateAdmin(e) {
       e.preventDefault();
-
       const id = document.getElementById('edit-id').value;
       const data = {
         username: document.getElementById('edit-username').value,
         name: document.getElementById('edit-name').value
       };
-
       try {
-        const res = await fetch(`/admin-users/api/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-
+        const res = await fetch(`/admin-users/api/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
         const result = await res.json();
-
-        if (result.success) {
-          alert('✅ Usuario actualizado');
-          location.reload();
-        } else {
-          alert('❌ Error al actualizar');
-        }
-      } catch (error) {
-        alert('❌ Error al actualizar usuario');
-        console.error(error);
-      }
+        if (result.success) { alert('✅ Usuario actualizado'); location.reload(); }
+        else { alert('❌ Error al actualizar'); }
+      } catch (err) { alert('❌ Error al actualizar usuario'); console.error(err); }
     }
 
-    // Cambiar MI contraseña
     function changeMyPassword(id) {
       document.getElementById('change-id').value = id;
       document.getElementById('currentPassword').value = '';
@@ -667,43 +399,19 @@
 
     async function changePassword(e) {
       e.preventDefault();
-
       const newPassword = document.getElementById('newPassword').value;
       const confirmPassword = document.getElementById('confirmPassword').value;
-
-      if (newPassword !== confirmPassword) {
-        alert('❌ Las contraseñas no coinciden');
-        return;
-      }
-
+      if (newPassword !== confirmPassword) { alert('❌ Las contraseñas no coinciden'); return; }
+      const data = { currentPassword: document.getElementById('currentPassword').value, newPassword };
       const id = document.getElementById('change-id').value;
-      const data = {
-        currentPassword: document.getElementById('currentPassword').value,
-        newPassword: newPassword
-      };
-
       try {
-        const res = await fetch(`/admin-users/api/${id}/change-password`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-
+        const res = await fetch(`/admin-users/api/${id}/change-password`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
         const result = await res.json();
-
-        if (result.success) {
-          alert('✅ Contraseña cambiada exitosamente');
-          hideModal('changePasswordModal');
-        } else {
-          alert('❌ Error: ' + (result.error || 'No se pudo cambiar'));
-        }
-      } catch (error) {
-        alert('❌ Error al cambiar contraseña');
-        console.error(error);
-      }
+        if (result.success) { alert('✅ Contraseña cambiada exitosamente'); hideModal('changePasswordModal'); }
+        else { alert('❌ Error: ' + (result.error || 'No se pudo cambiar')); }
+      } catch (err) { alert('❌ Error al cambiar contraseña'); console.error(err); }
     }
 
-    // Resetear contraseña (otro usuario)
     function resetPassword(id) {
       document.getElementById('reset-id').value = id;
       document.getElementById('resetNewPassword').value = '';
@@ -712,70 +420,42 @@
 
     async function resetPasswordSubmit(e) {
       e.preventDefault();
-
       const id = document.getElementById('reset-id').value;
-      const data = {
-        newPassword: document.getElementById('resetNewPassword').value
-      };
-
+      const data = { newPassword: document.getElementById('resetNewPassword').value };
       try {
-        const res = await fetch(`/admin-users/api/${id}/reset-password`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-
+        const res = await fetch(`/admin-users/api/${id}/reset-password`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
         const result = await res.json();
-
-        if (result.success) {
-          alert('✅ Contraseña reseteada exitosamente\n\n⚠️ Asegúrate de comunicarle la nueva contraseña al usuario');
-          hideModal('resetPasswordModal');
-        } else {
-          alert('❌ Error: ' + (result.error || 'No se pudo resetear'));
-        }
-      } catch (error) {
-        alert('❌ Error al resetear contraseña');
-        console.error(error);
-      }
+        if (result.success) { alert('✅ Contraseña reseteada exitosamente'); hideModal('resetPasswordModal'); }
+        else { alert('❌ Error: ' + (result.error || 'No se pudo resetear')); }
+      } catch (err) { alert('❌ Error al resetear contraseña'); console.error(err); }
     }
 
-    // Eliminar admin
     async function deleteAdmin(id) {
       if (!confirm('¿Eliminar este usuario administrador?\n\nEsta acción no se puede deshacer.')) return;
-
       try {
-        const res = await fetch(`/admin-users/api/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/admin-users/api/${id}`, { method:'DELETE' });
         const result = await res.json();
-
-        if (result.success) {
-          alert('✅ Usuario eliminado');
-          location.reload();
-        } else {
-          alert('❌ Error: ' + (result.error || 'No se pudo eliminar'));
-        }
-      } catch (error) {
-        alert('❌ Error al eliminar usuario');
-        console.error(error);
-      }
+        if (result.success) { alert('✅ Usuario eliminado'); location.reload(); }
+        else { alert('❌ Error: ' + (result.error || 'No se pudo eliminar')); }
+      } catch (err) { alert('❌ Error al eliminar usuario'); console.error(err); }
     }
 
-    // Mostrar / ocultar modales
-    function showModal(modalId) {
-      document.getElementById(modalId).style.display = 'block';
+    // Modales (usamos clases Tailwind en lugar de CSS propio)
+    function showModal(id){
+      const el = document.getElementById(id);
+      el.classList.remove('hidden');
+      el.classList.add('flex');
     }
-
-    function hideModal(modalId) {
-      document.getElementById(modalId).style.display = 'none';
+    function hideModal(id){
+      const el = document.getElementById(id);
+      el.classList.remove('flex');
+      el.classList.add('hidden');
     }
-
-    window.onclick = function(event) {
-      const modals = document.getElementsByClassName('modal');
-      for (let modal of modals) {
-        if (event.target == modal) {
-          modal.style.display = 'none';
-        }
-      }
-    }
+    window.addEventListener('click', (e) => {
+      document.querySelectorAll('#addModal,#editModal,#changePasswordModal,#resetPasswordModal').forEach(m => {
+        if (e.target === m) hideModal(m.id);
+      });
+    });
   </script>
 </body>
 </html>

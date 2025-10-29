@@ -5,10 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title><%= title %> - WhatsApp Bot Admin</title>
 
-  <!-- Fuente + Tailwind -->
+  <!-- Fuente -->
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Tailwind (misma config del dashboard) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -16,10 +18,12 @@
         extend: {
           fontFamily: { sans: ['Inter','ui-sans-serif','system-ui'] },
           colors: {
-            primary:{ DEFAULT:'#1e3a8a', 600:'#1e3a8a', 700:'#1e40af' },
+            primary:   { DEFAULT:'#667eea', 600:'#667eea', 700:'#5a67d8' },
+            secondary: { DEFAULT:'#764ba2', 600:'#764ba2', 700:'#6b3fa0' },
           },
-          boxShadow:{
-            soft:'0 10px 25px -10px rgba(0,0,0,.15)',
+          boxShadow: {
+            soft:'0 4px 6px -1px rgba(0,0,0,.08), 0 2px 4px -1px rgba(0,0,0,.04)',
+            card:'0 10px 30px -5px rgba(0,0,0,.10)'
           }
         }
       },
@@ -27,294 +31,185 @@
     }
   </script>
 
-  <!-- motion + icons -->
-  <script src="https://unpkg.com/@motionone/dom/dist/motion.min.js"></script>
+  <!-- Utilidades externas del dashboard -->
+  <link rel="stylesheet" href="/css/ui.css">
+
+  <!-- Iconos -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
     @media (prefers-reduced-motion: reduce){
       *{
-        animation-duration:.001ms !important;
-        animation-iteration-count:1 !important;
-        transition-duration:.001ms !important;
-        scroll-behavior:auto !important;
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
       }
     }
 
-    .sidebar-link-active{
-      background-color:rgba(255,255,255,.12);
-      color:#fff !important;
-      font-weight:600;
+    /* Gradient text */
+    .gradient-text {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
 
-    /* Para modales: inicialmente ocultos */
-    .modal-hidden{
-      display:none !important;
-    }
+    /* Icon sizes */
+    .icon { width: 1.25rem; height: 1.25rem; }
+    .icon-lg { width: 1.75rem; height: 1.75rem; }
+
+    .hidden-card { display: none; }
   </style>
 </head>
 
-<body class="h-full bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100">
-<a href="#main-content"
-   class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-3 focus:py-2 focus:rounded-lg shadow">
-  Saltar al contenido
-</a>
+<body class="h-full bg-gradient-to-br from-slate-50 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 text-slate-800 dark:text-slate-100">
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-4 focus:py-2 focus:rounded-lg shadow-lg">
+    Saltar al contenido
+  </a>
 
-<%
-  function isActive(p){
-    return (page === p || (!page && p==='dashboard')) ? 'sidebar-link-active' : '';
-  }
-%>
+  <main id="main-content" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
-<div class="min-h-screen w-full flex relative">
+    <!-- Volver al Dashboard + breadcrumb -->
+    <div class="flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <a href="/"
+           class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
+          <i data-lucide="arrow-left" class="icon"></i>
+          <span>Volver al Dashboard</span>
+        </a>
+      </div>
 
-  <!-- Overlay móvil del sidebar -->
-  <div id="mobile-sidebar-overlay"
-       class="fixed inset-0 bg-black/40 z-40 opacity-0 pointer-events-none transition-opacity md:hidden"></div>
-
-  <!-- SIDEBAR -->
-  <aside id="sidebar"
-         class="w-[280px] flex flex-col bg-gradient-to-b from-primary to-primary-700 text-white shadow-soft
-                fixed inset-y-0 left-0 z-50 -translate-x-full transition-transform md:translate-x-0 md:relative md:flex"
-         role="navigation"
-         aria-label="Menú principal">
-
-    <div class="px-5 py-6 border-b border-white/10 bg-white/5 backdrop-blur flex items-center justify-between">
-      <h2 class="text-xl font-semibold flex items-center gap-2">
-        <i data-lucide="bot" class="w-5 h-5"></i> Bot Admin
-      </h2>
-
-      <button id="close-sidebar-btn"
-              class="md:hidden inline-flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 p-2"
-              aria-label="Cerrar menú">
-        <i data-lucide="x" class="w-5 h-5"></i>
-      </button>
+      <nav aria-label="Breadcrumb" class="text-xs text-slate-500 dark:text-slate-400">
+        <ol class="flex items-center gap-2">
+          <li class="inline-flex items-center gap-1">
+            <a href="/" class="hover:underline inline-flex items-center gap-1">
+              <i data-lucide="home" class="w-3.5 h-3.5"></i> Inicio
+            </a>
+          </li>
+          <li class="select-none">/</li>
+          <li class="inline-flex items-center gap-1">
+            <i data-lucide="package" class="w-3.5 h-3.5"></i>
+            <span class="font-medium">Productos</span>
+          </li>
+        </ol>
+      </nav>
     </div>
 
-    <nav class="py-4 flex-1 overflow-y-auto">
-      <ul class="px-2 space-y-1 text-[15px] leading-5">
-        <li>
-          <a href="/"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('dashboard') %>"
-             aria-current="<%= isActive('dashboard') ? 'page' : false %>">
-            <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
-            <span>Dashboard</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/contacts"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('contacts') %>"
-             aria-current="<%= isActive('contacts') ? 'page' : false %>">
-            <i data-lucide="users" class="w-5 h-5"></i>
-            <span>Contactos</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/conversations"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('conversations') %>"
-             aria-current="<%= isActive('conversations') ? 'page' : false %>">
-            <i data-lucide="message-circle" class="w-5 h-5"></i>
-            <span>Conversaciones</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/blocked"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('blocked') %>"
-             aria-current="<%= isActive('blocked') ? 'page' : false %>">
-            <i data-lucide="ban" class="w-5 h-5"></i>
-            <span>Bloqueados</span>
-          </a>
-        </li>
-
-        <li><div class="my-3 h-px bg-white/10"></div></li>
-
-        <li>
-          <a href="/calendar"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('calendar') %>"
-             aria-current="<%= isActive('calendar') ? 'page' : false %>">
-            <i data-lucide="calendar" class="w-5 h-5"></i>
-            <span>Calendario</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/working-hours"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('working-hours') %>"
-             aria-current="<%= isActive('working-hours') ? 'page' : false %>">
-            <i data-lucide="clock" class="w-5 h-5"></i>
-            <span>Horarios</span>
-          </a>
-        </li>
-
-        <li><div class="my-3 h-px bg-white/10"></div></li>
-
-        <li>
-          <a href="/departments"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('departments') %>"
-             aria-current="<%= isActive('departments') ? 'page' : false %>">
-            <i data-lucide="building-2" class="w-5 h-5"></i>
-            <span>Departamentos</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/products"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white hover:bg-white/10 transition <%= isActive('products') %>"
-             aria-current="<%= isActive('products') ? 'page' : false %>">
-            <i data-lucide="package" class="w-5 h-5"></i>
-            <span>Productos</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/auto-responses"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('auto-responses') %>"
-             aria-current="<%= isActive('auto-responses') ? 'page' : false %>">
-            <i data-lucide="bot" class="w-5 h-5"></i>
-            <span>Respuestas Auto</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/tags"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('tags') %>"
-             aria-current="<%= isActive('tags') ? 'page' : false %>">
-            <i data-lucide="tags" class="w-5 h-5"></i>
-            <span>Etiquetas</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/templates"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('templates') %>"
-             aria-current="<%= isActive('templates') ? 'page' : false %>">
-            <i data-lucide="file-text" class="w-5 h-5"></i>
-            <span>Plantillas</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/metrics"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('metrics') %>"
-             aria-current="<%= isActive('metrics') ? 'page' : false %>">
-            <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
-            <span>Métricas</span>
-          </a>
-        </li>
-
-        <li><div class="my-3 h-px bg-white/10"></div></li>
-
-        <li>
-          <a href="/admin-users"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('admin-users') %>"
-             aria-current="<%= isActive('admin-users') ? 'page' : false %>">
-            <i data-lucide="shield" class="w-5 h-5"></i>
-            <span>Usuarios Admin</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/settings"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('settings') %>"
-             aria-current="<%= isActive('settings') ? 'page' : false %>">
-            <i data-lucide="settings" class="w-5 h-5"></i>
-            <span>Configuración</span>
-          </a>
-        </li>
-      </ul>
-    </nav>
-
-    <div class="mt-auto p-4 bg-white/5 border-t border-white/10">
-      <div class="rounded-xl bg-white/10 p-3">
-        <div class="text-[11px] uppercase tracking-wide opacity-80">Sesión activa</div>
-        <div class="font-semibold text-sm mt-1 flex items-center gap-2">
-          <i data-lucide="user" class="w-4 h-4"></i>
-          <%= user || 'Admin' %>
-        </div>
-      </div>
-
-      <form method="POST" action="/auth/logout" class="mt-3">
-        <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
-          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <% } %>
-        <button type="submit"
-                class="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-red-500/20 hover:bg-red-500/30 text-white py-2.5 text-sm font-medium transition">
-          <i data-lucide="log-out" class="w-4 h-4"></i> Cerrar sesión
-        </button>
-      </form>
-    </div>
-  </aside>
-
-  <!-- MAIN -->
-  <main id="main-content" class="flex-1 p-4 md:p-8 w-full md:w-auto">
-
-    <!-- HEADER -->
-    <header class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-      <div class="flex items-start justify-between w-full md:w-auto">
-        <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
-          <i data-lucide="package" class="w-7 h-7 text-primary"></i>
-          Catálogo de Productos
-        </h1>
-
-        <!-- abrir sidebar móvil -->
-        <button id="open-sidebar-btn"
-                class="md:hidden inline-flex items-center justify-center rounded-lg text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 p-2 shadow-soft"
-                aria-label="Abrir menú">
-          <i data-lucide="menu" class="w-6 h-6"></i>
-        </button>
-      </div>
-
-      <div class="flex items-center gap-3">
-        <button
-          class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft transition"
-          onclick="openNewProductModal()">
-          <i data-lucide="plus" class="w-4 h-4"></i>
-          <span>Nuevo Producto</span>
-        </button>
-      </div>
-    </header>
-
-    <!-- FILTROS -->
-    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-soft border border-slate-100/70 dark:border-white/5 mb-6">
-      <div class="px-6 py-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex flex-col">
-          <div class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <i data-lucide="filter" class="w-5 h-5 text-primary"></i>
-            Filtros
-          </div>
-          <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-            Filtra por categoría para encontrar productos más rápido.
+    <!-- Header -->
+    <header class="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 px-6 py-5">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 class="text-3xl font-bold tracking-tight gradient-text flex items-center gap-3">
+            <i data-lucide="package" class="icon-lg text-primary"></i>
+            Catálogo de Productos
+          </h1>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Gestiona tu inventario de productos y servicios
           </p>
         </div>
 
-        <div class="flex items-center gap-3">
-          <select id="categoryFilter"
-                  onchange="filterByCategory()"
-                  class="rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-w-[200px]">
-            <option value="">Todas las categorías</option>
-            <% if (categories && categories.length > 0) { %>
-              <% categories.forEach(cat => { %>
-                <option value="<%= cat %>"><%= cat %></option>
-              <% }) %>
-            <% } %>
-          </select>
+        <div class="flex flex-wrap items-center gap-3">
+          <button
+            class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft transition"
+            onclick="openNewProductModal()">
+            <i data-lucide="plus-circle" class="icon"></i>
+            <span>Nuevo Producto</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Buscador y filtros -->
+    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/50 dark:border-white/5 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-white/5 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50">
+        <h2 class="text-lg font-bold flex items-center gap-2.5 text-slate-800 dark:text-white">
+          <div class="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+            <i data-lucide="search" class="icon text-indigo-600 dark:text-indigo-400"></i>
+          </div>
+          Buscar Productos
+        </h2>
+      </div>
+
+      <div class="p-6">
+        <div class="flex flex-col sm:flex-row gap-4">
+          <div class="flex-1">
+            <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">
+              Buscar por nombre, categoría o descripción
+            </label>
+            <input
+              id="searchInput"
+              type="text"
+              class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 transition"
+              placeholder="Ej: Impresora HP, Tóner Negro"
+              oninput="filterProducts()"
+            />
+          </div>
+
+          <div class="flex-shrink-0 sm:w-64">
+            <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">
+              Filtrar por categoría
+            </label>
+            <select
+              id="categoryFilter"
+              onchange="filterProducts()"
+              class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500 transition">
+              <option value="">Todas las categorías</option>
+              <% if (categories && categories.length > 0) { %>
+                <% categories.forEach(cat => { %>
+                  <option value="<%= cat %>"><%= cat %></option>
+                <% }) %>
+              <% } %>
+            </select>
+          </div>
+
+          <div class="flex-shrink-0 sm:w-48">
+            <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">
+              Estado
+            </label>
+            <select
+              id="statusFilter"
+              onchange="filterProducts()"
+              class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500 transition">
+              <option value="">Todos</option>
+              <option value="true">Activos</option>
+              <option value="false">Inactivos</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="mt-4 text-sm text-slate-500 dark:text-slate-400">
+          Mostrando: <span id="countVisible" class="font-semibold text-slate-700 dark:text-slate-200"><%= (products||[]).length %></span> / <%= (products||[]).length %> productos
         </div>
       </div>
     </section>
 
-    <!-- LISTA DE PRODUCTOS -->
-    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-soft border border-slate-100/70 dark:border-white/5">
-      <div class="px-6 py-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3" id="productsList">
+    <!-- Lista de Productos -->
+    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/50 dark:border-white/5 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-white/5 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50">
+        <h2 class="text-lg font-bold flex items-center gap-2.5 text-slate-800 dark:text-white">
+          <div class="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+            <i data-lucide="list" class="icon text-blue-600 dark:text-blue-400"></i>
+          </div>
+          Lista de Productos
+        </h2>
+      </div>
+
+      <div class="p-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3" id="productsList">
         <% if (products && products.length > 0) { %>
           <% products.forEach(product => { %>
             <div
-              class="group relative rounded-xl border shadow-soft p-5 bg-white dark:bg-slate-900
+              class="product-card group relative rounded-xl border shadow-card p-5 bg-white dark:bg-slate-900
                      transition hover:shadow-lg hover:border-indigo-400/60 hover:bg-slate-50/60 dark:hover:bg-white/5
                      border-slate-200/70 dark:border-slate-700/70"
               data-category="<%= product.category %>"
+              data-status="<%= product.isActive %>"
+              data-search-text="<%- [
+                product.name || '',
+                product.category || '',
+                product.description || '',
+                ...(product.keywords||[]).map(k=>k.keyword).join(' ')
+              ].join(' ').toLowerCase() %>"
             >
               <!-- Imagen / Placeholder -->
               <div class="w-full h-36 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4 shadow-inner">
@@ -328,7 +223,7 @@
 
               <!-- Nombre + estado -->
               <div class="flex flex-wrap items-center gap-2 mb-2">
-                <div class="text-base font-semibold text-slate-900 dark:text-white">
+                <div class="text-base font-semibold text-slate-900 dark:text-white flex-1">
                   <%= product.name %>
                 </div>
 
@@ -349,9 +244,11 @@
 
               <!-- Descripción -->
               <% if (product.description) { %>
-                <p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-3">
-                  <%= product.description.substring(0,120) %><%= product.description.length > 120 ? '…' : '' %>
+                <p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed mb-3 line-clamp-3">
+                  <%= product.description %>
                 </p>
+              <% } else { %>
+                <p class="text-sm text-slate-400 dark:text-slate-500 italic mb-3">Sin descripción</p>
               <% } %>
 
               <!-- Precio -->
@@ -362,15 +259,15 @@
               <% } %>
 
               <!-- Keywords -->
-              <div class="flex flex-wrap gap-2 mb-4">
+              <div class="flex flex-wrap gap-1.5 mb-4 min-h-[28px]">
                 <% if (product.keywords && product.keywords.length > 0) { %>
                   <% product.keywords.slice(0,3).forEach(kw => { %>
-                    <span class="inline-flex items-center rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-2 py-1 text-[11px] font-medium">
+                    <span class="inline-flex items-center rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-2 py-0.5 text-[11px] font-semibold leading-none">
                       <%= kw.keyword %>
                     </span>
                   <% }) %>
                   <% if (product.keywords.length > 3) { %>
-                    <span class="inline-flex items-center rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-2 py-1 text-[11px] font-medium">
+                    <span class="inline-flex items-center rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-2 py-0.5 text-[11px] font-semibold leading-none">
                       +<%= product.keywords.length - 3 %>
                     </span>
                   <% } %>
@@ -382,539 +279,447 @@
               <!-- Acciones -->
               <div class="flex flex-wrap gap-2">
                 <button
-                  class="inline-flex items-center gap-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-xs font-semibold shadow-soft transition"
+                  class="inline-flex items-center gap-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
                   onclick="editProduct('<%= product.id %>')">
-                  <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
-                  Editar
+                  <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                  <span>Editar</span>
                 </button>
 
                 <button
-                  class="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 text-xs font-semibold shadow-soft transition"
+                  class="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
                   onclick="manageKeywords('<%= product.id %>')">
                   <i data-lucide="key" class="w-3.5 h-3.5"></i>
-                  Keywords
+                  <span>Keywords</span>
                 </button>
 
                 <button
-                  class="inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-2 text-xs font-semibold shadow-soft transition"
+                  class="inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
                   onclick="askDeleteProduct('<%= product.id %>')">
                   <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                  Eliminar
+                  <span>Eliminar</span>
                 </button>
               </div>
             </div>
           <% }) %>
         <% } else { %>
-          <div class="text-center text-slate-400 dark:text-slate-500 col-span-full py-16 text-sm">
-            No hay productos configurados. Crea uno nuevo para comenzar.
+          <div class="col-span-full py-16 text-center">
+            <div class="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
+              <i data-lucide="inbox" class="icon-lg text-slate-400"></i>
+            </div>
+            <p class="text-sm text-slate-500 dark:text-slate-400 font-medium">No hay productos configurados</p>
+            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Crea uno nuevo para comenzar</p>
           </div>
         <% } %>
       </div>
     </section>
 
   </main>
-</div>
 
-<!-- ============ MODAL PRODUCTO ============ -->
-<div
-  id="productModal"
-  class="modal-hidden fixed inset-0 z-[1000] bg-black/40 backdrop-blur-sm p-4 md:p-8 flex items-center justify-center"
-  role="dialog"
-  aria-modal="true"
-  aria-labelledby="productModalTitle"
-  hidden
->
-  <div class="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200/70 dark:border-white/10 overflow-hidden">
-    <!-- header -->
-    <div class="px-5 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-start justify-between gap-4">
-      <div class="flex flex-col">
-        <h2 id="productModalTitle" class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <i data-lucide="package-plus" class="w-5 h-5 text-indigo-600 dark:text-indigo-400"></i>
-          <span>Nuevo Producto</span>
+  <!-- Modal Crear/Editar Producto -->
+  <div id="product-modal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-xl w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden max-h-[90vh] overflow-y-auto">
+      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="package" class="icon text-primary"></i>
+          <span id="product-modal-title">Nuevo Producto</span>
         </h2>
-        <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-          Registra o actualiza información del producto.
-        </p>
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="closeProductModal()">
+          <i data-lucide="x" class="icon"></i>
+        </button>
       </div>
 
-      <button class="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition"
-              onclick="closeProductModal()" aria-label="Cerrar">
-        <i data-lucide="x" class="w-5 h-5"></i>
-      </button>
-    </div>
+      <div class="p-6">
+        <input type="hidden" id="productId" />
 
-    <!-- body -->
-    <div class="px-5 py-5 max-h-[70vh] overflow-y-auto">
-      <form id="productForm" class="space-y-5">
-        <input type="hidden" id="productId"/>
+        <div class="grid gap-4 md:grid-cols-2">
+          <div class="md:col-span-2">
+            <label class="block text-sm font-semibold mb-2">Nombre *</label>
+            <input id="productName" type="text" required class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+          </div>
 
-        <div class="flex flex-col">
-          <label class="text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Nombre *</label>
-          <input type="text" id="productName" required
-                 class="rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800
-                        px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none
-                        focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"/>
+          <div>
+            <label class="block text-sm font-semibold mb-2">Categoría *</label>
+            <input id="productCategory" type="text" required placeholder="ej: Impresora, Tóner" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold mb-2">Precio (S/)</label>
+            <input id="productPrice" type="number" step="0.01" min="0" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+          </div>
+
+          <div class="md:col-span-2">
+            <label class="block text-sm font-semibold mb-2">Descripción</label>
+            <textarea id="productDescription" rows="3" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 min-h-[80px]"></textarea>
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold mb-2">URL de imagen</label>
+            <input id="productImageUrl" type="text" placeholder="https://..." class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold mb-2">Estado</label>
+            <select id="productActive" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+              <option value="true">Activo</option>
+              <option value="false">Inactivo</option>
+            </select>
+          </div>
         </div>
 
-        <div class="flex flex-col">
-          <label class="text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Categoría *</label>
-          <input type="text" id="productCategory" required placeholder="ej: Impresora, Tóner, Servicio"
-                 class="rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800
-                        px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none
-                        focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"/>
+        <div class="mt-6 flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <button
+            type="button"
+            class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition"
+            onclick="closeProductModal()">
+            Cancelar
+          </button>
+
+          <button
+            id="product-save-btn"
+            class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition"
+            onclick="submitProductForm()">
+            Guardar
+          </button>
         </div>
-
-        <div class="flex flex-col">
-          <label class="text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Descripción</label>
-          <textarea id="productDescription" rows="3"
-                    class="rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800
-                           px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none
-                           focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"></textarea>
-        </div>
-
-        <div class="flex flex-col">
-          <label class="text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Precio (S/)</label>
-          <input type="number" id="productPrice" step="0.01" min="0"
-                 class="rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800
-                        px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none
-                        focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"/>
-        </div>
-
-        <div class="flex flex-col">
-          <label class="text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">URL de imagen</label>
-          <input type="text" id="productImageUrl" placeholder="https://..."
-                 class="rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800
-                        px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none
-                        focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"/>
-        </div>
-
-        <div class="flex flex-col">
-          <label class="text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Estado</label>
-          <select id="productActive"
-                  class="rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800
-                         px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none
-                         focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-            <option value="true">Activo</option>
-            <option value="false">Inactivo</option>
-          </select>
-        </div>
-      </form>
-    </div>
-
-    <!-- footer -->
-    <div class="px-5 py-4 border-t border-slate-200/70 dark:border-white/10 flex items-center justify-end gap-3">
-      <button type="button"
-              class="inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-3 py-2 text-sm font-medium shadow transition"
-              onclick="closeProductModal()">
-        Cancelar
-      </button>
-
-      <button type="button"
-              class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 text-sm font-semibold shadow-soft transition"
-              onclick="submitProductForm()">
-        <i data-lucide="save" class="w-4 h-4"></i>
-        Guardar
-      </button>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- ============ MODAL KEYWORDS ============ -->
-<div
-  id="keywordModal"
-  class="modal-hidden fixed inset-0 z-[1000] bg-black/40 backdrop-blur-sm p-4 md:p-8 flex items-center justify-center"
-  role="dialog"
-  aria-modal="true"
-  aria-labelledby="kwTitle"
-  hidden
->
-  <div class="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200/70 dark:border-white/10 overflow-hidden">
-    <!-- header -->
-    <div class="px-5 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-start justify-between gap-4">
-      <div class="flex flex-col">
-        <h2 id="kwTitle" class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <i data-lucide="key" class="w-5 h-5 text-indigo-600 dark:text-indigo-400"></i>
+  <!-- Modal Keywords -->
+  <div id="keyword-modal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="key" class="icon text-primary"></i>
           <span>Gestionar Keywords</span>
         </h2>
-        <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-          Añade o elimina palabras clave para mejorar las coincidencias.
-        </p>
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="closeKeywordModal()">
+          <i data-lucide="x" class="icon"></i>
+        </button>
       </div>
 
-      <button class="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition"
-              onclick="closeKeywordModal()" aria-label="Cerrar">
-        <i data-lucide="x" class="w-5 h-5"></i>
-      </button>
-    </div>
-
-    <!-- body -->
-    <div class="px-5 py-5 max-h-[70vh] overflow-y-auto">
-      <div id="keywordsList" class="mb-5 text-sm text-slate-700 dark:text-slate-200">
-        <!-- dinámico -->
-      </div>
-
-      <form id="keywordForm" class="space-y-5">
-        <input type="hidden" id="keywordProductId"/>
-
-        <div class="flex flex-col">
-          <label class="text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
-            Nueva palabra clave
-          </label>
-          <input type="text" id="keywordText" required placeholder="ej: hp laserjet, toner negro"
-                 class="rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800
-                        px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none
-                        focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"/>
+      <div class="p-6">
+        <input type="hidden" id="keywordProductId" />
+        
+        <!-- Lista actual de keywords -->
+        <div id="keywordsList" class="mb-5 text-sm text-slate-700 dark:text-slate-200">
+          <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold mb-2">
+            Keywords actuales:
+          </div>
+          <div id="keywordsChips" class="flex flex-wrap gap-2">
+            <!-- dinámico -->
+          </div>
         </div>
-      </form>
-    </div>
 
-    <!-- footer -->
-    <div class="px-5 py-4 border-t border-slate-200/70 dark:border-white/10 flex items-center justify-end gap-3">
-      <button
-        class="inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-3 py-2 text-sm font-medium shadow transition"
-        onclick="closeKeywordModal()">
-        Cerrar
-      </button>
+        <!-- Agregar nueva -->
+        <div class="grid gap-4">
+          <div>
+            <label class="block text-sm font-semibold mb-2">Nueva palabra clave</label>
+            <input id="keywordText" type="text" placeholder="ej: hp laserjet, toner negro" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
+          </div>
+        </div>
 
-      <button
-        class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 text-sm font-semibold shadow-soft transition"
-        onclick="submitKeywordForm()">
-        <i data-lucide="plus" class="w-4 h-4"></i>
-        Agregar
-      </button>
+        <div class="mt-6 flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <button class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition" onclick="closeKeywordModal()">Cerrar</button>
+          <button class="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition" onclick="submitKeywordForm()">Agregar</button>
+        </div>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- ============ MODAL CONFIRM ============ -->
-<div
-  id="confirmModal"
-  class="modal-hidden fixed inset-0 z-[1000] bg-black/40 backdrop-blur-sm p-4 md:p-8 flex items-center justify-center"
-  role="dialog"
-  aria-modal="true"
-  hidden
->
-  <div class="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200/70 dark:border-white/10 overflow-hidden">
-    <!-- header -->
-    <div class="px-5 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-start justify-between gap-4">
-      <div class="flex flex-col">
-        <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <i data-lucide="alert-triangle" class="w-5 h-5 text-rose-600 dark:text-rose-400"></i>
+  <!-- Modal Confirmación -->
+  <div id="confirm-modal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="alert-triangle" class="icon text-rose-600"></i>
           <span>¿Confirmar?</span>
         </h2>
-        <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="closeConfirmModal()">
+          <i data-lucide="x" class="icon"></i>
+        </button>
+      </div>
+
+      <div class="p-6">
+        <div id="confirmText" class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
           Esta acción no se puede deshacer.
-        </p>
+        </div>
+
+        <div class="mt-6 flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <button class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition" onclick="closeConfirmModal()">Cancelar</button>
+          <button id="confirmOkBtn" class="rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition">Aceptar</button>
+        </div>
       </div>
-
-      <button class="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 transition"
-              onclick="closeConfirmModal()" aria-label="Cerrar">
-        <i data-lucide="x" class="w-5 h-5"></i>
-      </button>
-    </div>
-
-    <!-- body -->
-    <div class="px-5 py-5 max-h-[70vh] overflow-y-auto">
-      <div id="confirmText"
-           class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-        Esta acción no se puede deshacer.
-      </div>
-    </div>
-
-    <!-- footer -->
-    <div class="px-5 py-4 border-t border-slate-200/70 dark:border-white/10 flex items-center justify-end gap-3">
-      <button
-        class="inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-3 py-2 text-sm font-medium shadow transition"
-        onclick="closeConfirmModal()">
-        Cancelar
-      </button>
-
-      <button id="confirmOkBtn"
-        class="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-2 text-sm font-semibold shadow-soft transition">
-        <i data-lucide="check-circle" class="w-4 h-4"></i>
-        Aceptar
-      </button>
     </div>
   </div>
-</div>
 
-<script>
-  // ===== ICONOS =====
-  if (window.lucide) { lucide.createIcons(); }
-
-  // ===== SIDEBAR MÓVIL =====
-  (function(){
-    const sidebar   = document.getElementById('sidebar');
-    const overlay   = document.getElementById('mobile-sidebar-overlay');
-    const openBtn   = document.getElementById('open-sidebar-btn');
-    const closeBtn  = document.getElementById('close-sidebar-btn');
-
-    function openSidebar(){
-      sidebar.classList.remove('-translate-x-full');
-      overlay.classList.remove('opacity-0','pointer-events-none');
-    }
-    function closeSidebar(){
-      sidebar.classList.add('-translate-x-full');
-      overlay.classList.add('opacity-0','pointer-events-none');
-    }
-
-    if (openBtn)  openBtn.addEventListener('click', openSidebar);
-    if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
-    if (overlay)  overlay.addEventListener('click', closeSidebar);
-  })();
-
-  // ===== ANIMACIÓN DE LAS CARDS =====
-  (function(){
-    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!prefersReduced && window.motion) {
-      const cards = document.querySelectorAll('#productsList > div.group');
-      cards.forEach((el,i)=>{
-        motion.animate(
-          el,
-          { opacity:[0,1], transform:['translateY(8px)','translateY(0)'] },
-          { duration:.4, delay:i*0.03, easing:'ease-out' }
-        );
-        el.addEventListener('pointerenter', () =>
-          motion.animate(el, { transform: ['translateY(0)','translateY(-2px)'] }, { duration:.18, easing:'ease-out' })
-        );
-        el.addEventListener('pointerleave', () =>
-          motion.animate(el, { transform: ['translateY(-2px)','translateY(0)'] }, { duration:.18, easing:'ease-out' })
-        );
-      });
-    }
-  })();
-
-  // ===== MODAL HELPERS (mismo patrón de working-hours) =====
-  function showModal(id){
-    const m = document.getElementById(id);
-    if(!m) return;
-    m.classList.remove('modal-hidden');
-    m.removeAttribute('hidden');
-  }
-  function hideModal(id){
-    const m = document.getElementById(id);
-    if(!m) return;
-    m.classList.add('modal-hidden');
-    m.setAttribute('hidden','');
-  }
-
-  // cerrar modal clickeando fuera del panel
-  window.addEventListener('click',(e)=>{
-    ['productModal','keywordModal','confirmModal'].forEach(id=>{
-      const overlay = document.getElementById(id);
-      if(!overlay) return;
-      if(overlay.classList.contains('modal-hidden')) return;
-      if(e.target === overlay){
-        hideModal(id);
-      }
+  <script>
+    // Iconos
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
     });
-  });
 
-  // cerrar con ESC
-  window.addEventListener('keydown',(e)=>{
-    if(e.key === 'Escape'){
-      hideModal('productModal');
-      hideModal('keywordModal');
-      hideModal('confirmModal');
-    }
-  });
+    // === Refs
+    const searchInputEl  = document.getElementById('searchInput');
+    const categoryFilterEl = document.getElementById('categoryFilter');
+    const statusFilterEl = document.getElementById('statusFilter');
+    const countVisibleEl = document.getElementById('countVisible');
 
-  // ===== FILTRO CATEGORÍA =====
-  function filterByCategory() {
-    const category = document.getElementById('categoryFilter').value;
-    const cards = document.querySelectorAll('#productsList .group');
+    // === Filtrado
+    function filterProducts() {
+      const searchQuery = (searchInputEl.value || '').trim().toLowerCase();
+      const category = categoryFilterEl.value;
+      const status = statusFilterEl.value;
+      
+      const cards = document.querySelectorAll('.product-card');
+      let visible = 0;
 
-    cards.forEach(card => {
-      if (!category || card.getAttribute('data-category') === category) {
-        card.classList.remove('hidden');
-      } else {
-        card.classList.add('hidden');
-      }
-    });
-  }
+      cards.forEach(card => {
+        const searchText = card.getAttribute('data-search-text') || '';
+        const cardCategory = card.getAttribute('data-category');
+        const cardStatus = card.getAttribute('data-status');
 
-  // ===== PRODUCTO =====
-  function openNewProductModal() {
-    document.getElementById('productId').value = '';
-    document.getElementById('productName').value = '';
-    document.getElementById('productCategory').value = '';
-    document.getElementById('productDescription').value = '';
-    document.getElementById('productPrice').value = '';
-    document.getElementById('productImageUrl').value = '';
-    document.getElementById('productActive').value = 'true';
+        const matchSearch = !searchQuery || searchText.includes(searchQuery);
+        const matchCategory = !category || cardCategory === category;
+        const matchStatus = !status || cardStatus === status;
 
-    const titleNode = document.getElementById('productModalTitle');
-    titleNode.querySelector('span:last-child').textContent = 'Nuevo Producto';
-
-    showModal('productModal');
-  }
-
-  function closeProductModal() {
-    hideModal('productModal');
-  }
-
-  async function editProduct(id) {
-    try {
-      const res = await fetch(`/products/api/${id}`);
-      const product = await res.json();
-
-      document.getElementById('productId').value = product.id || '';
-      document.getElementById('productName').value = product.name || '';
-      document.getElementById('productCategory').value = product.category || '';
-      document.getElementById('productDescription').value = product.description || '';
-      document.getElementById('productPrice').value = product.price != null ? product.price : '';
-      document.getElementById('productImageUrl').value = product.imageUrl || '';
-      document.getElementById('productActive').value = product.isActive ? 'true' : 'false';
-
-      const titleNode = document.getElementById('productModalTitle');
-      titleNode.querySelector('span:last-child').textContent = 'Editar Producto';
-
-      showModal('productModal');
-    } catch (err) {
-      alert('Error cargando producto');
-      console.error(err);
-    }
-  }
-
-  async function submitProductForm() {
-    const id = document.getElementById('productId').value;
-
-    const data = {
-      name: document.getElementById('productName').value,
-      category: document.getElementById('productCategory').value,
-      description: document.getElementById('productDescription').value,
-      price: document.getElementById('productPrice').value
-        ? parseFloat(document.getElementById('productPrice').value)
-        : undefined,
-      imageUrl: document.getElementById('productImageUrl').value,
-      isActive: document.getElementById('productActive').value === 'true'
-    };
-
-    try {
-      const url = id ? `/products/api/${id}` : '/products/api';
-      const method = id ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        const match = matchSearch && matchCategory && matchStatus;
+        
+        card.classList.toggle('hidden-card', !match);
+        if (match) visible++;
       });
 
-      if (res.ok) {
-        location.reload();
-      } else {
-        alert('Error al guardar producto');
-      }
-    } catch (err) {
-      alert('Error: ' + err.message);
+      countVisibleEl.textContent = String(visible);
     }
-  }
 
-  // ===== ELIMINAR PRODUCTO =====
-  function askDeleteProduct(id) {
-    document.getElementById('confirmText').textContent =
-      '¿Eliminar este producto? Esta acción no se puede deshacer.';
+    // === Modales (helpers comunes)
+    function openFlex(id){ const el = document.getElementById(id); el.classList.remove('hidden'); el.classList.add('flex'); }
+    function closeFlex(id){ const el = document.getElementById(id); el.classList.remove('flex'); el.classList.add('hidden'); }
 
-    const okBtn = document.getElementById('confirmOkBtn');
-    okBtn.onclick = async () => {
+    // === Producto CRUD
+    const productModal = 'product-modal';
+    const productTitleEl = document.getElementById('product-modal-title');
+    const productIdEl = document.getElementById('productId');
+    const productNameEl = document.getElementById('productName');
+    const productCategoryEl = document.getElementById('productCategory');
+    const productDescriptionEl = document.getElementById('productDescription');
+    const productPriceEl = document.getElementById('productPrice');
+    const productImageUrlEl = document.getElementById('productImageUrl');
+    const productActiveEl = document.getElementById('productActive');
+
+    function openNewProductModal() {
+      productTitleEl.textContent = 'Nuevo Producto';
+      productIdEl.value = '';
+      productNameEl.value = '';
+      productCategoryEl.value = '';
+      productDescriptionEl.value = '';
+      productPriceEl.value = '';
+      productImageUrlEl.value = '';
+      productActiveEl.value = 'true';
+      openFlex(productModal);
+    }
+
+    async function editProduct(id) {
       try {
-        const res = await fetch(`/products/api/${id}`, { method: 'DELETE' });
-        if (res.ok) {
-          location.reload();
-        } else {
-          alert('No se pudo eliminar el producto');
-        }
+        const res = await fetch(`/products/api/${id}`);
+        const product = await res.json();
+
+        productTitleEl.textContent = 'Editar Producto';
+        productIdEl.value = product.id || '';
+        productNameEl.value = product.name || '';
+        productCategoryEl.value = product.category || '';
+        productDescriptionEl.value = product.description || '';
+        productPriceEl.value = product.price != null ? product.price : '';
+        productImageUrlEl.value = product.imageUrl || '';
+        productActiveEl.value = product.isActive ? 'true' : 'false';
+
+        openFlex(productModal);
       } catch (err) {
-        alert('Error: ' + err.message);
+        alert('❌ Error al cargar el producto');
+        console.error(err);
       }
-    };
+    }
 
-    showModal('confirmModal');
-  }
+    function closeProductModal() {
+      closeFlex(productModal);
+    }
 
-  function closeConfirmModal() {
-    hideModal('confirmModal');
-  }
+    async function submitProductForm() {
+      const id = productIdEl.value;
+      const data = {
+        name: productNameEl.value.trim(),
+        category: productCategoryEl.value.trim(),
+        description: productDescriptionEl.value.trim(),
+        price: productPriceEl.value ? parseFloat(productPriceEl.value) : undefined,
+        imageUrl: productImageUrlEl.value.trim(),
+        isActive: productActiveEl.value === 'true'
+      };
 
-  // ===== KEYWORDS =====
-  async function manageKeywords(productId) {
-    document.getElementById('keywordProductId').value = productId;
-    document.getElementById('keywordText').value = '';
+      if (!data.name || !data.category) {
+        alert('Nombre y categoría son obligatorios');
+        return;
+      }
 
-    const list = document.getElementById('keywordsList');
-    list.innerHTML = '<span class="text-slate-400 dark:text-slate-500 text-sm">Cargando…</span>';
+      try {
+        const url = id ? `/products/api/${id}` : '/products/api';
+        const method = id ? 'PUT' : 'POST';
 
-    try {
-      const res = await fetch(`/products/api/${productId}`);
-      const product = await res.json();
-
-      if (product.keywords && product.keywords.length > 0) {
-        list.innerHTML = '<div class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 font-semibold mb-2">Keywords actuales:</div>';
-        product.keywords.forEach(kw => {
-          const chip = document.createElement('div');
-          chip.className = 'inline-flex items-center rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-2 py-1 text-[11px] font-medium mr-2 mb-2';
-          chip.innerHTML = `
-            ${kw.keyword}
-            <button class="ml-2 text-rose-600 dark:text-rose-400 font-bold" onclick="askDeleteKeyword('${kw.id}')">✕</button>
-          `;
-          list.appendChild(chip);
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
         });
-      } else {
-        list.innerHTML = '<em class="text-[12px] text-slate-400">Sin keywords</em>';
-      }
-    } catch (err) {
-      list.innerHTML = '<span class="text-rose-500 text-sm">Error cargando keywords</span>';
-      console.error(err);
-    }
 
-    showModal('keywordModal');
-  }
-
-  function closeKeywordModal() {
-    hideModal('keywordModal');
-  }
-
-  async function submitKeywordForm() {
-    const productId = document.getElementById('keywordProductId').value;
-    const keyword = document.getElementById('keywordText').value;
-
-    try {
-      const res = await fetch(`/products/api/${productId}/keywords`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyword })
-      });
-
-      if (res.ok) {
-        location.reload();
-      } else {
-        alert('No se pudo agregar la keyword');
-      }
-    } catch (err) {
-      alert('Error: ' + err.message);
-    }
-  }
-
-  function askDeleteKeyword(id) {
-    document.getElementById('confirmText').textContent =
-      '¿Eliminar esta keyword?';
-
-    const okBtn = document.getElementById('confirmOkBtn');
-    okBtn.onclick = async () => {
-      try {
-        const res = await fetch(`/products/api/keywords/${id}`, { method: 'DELETE' });
         if (res.ok) {
+          alert('✅ Producto guardado');
           location.reload();
         } else {
-          alert('No se pudo eliminar la keyword');
+          alert('❌ No se pudo guardar el producto');
         }
       } catch (err) {
-        alert('Error: ' + err.message);
+        alert('❌ Error: ' + err.message);
       }
-    };
+    }
 
-    showModal('confirmModal');
-  }
-</script>
+    // === Eliminar Producto
+    function askDeleteProduct(id) {
+      document.getElementById('confirmText').textContent =
+        '¿Eliminar este producto? Esta acción no se puede deshacer.';
+
+      const okBtn = document.getElementById('confirmOkBtn');
+      okBtn.onclick = async () => {
+        try {
+          const res = await fetch(`/products/api/${id}`, { method: 'DELETE' });
+          if (res.ok) {
+            alert('✅ Producto eliminado');
+            location.reload();
+          } else {
+            alert('❌ No se pudo eliminar el producto');
+          }
+        } catch (err) {
+          alert('❌ Error: ' + err.message);
+        }
+      };
+
+      openFlex('confirm-modal');
+    }
+
+    function closeConfirmModal() {
+      closeFlex('confirm-modal');
+    }
+
+    // === Keywords
+    const keywordModal = 'keyword-modal';
+    const keywordProductIdEl = document.getElementById('keywordProductId');
+    const keywordTextEl = document.getElementById('keywordText');
+    const keywordsChipsEl = document.getElementById('keywordsChips');
+
+    async function manageKeywords(productId) {
+      keywordProductIdEl.value = productId;
+      keywordTextEl.value = '';
+      keywordsChipsEl.innerHTML = '<span class="text-slate-400 text-xs">Cargando…</span>';
+
+      try {
+        const res = await fetch(`/products/api/${productId}`);
+        const product = await res.json();
+
+        if (product.keywords && product.keywords.length > 0) {
+          keywordsChipsEl.innerHTML = '';
+          product.keywords.forEach(kw => {
+            const chip = document.createElement('span');
+            chip.className = 'inline-flex items-center gap-1 rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-2 py-0.5 text-[11px] font-semibold leading-none';
+            chip.innerHTML = `
+              ${kw.keyword}
+              <button class="ml-1 hover:text-rose-600" title="Eliminar" onclick="askDeleteKeyword('${kw.id}')">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+              </button>
+            `;
+            keywordsChipsEl.appendChild(chip);
+          });
+          if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
+        } else {
+          keywordsChipsEl.innerHTML = '<span class="text-xs text-slate-400 italic">Sin keywords</span>';
+        }
+      } catch (err) {
+        keywordsChipsEl.innerHTML = '<span class="text-rose-500 text-xs">Error cargando keywords</span>';
+        console.error(err);
+      }
+
+      openFlex(keywordModal);
+    }
+
+    function closeKeywordModal() {
+      closeFlex(keywordModal);
+    }
+
+    async function submitKeywordForm() {
+      const productId = keywordProductIdEl.value;
+      const keyword = keywordTextEl.value.trim();
+
+      if (!keyword) {
+        alert('Ingresa una palabra clave');
+        return;
+      }
+
+      try {
+        const res = await fetch(`/products/api/${productId}/keywords`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword })
+        });
+
+        if (res.ok) {
+          alert('✅ Keyword agregada');
+          location.reload();
+        } else {
+          alert('❌ No se pudo agregar la keyword');
+        }
+      } catch (err) {
+        alert('❌ Error: ' + err.message);
+      }
+    }
+
+    function askDeleteKeyword(id) {
+      document.getElementById('confirmText').textContent = '¿Eliminar esta keyword?';
+
+      const okBtn = document.getElementById('confirmOkBtn');
+      okBtn.onclick = async () => {
+        try {
+          const res = await fetch(`/products/api/keywords/${id}`, { method: 'DELETE' });
+          if (res.ok) {
+            alert('✅ Keyword eliminada');
+            location.reload();
+          } else {
+            alert('❌ No se pudo eliminar la keyword');
+          }
+        } catch (err) {
+          alert('❌ Error: ' + err.message);
+        }
+      };
+
+      openFlex('confirm-modal');
+    }
+
+    // Cerrar modales al click fuera
+    window.addEventListener('click', (e) => {
+      ['product-modal', 'keyword-modal', 'confirm-modal'].forEach(mid => {
+        const m = document.getElementById(mid);
+        if (e.target === m) closeFlex(mid);
+      });
+    });
+
+    // Exponer funciones
+    window.filterProducts = filterProducts;
+    window.openNewProductModal = openNewProductModal;
+    window.closeProductModal = closeProductModal;
+    window.editProduct = editProduct;
+    window.submitProductForm = submitProductForm;
+    window.askDeleteProduct = askDeleteProduct;
+    window.closeConfirmModal = closeConfirmModal;
+    window.manageKeywords = manageKeywords;
+    window.closeKeywordModal = closeKeywordModal;
+    window.submitKeywordForm = submitKeywordForm;
+    window.askDeleteKeyword = askDeleteKeyword;
+  </script>
 </body>
 </html>

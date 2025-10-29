@@ -3,33 +3,38 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title><%= title %> - WhatsApp Bot Admin</title>
+  <title><%= title || 'Calendario' %> - WhatsApp Bot Admin</title>
 
-  <!-- Fuente + Tailwind -->
+  <!-- Fuente -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
+  <!-- Tailwind (misma config del ejemplo) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] },
+          fontFamily: { sans: ['Inter','ui-sans-serif','system-ui'] },
           colors: {
-            primary: { DEFAULT: '#1e3a8a', 600: '#1e3a8a', 700:'#1e40af' },
+            primary:   { DEFAULT:'#667eea', 600:'#667eea', 700:'#5a67d8' },
+            secondary: { DEFAULT:'#764ba2', 600:'#764ba2', 700:'#6b3fa0' },
           },
           boxShadow: {
-            soft: '0 10px 25px -10px rgba(0,0,0,.15)',
+            soft:'0 4px 6px -1px rgba(0,0,0,.08), 0 2px 4px -1px rgba(0,0,0,.04)',
+            card:'0 10px 30px -5px rgba(0,0,0,.10)'
           }
         }
       },
-      darkMode: 'media'
+      darkMode:'media'
     }
   </script>
 
-  <!-- Motion / Icons -->
-  <script src="https://unpkg.com/@motionone/dom/dist/motion.min.js"></script>
+  <!-- Utilidades externas del dashboard -->
+  <link rel="stylesheet" href="/css/ui.css">
+
+  <!-- Iconos -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
@@ -42,412 +47,225 @@
       }
     }
 
-    .sidebar-link-active {
-      background-color: rgba(255,255,255,.12);
-      color:#fff !important;
-      font-weight:600;
+    /* Gradient text (igual al ejemplo) */
+    .gradient-text {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
 
-    /* Overlay modal */
-    .modal {
-      display: none;
-      position: fixed;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 1000;
-      background: rgba(0,0,0,0.6);
-      backdrop-filter: blur(4px);
-      overflow-y: auto;
-      padding: 1rem;
-    }
-    .modal.show {
-      display: flex;
-      align-items: flex-start;
-      justify-content: center;
-    }
+    /* Icon sizes (igual al ejemplo) */
+    .icon { width: 1.25rem; height: 1.25rem; }
+    .icon-lg { width: 1.75rem; height: 1.75rem; }
   </style>
 </head>
-<body class="h-full bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100">
-  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-3 focus:py-2 focus:rounded-lg shadow">
+
+<body class="h-full bg-gradient-to-br from-slate-50 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 text-slate-800 dark:text-slate-100">
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-4 focus:py-2 focus:rounded-lg shadow-lg">
     Saltar al contenido
   </a>
 
   <%
     const evts = Array.isArray(events) ? events : [];
-    function isActive(p){
-      return (page === p) ? 'sidebar-link-active' : '';
-    }
+    const now  = new Date();
+    const fmt  = new Intl.DateTimeFormat('es-PE', { month:'long', year:'numeric' });
+
+    // leyenda de tipos
+    const TYPE_META = {
+      holiday:       { dot:'bg-rose-500',    chip:'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300', label:'🎉 Feriado' },
+      special_event: { dot:'bg-amber-500',   chip:'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300', label:'⭐ Evento Especial' },
+      closure:       { dot:'bg-slate-500',   chip:'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200',    label:'🔒 Cierre' }
+    };
   %>
 
-  <div class="min-h-screen w-full flex relative">
+  <main id="main-content" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
-    <!-- Overlay móvil -->
-    <div id="mobile-sidebar-overlay"
-         class="fixed inset-0 bg-black/40 z-40 opacity-0 pointer-events-none transition-opacity md:hidden">
+    <!-- Volver al Dashboard + breadcrumb -->
+    <div class="flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <a href="/"
+           class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
+          <i data-lucide="arrow-left" class="icon"></i>
+          <span>Volver al Dashboard</span>
+        </a>
+      </div>
+
+      <nav aria-label="Breadcrumb" class="text-xs text-slate-500 dark:text-slate-400">
+        <ol class="flex items-center gap-2">
+          <li class="inline-flex items-center gap-1">
+            <a href="/" class="hover:underline inline-flex items-center gap-1">
+              <i data-lucide="home" class="w-3.5 h-3.5"></i> Inicio
+            </a>
+          </li>
+          <li class="select-none">/</li>
+          <li class="inline-flex items-center gap-1">
+            <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+            <span class="font-medium">Calendario</span>
+          </li>
+        </ol>
+      </nav>
     </div>
 
-    <!-- Sidebar -->
-    <aside id="sidebar"
-           class="w-[280px] flex flex-col bg-gradient-to-b from-primary to-primary-700 text-white shadow-soft
-                  fixed inset-y-0 left-0 z-50 -translate-x-full transition-transform md:translate-x-0 md:relative md:flex"
-           role="navigation"
-           aria-label="Menú principal">
-
-      <div class="px-5 py-6 border-b border-white/10 bg-white/5 backdrop-blur flex items-center justify-between">
-        <h2 class="text-xl font-semibold flex items-center gap-2">
-          <i data-lucide="bot" class="w-5 h-5"></i> Bot Admin
-        </h2>
-
-        <!-- Botón cerrar sidebar móvil -->
-        <button id="close-sidebar-btn"
-                class="md:hidden inline-flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 p-2"
-                aria-label="Cerrar menú">
-          <i data-lucide="x" class="w-5 h-5"></i>
-        </button>
-      </div>
-
-      <nav class="py-4 flex-1 overflow-y-auto">
-        <ul class="px-2 space-y-1 text-[15px] leading-5">
-          <li>
-            <a href="/"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('dashboard') %>">
-              <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
-              <span>Dashboard</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/contacts"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('contacts') %>">
-              <i data-lucide="users" class="w-5 h-5"></i>
-              <span>Contactos</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/conversations"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('conversations') %>">
-              <i data-lucide="message-circle" class="w-5 h-5"></i>
-              <span>Conversaciones</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/blocked"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('blocked') %>">
-              <i data-lucide="ban" class="w-5 h-5"></i>
-              <span>Bloqueados</span>
-            </a>
-          </li>
-
-          <li><div class="my-3 h-px bg-white/10"></div></li>
-
-          <li>
-            <a href="/calendar"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('calendar') %>">
-              <i data-lucide="calendar" class="w-5 h-5"></i>
-              <span>Calendario</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/working-hours"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('working-hours') %>">
-              <i data-lucide="clock" class="w-5 h-5"></i>
-              <span>Horarios</span>
-            </a>
-          </li>
-
-          <li><div class="my-3 h-px bg-white/10"></div></li>
-
-          <li>
-            <a href="/departments"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('departments') %>">
-              <i data-lucide="building-2" class="w-5 h-5"></i>
-              <span>Departamentos</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/products"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('products') %>">
-              <i data-lucide="package" class="w-5 h-5"></i>
-              <span>Productos</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/auto-responses"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('auto-responses') %>">
-              <i data-lucide="robot" class="w-5 h-5"></i>
-              <span>Auto-respuestas</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/tags"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('tags') %>">
-              <i data-lucide="tags" class="w-5 h-5"></i>
-              <span>Tags</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/templates"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('templates') %>">
-              <i data-lucide="file-text" class="w-5 h-5"></i>
-              <span>Plantillas</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/metrics"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('metrics') %>">
-              <i data-lucide="line-chart" class="w-5 h-5"></i>
-              <span>Métricas</span>
-            </a>
-          </li>
-
-          <li><div class="my-3 h-px bg-white/10"></div></li>
-
-          <li>
-            <a href="/admin-users"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('admin-users') %>">
-              <i data-lucide="shield" class="w-5 h-5"></i>
-              <span>Usuarios Admin</span>
-            </a>
-          </li>
-
-          <li>
-            <a href="/settings"
-               class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('settings') %>">
-              <i data-lucide="settings" class="w-5 h-5"></i>
-              <span>Configuración</span>
-            </a>
-          </li>
-        </ul>
-      </nav>
-
-      <div class="mt-auto p-4 bg-white/5 border-t border-white/10">
-        <div class="rounded-xl bg-white/10 p-3">
-          <div class="text-[11px] uppercase tracking-wide opacity-80">Sesión activa</div>
-          <div class="font-semibold text-sm mt-1 flex items-center gap-2">
-            <i data-lucide="user" class="w-4 h-4"></i>
-            <span><%= user || 'Admin' %></span>
-          </div>
-        </div>
-
-        <form method="POST" action="/auth/logout" class="mt-3">
-          <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
-            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-          <% } %>
-          <button type="submit"
-            class="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-red-500/20 hover:bg-red-500/30 text-white py-2.5 text-sm font-medium transition">
-            <i data-lucide="log-out" class="w-4 h-4"></i> Cerrar sesión
-          </button>
-        </form>
-      </div>
-    </aside>
-
-    <!-- Main Content -->
-    <main id="main-content" class="flex-1 p-4 md:p-8 md:ml-0 ml-0 w-full md:w-auto">
-      <!-- Header -->
-      <header class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div class="flex items-start justify-between w-full md:w-auto">
-          <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
-            <i data-lucide="calendar" class="w-7 h-7 text-primary"></i>
-            <span>Calendario</span>
+    <!-- Header -->
+    <header class="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 px-6 py-5">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 class="text-3xl font-bold tracking-tight gradient-text flex items-center gap-3">
+            <i data-lucide="calendar" class="icon-lg text-primary"></i>
+            Calendario
           </h1>
-
-          <!-- Sidebar móvil -->
-          <button id="open-sidebar-btn"
-                  class="md:hidden inline-flex items-center justify-center rounded-lg text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 p-2 shadow-soft"
-                  aria-label="Abrir menú">
-            <i data-lucide="menu" class="w-6 h-6"></i>
-          </button>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Feriados, eventos especiales y cierres de operación
+          </p>
         </div>
 
-        <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-end w-full md:w-auto">
-          <button
-            class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-sm font-semibold shadow-soft transition"
-            onclick="showModal('addModal')"
-          >
-            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="hidden sm:flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 px-2 py-1.5 text-sm">
+            <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Feriado</span>
+            <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Evento</span>
+            <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-500"></span> Cierre</span>
+          </div>
+
+          <button class="inline-flex items-center gap-2 rounded-xl bg-slate-600 hover:bg-slate-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft"
+                  onclick="goToday()">
+            <i data-lucide="clock" class="icon"></i>
+            <span>Hoy</span>
+          </button>
+
+          <button class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft"
+                  onclick="showModal('addModal')">
+            <i data-lucide="plus-circle" class="icon"></i>
             <span>Agregar Evento</span>
           </button>
         </div>
-      </header>
+      </div>
+    </header>
 
-      <!-- Contenido -->
-      <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-soft border border-slate-100/70 dark:border-white/5">
-        <div class="px-6 py-4 border-b border-slate-100/70 dark:border-white/5 flex items-center justify-between">
-          <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <i data-lucide="star" class="w-5 h-5 text-primary"></i>
-            <span>Feriados y Eventos Especiales</span>
-          </h2>
+    <!-- Calendario -->
+    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/50 dark:border-white/5 overflow-hidden">
+      <!-- Barra mes -->
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-white/5 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <button type="button" class="rounded-lg p-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700"
+                  onclick="prevMonth()" aria-label="Mes anterior">
+            <i data-lucide="chevron-left" class="icon"></i>
+          </button>
+          <button type="button" class="rounded-lg p-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700"
+                  onclick="nextMonth()" aria-label="Mes siguiente">
+            <i data-lucide="chevron-right" class="icon"></i>
+          </button>
         </div>
+        <div class="text-lg font-bold text-slate-800 dark:text-white">
+          <span id="monthLabel"><%= fmt.format(now) %></span>
+        </div>
+        <div class="text-xs text-slate-500 dark:text-slate-400">
+          <span id="yearRange"></span>
+        </div>
+      </div>
 
-        <div class="px-6 py-6">
-          <% if (evts.length > 0) { %>
-            <div class="grid gap-4 lg:grid-cols-2">
-              <% evts.forEach(event => {
+      <!-- Cabecera días -->
+      <div class="grid grid-cols-7 bg-slate-50 dark:bg-slate-800/50 text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <% ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'].forEach(d => { %>
+          <div class="px-3 py-2 text-center"><%= d %></div>
+        <% }) %>
+      </div>
 
-                const t = event.type;
-                const colorBar =
-                  t === 'holiday'        ? 'bg-rose-500'
-                : t === 'special_event' ? 'bg-amber-500'
-                                        : 'bg-slate-500';
+      <!-- Grilla -->
+      <div id="monthGrid" class="grid grid-cols-7 auto-rows-[140px] sm:auto-rows-[160px] lg:auto-rows-[180px]"></div>
+    </section>
 
-                const bgSoft =
-                  t === 'holiday'
-                    ? 'bg-rose-50 dark:bg-rose-900/10'
-                    : t === 'special_event'
-                    ? 'bg-amber-50 dark:bg-amber-900/10'
-                    : 'bg-slate-50 dark:bg-slate-800/30';
-
-                const chipBg =
-                  t === 'holiday'
-                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
-                    : t === 'special_event'
-                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                    : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200';
-
-                const chipText =
-                  t === 'holiday'
-                    ? '🎉 Feriado'
-                    : t === 'special_event'
-                    ? '⭐ Evento Especial'
-                    : '🔒 Cierre';
-
-              %>
-              <div class="flex rounded-xl border-2 border-slate-200 dark:border-white/10 shadow-sm hover:shadow-md hover:border-indigo-400/60 transition <%= bgSoft %>">
-                <!-- Columna color -->
-                <div class="w-1 rounded-l-xl <%= colorBar %>"></div>
-
-                <!-- Contenido -->
-                <div class="flex-1 p-5">
-                  <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                    <div class="min-w-0 flex-1">
-                      <div class="text-slate-900 dark:text-white font-semibold text-base flex flex-col">
-                        <span class="truncate break-words"><%= event.title %></span>
-                        <span class="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-2">
-                          <span class="font-medium">📅</span>
-                          <span class="date-label" data-ymd="<%= event.dateYMD %>"></span>
-                        </span>
-                      </div>
-
-                      <div class="mt-2 flex flex-wrap gap-2 text-[11px] leading-none font-semibold">
-                        <span class="inline-flex items-center rounded-md px-2 py-1 <%= chipBg %>">
-                          <%= chipText %>
-                        </span>
-
-                        <% if (event.isRecurring) { %>
-                          <span class="inline-flex items-center rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-2 py-1">
-                            🔄 Anual
-                          </span>
-                        <% } %>
-                      </div>
-
-                      <% if (event.description) { %>
-                        <div class="mt-3 text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line break-words">
-                          <%= event.description %>
-                        </div>
-                      <% } %>
+    <!-- Lista plana de eventos (por si se desea revisar) -->
+    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/50 dark:border-white/5 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-white/5 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50">
+        <h2 class="text-lg font-bold flex items-center gap-2.5 text-slate-800 dark:text-white">
+          <div class="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+            <i data-lucide="list" class="icon text-indigo-600 dark:text-indigo-400"></i>
+          </div>
+          Próximos eventos
+        </h2>
+      </div>
+      <div class="p-6">
+        <% if (evts.length > 0) { %>
+          <ul class="space-y-3">
+            <% evts
+               .slice().sort((a,b)=> (a.dateYMD < b.dateYMD ? -1 : 1))
+               .map(e => ({...e, meta: TYPE_META[e.type] || TYPE_META.closure}))
+               .forEach(e => { %>
+              <li class="flex items-start justify-between gap-3 rounded-xl border border-slate-200 dark:border-white/10 p-4 hover:shadow-sm transition">
+                <div class="flex items-start gap-3">
+                  <span class="mt-1 w-2 h-2 rounded-full <%= e.meta.dot %>"></span>
+                  <div>
+                    <div class="text-sm font-semibold text-slate-800 dark:text-white"><%= e.title %></div>
+                    <div class="text-xs text-slate-500 dark:text-slate-400">
+                      <time datetime="<%= e.dateYMD %>"><%= new Date(e.dateYMD).toLocaleDateString('es-PE',{ weekday:'long', year:'numeric', month:'long', day:'numeric'}) %></time>
                     </div>
-
-                    <div class="flex-shrink-0 flex gap-2">
-                      <button
-                        class="inline-flex items-center justify-center rounded-lg bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
-                        onclick="editEvent('<%= event.id %>')"
-                      >
-                        ✏️
-                        <span class="hidden sm:inline">&nbsp;Editar</span>
-                      </button>
-
-                      <button
-                        class="inline-flex items-center justify-center rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
-                        onclick="deleteEvent('<%= event.id %>')"
-                      >
-                        🗑️
-                        <span class="hidden sm:inline">&nbsp;Eliminar</span>
-                      </button>
+                    <% if (e.description) { %>
+                      <p class="text-sm text-slate-600 dark:text-slate-300 mt-1 whitespace-pre-wrap"><%= e.description %></p>
+                    <% } %>
+                    <div class="mt-2 inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold leading-none <%= e.meta.chip %>">
+                      <%= e.meta.label %>
+                      <% if (e.isRecurring) { %><span class="ml-2">• 🔄 Anual</span><% } %>
                     </div>
                   </div>
                 </div>
-              </div>
-              <% }) %>
+                <div class="flex-shrink-0 flex gap-2">
+                  <button class="inline-flex items-center gap-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 text-xs font-medium"
+                          onclick="editEvent('<%= e.id %>')">
+                    <i data-lucide="pencil" class="w-3.5 h-3.5"></i> Editar
+                  </button>
+                  <button class="inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1.5 text-xs font-medium"
+                          onclick="deleteEvent('<%= e.id %>')">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Eliminar
+                  </button>
+                </div>
+              </li>
+            <% }) %>
+          </ul>
+        <% } else { %>
+          <div class="px-6 py-12 text-center">
+            <div class="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
+              <i data-lucide="inbox" class="icon-lg text-slate-400"></i>
             </div>
-          <% } else { %>
-            <div class="text-center text-slate-500 dark:text-slate-400 py-16">
-              <div class="text-4xl mb-3">😌</div>
-              <p class="text-base font-semibold text-slate-700 dark:text-white mb-1">
-                Sin eventos
-              </p>
-              <p class="text-sm text-slate-500 dark:text-slate-400">
-                Agrega feriados y eventos especiales
-              </p>
-            </div>
-          <% } %>
-        </div>
-      </section>
-    </main>
-  </div>
+            <p class="text-sm text-slate-500 dark:text-slate-400 font-medium">Sin eventos</p>
+            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Agrega un evento para comenzar</p>
+          </div>
+        <% } %>
+      </div>
+    </section>
+  </main>
 
   <!-- Modal Agregar Evento -->
-  <div id="addModal" class="modal">
-    <div
-      class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft w-full max-w-md border border-slate-200 dark:border-white/10 max-h-[90vh] overflow-y-auto"
-    >
-      <div class="px-6 py-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
-        <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-          <span>➕</span>
-          <span>Agregar Evento</span>
+  <div id="addModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="calendar-plus" class="icon text-primary"></i>
+          Agregar Evento
         </h2>
-        <button
-          class="text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white text-xl leading-none"
-          onclick="hideModal('addModal')"
-        >
-          &times;
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="hideModal('addModal')">
+          <i data-lucide="x" class="icon"></i>
         </button>
       </div>
 
       <div class="p-6">
-        <form onsubmit="addEvent(event)" class="space-y-5">
+        <form onsubmit="addEvent(event)" class="space-y-4">
           <div>
-            <label class="block mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200" for="title">
-              Título *
-            </label>
-            <input
-              type="text"
-              id="title"
-              required
-              placeholder="Ej: Día de la Independencia"
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0"
-            />
+            <label for="title" class="block text-sm font-semibold mb-2">Título *</label>
+            <input id="title" required placeholder="Ej: Fiestas Patrias"
+                   class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
           </div>
 
           <div>
-            <label class="block mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200" for="date">
-              Fecha *
-            </label>
-            <input
-              type="date"
-              id="date"
-              required
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0"
-            />
+            <label for="date" class="block text-sm font-semibold mb-2">Fecha *</label>
+            <input id="date" type="date" required
+                   class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
           </div>
 
           <div>
-            <label class="block mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200" for="type">
-              Tipo *
-            </label>
-            <select
-              id="type"
-              required
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0"
-            >
+            <label for="type" class="block text-sm font-semibold mb-2">Tipo *</label>
+            <select id="type" required
+                    class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
               <option value="">Seleccionar...</option>
               <option value="holiday">🎉 Feriado</option>
               <option value="special_event">⭐ Evento Especial</option>
@@ -456,40 +274,25 @@
           </div>
 
           <div>
-            <label class="block mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200" for="description">
-              Descripción (opcional)
-            </label>
-            <textarea
-              id="description"
-              placeholder="Descripción del evento..."
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0 min-h-[80px] resize-y"
-            ></textarea>
+            <label for="description" class="block text-sm font-semibold mb-2">Descripción (opcional)</label>
+            <textarea id="description" placeholder="Descripción del evento..."
+                      class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 min-h-[80px] resize-y"></textarea>
           </div>
 
           <div class="flex items-start gap-2">
-            <input
-              type="checkbox"
-              id="isRecurring"
-              class="mt-[2px] w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0"
-            />
-            <label for="isRecurring" class="text-sm text-slate-700 dark:text-slate-200 select-none">
-              Evento anual (se repite cada año)
-            </label>
+            <input id="isRecurring" type="checkbox"
+                   class="mt-[2px] w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0" />
+            <label for="isRecurring" class="text-sm select-none">Evento anual (se repite cada año)</label>
           </div>
 
           <div class="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              class="inline-flex items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition"
-              onclick="hideModal('addModal')"
-            >
+            <button type="button"
+                    class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white"
+                    onclick="hideModal('addModal')">
               Cancelar
             </button>
-
-            <button
-              type="submit"
-              class="inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition"
-            >
+            <button type="submit"
+                    class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-3 py-2 shadow-soft">
               Guardar
             </button>
           </div>
@@ -499,102 +302,69 @@
   </div>
 
   <!-- Modal Editar Evento -->
-  <div id="editModal" class="modal">
-    <div
-      class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft w-full max-w-md border border-slate-200 dark:border-white/10 max-h-[90vh] overflow-y-auto"
-    >
-      <div class="px-6 py-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
-        <h2 class="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-          <span>✏️</span>
-          <span>Editar Evento</span>
+  <div id="editModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="pencil" class="icon text-amber-500"></i>
+          Editar Evento
         </h2>
-        <button
-          class="text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white text-xl leading-none"
-          onclick="hideModal('editModal')"
-        >
-          &times;
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="hideModal('editModal')">
+          <i data-lucide="x" class="icon"></i>
         </button>
       </div>
 
       <div class="p-6">
-        <form onsubmit="updateEvent(event)" class="space-y-5">
+        <form onsubmit="updateEvent(event)" class="space-y-4">
           <input type="hidden" id="edit-id" />
-
           <div>
-            <label class="block mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200" for="edit-title">
-              Título *
-            </label>
-            <input
-              type="text"
-              id="edit-title"
-              required
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0"
-            />
+            <label for="edit-title" class="block text-sm font-semibold mb-2">Título *</label>
+            <input id="edit-title" required
+                   class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
           </div>
-
           <div>
-            <label class="block mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200" for="edit-date">
-              Fecha *
-            </label>
-            <input
-              type="date"
-              id="edit-date"
-              required
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0"
-            />
+            <label for="edit-date" class="block text-sm font-semibold mb-2">Fecha *</label>
+            <input id="edit-date" type="date" required
+                   class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
           </div>
-
           <div>
-            <label class="block mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200" for="edit-type">
-              Tipo *
-            </label>
-            <select
-              id="edit-type"
-              required
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0"
-            >
+            <label for="edit-type" class="block text-sm font-semibold mb-2">Tipo *</label>
+            <select id="edit-type" required
+                    class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
               <option value="holiday">🎉 Feriado</option>
               <option value="special_event">⭐ Evento Especial</option>
               <option value="closure">🔒 Cierre</option>
             </select>
           </div>
-
           <div>
-            <label class="block mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200" for="edit-description">
-              Descripción (opcional)
-            </label>
-            <textarea
-              id="edit-description"
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0 min-h-[80px] resize-y"
-            ></textarea>
+            <label for="edit-description" class="block text-sm font-semibold mb-2">Descripción (opcional)</label>
+            <textarea id="edit-description"
+                      class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 min-h-[80px] resize-y"></textarea>
           </div>
-
           <div class="flex items-start gap-2">
-            <input
-              type="checkbox"
-              id="edit-isRecurring"
-              class="mt-[2px] w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0"
-            />
-            <label for="edit-isRecurring" class="text-sm text-slate-700 dark:text-slate-200 select-none">
-              Evento anual
-            </label>
+            <input id="edit-isRecurring" type="checkbox"
+                   class="mt-[2px] w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0" />
+            <label for="edit-isRecurring" class="text-sm select-none">Evento anual</label>
           </div>
 
-          <div class="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              class="inline-flex items-center justify-center rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition"
-              onclick="hideModal('editModal')"
-            >
-              Cancelar
+          <div class="flex justify-between gap-2 pt-2">
+            <button type="button"
+                    class="inline-flex items-center gap-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold px-3 py-2"
+                    onclick="deleteEventFromModal()">
+              <i data-lucide="trash-2" class="icon"></i> Eliminar
             </button>
 
-            <button
-              type="submit"
-              class="inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition"
-            >
-              Actualizar
-            </button>
+            <div class="flex gap-2">
+              <button type="button"
+                      class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white"
+                      onclick="hideModal('editModal')">
+                Cancelar
+              </button>
+              <button type="submit"
+                      class="rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold px-3 py-2">
+                Actualizar
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -602,56 +372,103 @@
   </div>
 
   <script>
-    // Iconos lucide
-    window.lucide && lucide.createIcons();
+    // Iconos
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
+    });
 
-    // Sidebar móvil
-    (function(){
-      const sidebar   = document.getElementById('sidebar');
-      const overlay   = document.getElementById('mobile-sidebar-overlay');
-      const openBtn   = document.getElementById('open-sidebar-btn');
-      const closeBtn  = document.getElementById('close-sidebar-btn');
+    // ======= Estado y helpers de calendario (sin slider) =======
+    const evts = <%- JSON.stringify(evts || []) %>;
+    const monthGrid   = document.getElementById('monthGrid');
+    const monthLabel  = document.getElementById('monthLabel');
+    const yearRangeEl = document.getElementById('yearRange');
 
-      function openSidebar(){
-        sidebar.classList.remove('-translate-x-full');
-        overlay.classList.remove('opacity-0','pointer-events-none');
-      }
-      function closeSidebar(){
-        sidebar.classList.add('-translate-x-full');
-        overlay.classList.add('opacity-0','pointer-events-none');
-      }
-
-      if (openBtn)  openBtn.addEventListener('click', openSidebar);
-      if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
-      if (overlay)  overlay.addEventListener('click', closeSidebar);
+    let state = (() => {
+      const d = new Date();
+      return { year: d.getFullYear(), month: d.getMonth() }; // 0-11
     })();
 
-    // ===== Helpers de fecha en el FRONT =====
-    function formatYMDLong(ymd, locale = 'es-PE') {
-      // ymd: "YYYY-MM-DD"
-      const [y, m, d] = ymd.split('-').map(Number);
-      const date = new Date(y, m - 1, d);
-      return date.toLocaleDateString(locale, {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
+    const pad = n => String(n).padStart(2,'0');
+    const toYMD = (y,m,d) => `${y}-${pad(m+1)}-${pad(d)}`;
+    const mondayIdx = d => ((d.getDay() === 0) ? 6 : d.getDay() - 1);
+
+    function renderMonth(){
+      // encabezado
+      const labelDate = new Date(state.year, state.month, 1);
+      monthLabel.textContent = labelDate.toLocaleDateString('es-PE', { month:'long', year:'numeric' });
+      yearRangeEl.textContent = state.year;
+
+      // grilla (6 filas x 7 columnas)
+      monthGrid.innerHTML = '';
+      const first = new Date(state.year, state.month, 1);
+      const lead = mondayIdx(first);
+      const start = new Date(state.year, state.month, 1 - lead);
+
+      for (let i=0; i<42; i++) {
+        const d = new Date(start); d.setDate(start.getDate()+i);
+        const inMonth = (d.getMonth() === state.month);
+        const isToday = sameYMD(d, new Date());
+
+        const cell = document.createElement('div');
+        cell.className =
+          `border border-slate-100 dark:border-slate-800 p-2
+           ${inMonth ? 'bg-white dark:bg-slate-900' : 'bg-slate-50/70 dark:bg-slate-900/40 text-slate-400'}`;
+
+        // cabecera del día
+        cell.innerHTML = `
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-xs font-semibold ${inMonth ? 'text-slate-700 dark:text-white' : 'text-slate-400'}">${d.getDate()}</div>
+            ${isToday ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 font-semibold">Hoy</span>' : ''}
+          </div>
+        `;
+
+        // eventos del día
+        const items = evts.filter(e => e.dateYMD === toYMD(d.getFullYear(), d.getMonth(), d.getDate()));
+        items.forEach(e => {
+          const dot =
+            e.type === 'holiday'       ? 'bg-rose-500'  :
+            e.type === 'special_event' ? 'bg-amber-500' :
+                                          'bg-slate-500';
+          const safeTitle = escapeHtml(e.title || '');
+          cell.innerHTML += `
+            <button
+              class="w-full text-left mt-1 flex items-center gap-2 text-xs rounded px-2 py-1 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+              onclick="editEvent('${e.id}')"
+              title="${safeTitle}">
+              <span class="w-2 h-2 rounded-full ${dot}"></span>
+              <span class="line-clamp-1">${safeTitle}</span>
+            </button>
+          `;
+        });
+
+        monthGrid.appendChild(cell);
+      }
     }
 
-    function renderDateLabels() {
-      document.querySelectorAll('.date-label').forEach(el => {
-        const ymd = el.getAttribute('data-ymd');
-        el.textContent = formatYMDLong(ymd);
-      });
+    function sameYMD(a,b){
+      return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+    }
+    function prevMonth(){
+      if (state.month === 0) { state.month = 11; state.year--; } else { state.month--; }
+      renderMonth();
+    }
+    function nextMonth(){
+      if (state.month === 11) { state.month = 0; state.year++; } else { state.month++; }
+      renderMonth();
+    }
+    function goToday(){
+      const d = new Date();
+      state.year = d.getFullYear(); state.month = d.getMonth();
+      renderMonth();
     }
 
-    // ====== CRUD EVENTOS (misma lógica que tenías) ======
+    function escapeHtml(str){
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
 
-    // Agregar evento
-    async function addEvent(e) {
+    // ======= CRUD EVENTOS =======
+    async function addEvent(e){
       e.preventDefault();
-
       const data = {
         title: document.getElementById('title').value,
         date: document.getElementById('date').value,
@@ -659,52 +476,34 @@
         description: document.getElementById('description').value,
         isRecurring: document.getElementById('isRecurring').checked
       };
-
-      try {
+      try{
         const res = await fetch('/calendar/api', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
+          method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
         });
-
         const result = await res.json();
-
-        if (result.success) {
-          alert('✅ Evento agregado exitosamente');
-          location.reload();
-        } else {
-          alert('❌ Error: ' + (result.error || 'No se pudo agregar'));
-        }
-      } catch (error) {
-        alert('❌ Error al agregar evento');
-        console.error(error);
-      }
+        if(result.success){ alert('✅ Evento agregado'); location.reload(); }
+        else { alert('❌ Error: ' + (result.error || 'No se pudo agregar')); }
+      }catch(err){ alert('❌ Error al agregar'); console.error(err); }
     }
 
-    // Editar evento
-    async function editEvent(id) {
-      try {
+    async function editEvent(id){
+      try{
         const res = await fetch(`/calendar/api/${id}`);
         const event = await res.json();
 
         document.getElementById('edit-id').value = event.id;
-        document.getElementById('edit-title').value = event.title;
-        document.getElementById('edit-date').value = event.dateYMD; // usamos dateYMD crudo
-        document.getElementById('edit-type').value = event.type;
+        document.getElementById('edit-title').value = event.title || '';
+        document.getElementById('edit-date').value = event.dateYMD;
+        document.getElementById('edit-type').value = event.type || 'closure';
         document.getElementById('edit-description').value = event.description || '';
-        document.getElementById('edit-isRecurring').checked = event.isRecurring;
+        document.getElementById('edit-isRecurring').checked = !!event.isRecurring;
 
         showModal('editModal');
-      } catch (error) {
-        alert('❌ Error al cargar evento');
-        console.error(error);
-      }
+      }catch(err){ alert('❌ Error al cargar'); console.error(err); }
     }
 
-    // Actualizar evento
-    async function updateEvent(e) {
+    async function updateEvent(e){
       e.preventDefault();
-
       const id = document.getElementById('edit-id').value;
       const data = {
         title: document.getElementById('edit-title').value,
@@ -713,69 +512,59 @@
         description: document.getElementById('edit-description').value,
         isRecurring: document.getElementById('edit-isRecurring').checked
       };
-
-      try {
+      try{
         const res = await fetch(`/calendar/api/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
+          method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)
         });
-
         const result = await res.json();
-
-        if (result.success) {
-          alert('✅ Evento actualizado');
-          location.reload();
-        } else {
-          alert('❌ Error al actualizar');
-        }
-      } catch (error) {
-        alert('❌ Error al actualizar evento');
-        console.error(error);
-      }
+        if(result.success){ alert('✅ Evento actualizado'); location.reload(); }
+        else { alert('❌ Error al actualizar'); }
+      }catch(err){ alert('❌ Error al actualizar'); console.error(err); }
     }
 
-    // Eliminar evento
-    async function deleteEvent(id) {
-      if (!confirm('¿Eliminar este evento?')) return;
-
-      try {
-        const res = await fetch(`/calendar/api/${id}`, { method: 'DELETE' });
+    async function deleteEvent(id){
+      if(!confirm('¿Eliminar este evento?')) return;
+      try{
+        const res = await fetch(`/calendar/api/${id}`, { method:'DELETE' });
         const result = await res.json();
+        if(result.success){ alert('✅ Evento eliminado'); location.reload(); }
+        else { alert('❌ Error al eliminar'); }
+      }catch(err){ alert('❌ Error al eliminar'); console.error(err); }
+    }
 
-        if (result.success) {
-          alert('✅ Evento eliminado');
-          location.reload();
-        } else {
-          alert('❌ Error al eliminar');
-        }
-      } catch (error) {
-        alert('❌ Error al eliminar evento');
-        console.error(error);
+    function deleteEventFromModal(){
+      const id = document.getElementById('edit-id').value;
+      hideModal('editModal');
+      deleteEvent(id);
+    }
+
+    // ======= Modales (igual patrón que el ejemplo) =======
+    function showModal(id){
+      const el = document.getElementById(id);
+      el.classList.remove('hidden');
+      el.classList.add('flex');
+    }
+    function hideModal(id){
+      const el = document.getElementById(id);
+      el.classList.remove('flex');
+      el.classList.add('hidden');
+      if(id==='addModal'){
+        document.getElementById('title').value = '';
+        document.getElementById('date').value = '';
+        document.getElementById('type').value = '';
+        document.getElementById('description').value = '';
+        document.getElementById('isRecurring').checked = false;
       }
     }
+    window.addEventListener('click', (e) => {
+      ['addModal','editModal'].forEach(mid=>{
+        const modal = document.getElementById(mid);
+        if (e.target === modal) hideModal(mid);
+      });
+    });
 
-    // Mostrar / ocultar modal
-    function showModal(modalId) {
-      document.getElementById(modalId).classList.add('show');
-    }
-
-    function hideModal(modalId) {
-      document.getElementById(modalId).classList.remove('show');
-    }
-
-    // Cerrar modal al clickear fuera
-    window.onclick = function(event) {
-      const modals = document.getElementsByClassName('modal');
-      for (let modal of modals) {
-        if (event.target === modal) {
-          modal.classList.remove('show');
-        }
-      }
-    }
-
-    // Render inicial de fechas
-    renderDateLabels();
+    // Inicial
+    renderMonth();
   </script>
 </body>
 </html>

@@ -2,6 +2,7 @@ import express from 'express';
 import { getPrismaClient } from '../../config/database.js';
 import { logger } from '../../utils/logger.js';
 import { getConnectionStatus, hasQR, getBotPhoneNumber } from '../../services/whatsapp.js';
+import * as workingHoursModel from '../../models/workingHours.js';
 
 const router = express.Router();
 const prisma = getPrismaClient();
@@ -17,7 +18,7 @@ async function safeCount<T>(fn: () => Promise<T>): Promise<number> {
   try {
     const r: any = await fn();
     if (typeof r === 'number') return r;
-    if (r && typeof r._count?. _all === 'number') return r._count._all;
+    if (r && typeof r._count?._all === 'number') return r._count._all;
     if (typeof r?.count === 'number') return r.count;
     return 0;
   } catch (e: any) {
@@ -58,6 +59,10 @@ router.get('/', async (_req, res) => {
 
       // últimos productos
       recentProducts,
+
+      // 👇 NUEVO: horarios de trabajo
+      workingHours,
+      workingNow,
     ] = await Promise.all([
 
       // contactos / mensajes / takeover
@@ -82,19 +87,19 @@ router.get('/', async (_req, res) => {
         },
       }),
 
-      // 👇 KPI departamentos
+      // KPI departamentos
       safeCount(() => prisma.department.count() as any),
 
-      // 👇 KPI productos
+      // KPI productos
       safeCount(() => prisma.product.count() as any),
 
-      // 👇 KPI auto-respuestas
+      // KPI auto-respuestas
       safeCount(() => prisma.autoResponse.count() as any),
 
-      // 👇 KPI tags
+      // KPI tags
       safeCount(() => prisma.tag.count() as any),
 
-      // 👇 KPI plantillas
+      // KPI plantillas
       safeCount(() => prisma.template.count() as any),
 
       // últimos productos
@@ -114,6 +119,26 @@ router.get('/', async (_req, res) => {
           },
         })
       ),
+
+      // 👇 NUEVO: obtener horario de hoy
+      (async () => {
+        try {
+          return await workingHoursModel.getTodayHours();
+        } catch (e) {
+          logger.debug('Error getting today hours:', e);
+          return null;
+        }
+      })(),
+
+      // 👇 NUEVO: verificar si está abierto ahora
+      (async () => {
+        try {
+          return await workingHoursModel.isWorkingNow();
+        } catch (e) {
+          logger.debug('Error checking working now:', e);
+          return false;
+        }
+      })(),
     ]);
 
     const whatsappStatus = {
@@ -122,9 +147,9 @@ router.get('/', async (_req, res) => {
       botNumber: typeof getBotPhoneNumber === 'function' ? getBotPhoneNumber() : null,
     };
 
-    // OJO: aquí mandamos TODOS los KPIs que la vista usa
     res.render('dashboard', {
       title: 'Dashboard',
+      page: 'dashboard',
       stats: {
         totalContacts,
         registeredContacts,
@@ -133,15 +158,21 @@ router.get('/', async (_req, res) => {
         messagesToday,
         humanTakeovers,
 
-        departmentsCount,    // <-- NUEVO
+        departmentsCount,
         productsCount,
         autoResponsesCount,
         tagsCount,
-        templatesCount,      // <-- NUEVO
+        templatesCount,
       },
       recentContacts,
       recentProducts,
       whatsappStatus,
+      
+      // 👇 NUEVO: pasar horarios a la vista
+      workingHours,
+      workingNow,
+      
+      user: _req.user?.name || 'Admin',
     });
   } catch (error) {
     logger.error('Error loading dashboard:', error);
@@ -168,6 +199,10 @@ router.get('/api/kpis/today', async (_req, res) => {
       autoResponsesCount,
       tagsCount,
       templatesCount,
+
+      // 👇 NUEVO: horarios
+      workingHours,
+      workingNow,
     ] = await Promise.all([
       prisma.contact.count(),
       prisma.contact.count({ where: { state: 'REGISTERED' } }),
@@ -181,6 +216,23 @@ router.get('/api/kpis/today', async (_req, res) => {
       safeCount(() => prisma.autoResponse.count() as any),
       safeCount(() => prisma.tag.count() as any),
       safeCount(() => prisma.template.count() as any),
+
+      // 👇 NUEVO: horarios para API
+      (async () => {
+        try {
+          return await workingHoursModel.getTodayHours();
+        } catch (e) {
+          return null;
+        }
+      })(),
+
+      (async () => {
+        try {
+          return await workingHoursModel.isWorkingNow();
+        } catch (e) {
+          return false;
+        }
+      })(),
     ]);
 
     res.json({
@@ -204,10 +256,79 @@ router.get('/api/kpis/today', async (_req, res) => {
         hasQR: hasQR(),
         botNumber: typeof getBotPhoneNumber === 'function' ? getBotPhoneNumber() : null,
       },
+      // 👇 NUEVO: incluir horarios en API
+      workingHours: workingHours ? {
+        dayOfWeek: workingHours.dayOfWeek,
+        isWorkday: workingHours.isWorkday,
+        openTime: workingHours.openTime,
+        closeTime: workingHours.closeTime,
+        breakStart: workingHours.breakStart,
+        breakEnd: workingHours.breakEnd,
+      } : null,
+      workingNow,
     });
   } catch (error) {
     logger.error('Error getting KPIs:', error);
     res.status(500).json({ success: false, error: 'Error getting KPIs' });
+  }
+});
+
+// ============= API: Obtener estado actual de horarios (para polling en tiempo real) =============
+router.get('/api/working-status', async (_req, res) => {
+  try {
+    const [workingHours, workingNow] = await Promise.all([
+      workingHoursModel.getTodayHours(),
+      workingHoursModel.isWorkingNow(),
+    ]);
+
+    // Calcular progreso del día si está en horario laboral
+    let dayProgress = 0;
+    let nextChange = null;
+
+    if (workingHours?.isWorkday && workingHours.openTime && workingHours.closeTime) {
+      const now = new Date();
+      const tz = 'America/Lima';
+      const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(now);
+      
+      const [openHour, openMin] = workingHours.openTime.split(':').map(Number);
+      const [closeHour, closeMin] = workingHours.closeTime.split(':').map(Number);
+      
+      const open = new Date(`${todayStr}T${workingHours.openTime}:00-05:00`);
+      const close = new Date(`${todayStr}T${workingHours.closeTime}:00-05:00`);
+      
+      const total = close.getTime() - open.getTime();
+      const elapsed = Math.min(Math.max(now.getTime() - open.getTime(), 0), total);
+      dayProgress = total > 0 ? Math.round((elapsed / total) * 100) : 0;
+
+      // Determinar próximo cambio
+      if (workingNow) {
+        // Si está abierto, el próximo cambio es el cierre
+        nextChange = {
+          type: 'close',
+          time: close.toISOString(),
+          label: 'Cierre',
+        };
+      } else if (now < open) {
+        // Si aún no abre, el próximo cambio es la apertura
+        nextChange = {
+          type: 'open',
+          time: open.toISOString(),
+          label: 'Apertura',
+        };
+      }
+    }
+
+    res.json({
+      success: true,
+      workingHours,
+      workingNow,
+      dayProgress,
+      nextChange,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('Error getting working status:', error);
+    res.status(500).json({ success: false, error: 'Error getting working status' });
   }
 });
 

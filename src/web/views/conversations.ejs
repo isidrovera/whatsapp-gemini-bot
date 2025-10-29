@@ -5,32 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title><%= title %> - WhatsApp Bot Admin</title>
 
-  <!-- Fuente + Tailwind -->
+  <!-- Fuente -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
+  <!-- Tailwind (misma config del dashboard) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] },
+          fontFamily: { sans: ['Inter','ui-sans-serif','system-ui'] },
           colors: {
-            primary: { DEFAULT: '#667eea', 600: '#667eea', 700:'#5a67d8' },
-            whatsapp: { DEFAULT: '#25D366', dark: '#128C7E' },
+            primary:   { DEFAULT:'#667eea', 600:'#667eea', 700:'#5a67d8' },
+            secondary: { DEFAULT:'#764ba2', 600:'#764ba2', 700:'#6b3fa0' },
+            whatsapp:  { DEFAULT: '#25D366', dark: '#128C7E' },
           },
           boxShadow: {
-            soft: '0 4px 6px -1px rgba(0,0,0,.08)',
-            card: '0 10px 30px -5px rgba(0,0,0,.1)',
+            soft:'0 4px 6px -1px rgba(0,0,0,.08), 0 2px 4px -1px rgba(0,0,0,.04)',
+            card:'0 10px 30px -5px rgba(0,0,0,.10)'
           }
         }
       },
-      darkMode: 'media'
+      darkMode:'media'
     }
   </script>
 
-  <!-- Icons -->
+  <!-- Utilidades externas del dashboard -->
+  <link rel="stylesheet" href="/css/ui.css">
+
+  <!-- Iconos -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
@@ -43,25 +48,30 @@
       }
     }
 
-    .sidebar-link-active {
-      background: linear-gradient(135deg, rgba(255,255,255,.15) 0%, rgba(255,255,255,.08) 100%);
-      color: #fff !important;
-      font-weight: 600;
-      box-shadow: 0 2px 8px rgba(0,0,0,.1);
+    /* Gradient text */
+    .gradient-text {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
+
+    /* Icon sizes */
+    .icon { width: 1.25rem; height: 1.25rem; }
+    .icon-lg { width: 1.75rem; height: 1.75rem; }
 
     /* Chat layout */
     .chat-container {
       display: grid;
       grid-template-columns: 350px 1fr;
-      height: calc(100vh - 180px);
+      height: calc(100vh - 280px);
       gap: 1rem;
     }
 
     @media (max-width: 768px) {
       .chat-container {
         grid-template-columns: 1fr;
-        height: calc(100vh - 140px);
+        height: calc(100vh - 240px);
       }
       .contacts-panel.hidden-mobile {
         display: none;
@@ -157,38 +167,18 @@
       max-height: 200px;
       border-radius: 8px;
     }
-
-    .remove-file-btn {
-      position: absolute;
-      top: -8px;
-      right: -8px;
-      background: #ef4444;
-      color: white;
-      border-radius: 50%;
-      width: 24px;
-      height: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: bold;
-    }
   </style>
 </head>
+
 <body class="h-full bg-gradient-to-br from-slate-50 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 text-slate-800 dark:text-slate-100">
   
   <!-- Audio element for notifications -->
   <audio id="notificationSound" preload="auto">
-    <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUKjk77ZkHQU2kdXzzHgrBSR3yPDckD8KFF+z6eunVRQKRp/h8r9sIQYrgc/y2Ik2CBxpvfDknE4MDlCo5O+2ZB0FNpHV88x4KwUkd8jw3JA/ChRfs+nrp1UUCkaf4fK/bCEGK4HP8tmJNggcab3w5JxODA5QqOTvtmQdBTaR1fPMeCsFJHfI8NyQPwoUX7Pp66dVFApGn+Hyv2whBiuBz/LZiTYIHGm98OScTgwOUKjk77ZkHQU2kdXzzHgrBSR3yPDckD8KFF+z6eunVRQKRp/h8r9sIQYrgc/y2Yk2CBxpvfDknE4MDlCo5O+2ZB0FNpHV88x4KwUkd8jw3JA/ChRfs+nrp1UUCkaf4fK/bCEGK4HP8tmJNggcab3w5JxODA5QqOTvtmQdBTaR1fPMeCsFJHfI8NyQPwoUX7Pp66dVFApGn+Hyv2whBiuBz/LZiTYIHGm98OScTgwOUKjk77ZkHQU2kdXzzHgrBSR3yPDckD8KFF+z6eunVRQKRp/h8r9sIQYrgc/y2Yk2CBxpvfDknE4MDlCo5O+2ZB0FNpHV88x4KwUkd8jw3JA/ChRfs+nrp1UUCkaf4fK/bCEGK4HP8tmJNggcab3w5JxODA5QqOTvtmQdBTaR1fPMeCsFJHfI8NyQPwoUX7Pp66dVFApGn+Hyv2whBiuBz/LZiTYIHGm98OScTgwOUKjk77ZkHQU2kdXzzHgrBSR3yPDckD8KFF+z6eunVRQKRp/h8r9sIQYrgc/y2Yk2CBxpvfDknE4MDlCo5O+2ZB0FNpHV88x4KwUkd8jw3JA/ChRfs+nrp1UUCkaf4fK/bCEGK4HP8tmJNgj8==" type="audio/wav">
+    <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUKjk77ZkHQU2kdXzzHgrBSR3yPDckD8KFF+z6eunVRQKRp/h8r9sIQYrgc/y2Ik2CBxpvfDknE4MDlCo5O+2ZB0FNpHV88x4KwUkd8jw3JA/ChRfs+nrp1UUCkaf4fK/bCEGK4HP8tmJNggcab3w5JxODA5QqOTvtmQdBTaR1fPMeCsFJHfI8NyQPwoUX7Pp66dVFApGn+Hyv2whBiuBz/LZiTYIHGm98OScTgwOUKjk77ZkHQU2kdXzzHgrBSR3yPDckD8KFF+z6eunVRQKRp/h8r9sIQYrgc/y2Yk2CBxpvfDknE4MDlCo5O+2ZB0FNpHV88x4KwUkd8jw3JA/ChRfs+nrp1UUCkaf4fK/bCEGK4HP8tmJNggcab3w5JxODA5QqOTvtmQdBTaR1fPMeCsFJHfI8NyQPwoUX7Pp66dVFApGn+Hyv2whBiuBz/LZiTYIHGm98OScTgwOUKjk77ZkHQU2kdXzzHgrBSR3yPDckD8KFF+z6eunVRQKRp/h8r9sIQYrgc/y2Yk2CBxpvfDknE4MDlCo5O+2ZB0FNpHV88x4KwUkd8jw3JA/ChRfs+nrp1UUCkaf4fK/bCEGK4HP8tmJNgj8==" type="audio/wav">
   </audio>
 
   <%
     const convList = Array.isArray(contacts) ? contacts : [];
-
-    function isActive(p){
-      return (page === p) ? 'sidebar-link-active' : '';
-    }
 
     function fmtTime(d){
       try {
@@ -212,359 +202,227 @@
     }
   %>
 
-  <div class="min-h-screen w-full flex relative">
+  <main id="main-content" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
-    <!-- Overlay móvil sidebar -->
-    <div id="mobile-sidebar-overlay"
-         class="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 opacity-0 pointer-events-none transition-opacity duration-300 md:hidden">
+    <!-- Volver al Dashboard + breadcrumb -->
+    <div class="flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <a href="/"
+           class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
+          <i data-lucide="arrow-left" class="icon"></i>
+          <span>Volver al Dashboard</span>
+        </a>
+      </div>
+
+      <nav aria-label="Breadcrumb" class="text-xs text-slate-500 dark:text-slate-400">
+        <ol class="flex items-center gap-2">
+          <li class="inline-flex items-center gap-1">
+            <a href="/" class="hover:underline inline-flex items-center gap-1">
+              <i data-lucide="home" class="w-3.5 h-3.5"></i> Inicio
+            </a>
+          </li>
+          <li class="select-none">/</li>
+          <li class="inline-flex items-center gap-1">
+            <i data-lucide="message-circle" class="w-3.5 h-3.5"></i>
+            <span class="font-medium">Conversaciones</span>
+          </li>
+        </ol>
+      </nav>
     </div>
 
-    <!-- Sidebar -->
-    <aside id="sidebar"
-           class="w-72 flex flex-col bg-gradient-to-br from-primary via-primary-600 to-primary-700 text-white shadow-2xl
-                  fixed inset-y-0 left-0 z-50 -translate-x-full transition-transform duration-300 ease-out md:translate-x-0 md:relative md:flex"
-           role="navigation"
-           aria-label="Menú principal">
+    <!-- Header -->
+    <header class="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 px-6 py-5">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 class="text-3xl font-bold tracking-tight gradient-text flex items-center gap-3">
+            <i data-lucide="messages-square" class="icon-lg text-primary"></i>
+            Conversaciones
+          </h1>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Chat en tiempo real con tus contactos</p>
+        </div>
 
-      <div class="px-6 py-6 border-b border-white/10 bg-white/5 backdrop-blur-sm">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg">
-              <i data-lucide="bot" class="w-6 h-6"></i>
-            </div>
-            <div>
-              <h2 class="text-lg font-bold">Bot Admin</h2>
-              <p class="text-xs text-white/70">Panel de control</p>
-            </div>
-          </div>
-
-          <button id="close-sidebar-btn"
-                  class="md:hidden inline-flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 p-2 transition"
-                  aria-label="Cerrar menú">
-            <i data-lucide="x" class="w-5 h-5"></i>
+        <div class="flex flex-wrap items-center gap-3">
+          <button id="toggleNotifications"
+                  class="inline-flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 px-4 py-2.5 text-sm font-semibold shadow-soft transition"
+                  onclick="toggleNotifications()">
+            <i data-lucide="bell" class="icon" id="bellIcon"></i>
+            <span id="notificationStatus">Sonido ON</span>
           </button>
         </div>
       </div>
+    </header>
 
-      <nav class="py-4 flex-1 overflow-y-auto">
-        <ul class="px-3 space-y-1 text-sm">
-          <li>
-            <a href="/" class="group flex items-center gap-3 rounded-xl px-4 py-2.5 text-white/80 hover:text-white hover:bg-white/10 transition-all <%= isActive('dashboard') %>">
-              <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
-              <span>Dashboard</span>
-            </a>
-          </li>
-          <li>
-            <a href="/contacts" class="group flex items-center gap-3 rounded-xl px-4 py-2.5 text-white/80 hover:text-white hover:bg-white/10 transition-all <%= isActive('contacts') %>">
-              <i data-lucide="users" class="w-5 h-5"></i>
-              <span>Contactos</span>
-            </a>
-          </li>
-          <li>
-            <a href="/conversations" class="group flex items-center gap-3 rounded-xl px-4 py-2.5 text-white/80 hover:text-white hover:bg-white/10 transition-all <%= isActive('conversations') %>">
-              <i data-lucide="message-circle" class="w-5 h-5"></i>
-              <span>Conversaciones</span>
-            </a>
-          </li>
-          <li>
-            <a href="/blocked" class="group flex items-center gap-3 rounded-xl px-4 py-2.5 text-white/80 hover:text-white hover:bg-white/10 transition-all <%= isActive('blocked') %>">
-              <i data-lucide="ban" class="w-5 h-5"></i>
-              <span>Bloqueados</span>
-            </a>
-          </li>
-          <li><div class="my-3 h-px bg-white/10"></div></li>
-          <li>
-            <a href="/calendar" class="group flex items-center gap-3 rounded-xl px-4 py-2.5 text-white/80 hover:text-white hover:bg-white/10 transition-all <%= isActive('calendar') %>">
-              <i data-lucide="calendar" class="w-5 h-5"></i>
-              <span>Calendario</span>
-            </a>
-          </li>
-          <li>
-            <a href="/working-hours" class="group flex items-center gap-3 rounded-xl px-4 py-2.5 text-white/80 hover:text-white hover:bg-white/10 transition-all <%= isActive('working-hours') %>">
-              <i data-lucide="clock" class="w-5 h-5"></i>
-              <span>Horarios</span>
-            </a>
-          </li>
-          <li><div class="my-3 h-px bg-white/10"></div></li>
-          <li>
-            <a href="/departments" class="group flex items-center gap-3 rounded-xl px-4 py-2.5 text-white/80 hover:text-white hover:bg-white/10 transition-all <%= isActive('departments') %>">
-              <i data-lucide="building-2" class="w-5 h-5"></i>
-              <span>Departamentos</span>
-            </a>
-          </li>
-          <li>
-            <a href="/products" class="group flex items-center gap-3 rounded-xl px-4 py-2.5 text-white/80 hover:text-white hover:bg-white/10 transition-all <%= isActive('products') %>">
-              <i data-lucide="package" class="w-5 h-5"></i>
-              <span>Productos</span>
-            </a>
-          </li>
-          <li>
-            <a href="/auto-responses" class="group flex items-center gap-3 rounded-xl px-4 py-2.5 text-white/80 hover:text-white hover:bg-white/10 transition-all <%= isActive('auto-responses') %>">
-              <i data-lucide="bot" class="w-5 h-5"></i>
-              <span>Auto-respuestas</span>
-            </a>
-          </li>
-          <li>
-            <a href="/tags" class="group flex items-center gap-3 rounded-xl px-4 py-2.5 text-white/80 hover:text-white hover:bg-white/10 transition-all <%= isActive('tags') %>">
-              <i data-lucide="tag" class="w-5 h-5"></i>
-              <span>Tags</span>
-            </a>
-          </li>
-          <li>
-            <a href="/templates" class="group flex items-center gap-3 rounded-xl px-4 py-2.5 text-white/80 hover:text-white hover:bg-white/10 transition-all <%= isActive('templates') %>">
-              <i data-lucide="file-text" class="w-5 h-5"></i>
-              <span>Plantillas</span>
-            </a>
-          </li>
-          <li>
-            <a href="/metrics" class="group flex items-center gap-3 rounded-xl px-4 py-2.5 text-white/80 hover:text-white hover:bg-white/10 transition-all <%= isActive('metrics') %>">
-              <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
-              <span>Métricas</span>
-            </a>
-          </li>
-          <li><div class="my-3 h-px bg-white/10"></div></li>
-          <li>
-            <a href="/admin-users" class="group flex items-center gap-3 rounded-xl px-4 py-2.5 text-white/80 hover:text-white hover:bg-white/10 transition-all <%= isActive('admin-users') %>">
-              <i data-lucide="shield" class="w-5 h-5"></i>
-              <span>Usuarios Admin</span>
-            </a>
-          </li>
-          <li>
-            <a href="/settings" class="group flex items-center gap-3 rounded-xl px-4 py-2.5 text-white/80 hover:text-white hover:bg-white/10 transition-all <%= isActive('settings') %>">
-              <i data-lucide="settings" class="w-5 h-5"></i>
-              <span>Configuración</span>
-            </a>
-          </li>
-        </ul>
-      </nav>
-
-      <div class="mt-auto p-4 bg-black/10 border-t border-white/10 backdrop-blur-sm">
-        <div class="rounded-xl bg-white/10 backdrop-blur-sm p-3.5 mb-3">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-              <i data-lucide="user" class="w-5 h-5"></i>
-            </div>
-            <div class="flex-1 min-w-0">
-              <p class="text-xs text-white/60 font-medium">Sesión activa</p>
-              <p class="font-semibold text-sm truncate"><%= user || 'Admin' %></p>
-            </div>
+    <!-- Chat Container -->
+    <div class="chat-container">
+      
+      <!-- Contacts Panel -->
+      <div class="contacts-panel bg-white dark:bg-slate-900 rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 flex flex-col overflow-hidden">
+        
+        <!-- Search -->
+        <div class="p-4 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50">
+          <div class="relative">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+            <input
+              id="searchInput"
+              type="text"
+              class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-3 py-2 text-sm outline-none focus:border-primary transition"
+              placeholder="Buscar contacto..."
+              onkeyup="filterContacts()"
+            />
           </div>
         </div>
-        
-        <form method="POST" action="/auth/logout">
-          <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
-            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+        <!-- Contact List -->
+        <div id="contactList" class="flex-1 overflow-y-auto">
+          <% if (convList.length > 0) { %>
+            <% convList.forEach((contact, idx) => { %>
+              <div
+                class="contact-item flex items-center gap-3 p-4 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition"
+                data-phone="<%= contact.phoneNumber %>"
+                data-name="<%= contact.name || contact.phoneNumber %>"
+                onclick="openChat('<%= contact.phoneNumber %>', '<%= contact.name || contact.phoneNumber %>')"
+              >
+                <!-- Avatar -->
+                <div class="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-primary-700 flex items-center justify-center text-white font-semibold flex-shrink-0">
+                  <%= (contact.name || contact.phoneNumber).substring(0, 2).toUpperCase() %>
+                </div>
+
+                <!-- Info -->
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between mb-1">
+                    <h3 class="font-semibold text-slate-900 dark:text-white truncate">
+                      <%= contact.name || contact.phoneNumber %>
+                    </h3>
+                    <span class="text-xs text-slate-500">
+                      <%= fmtTime(contact.updatedAt) %>
+                    </span>
+                  </div>
+                  <p class="text-sm text-slate-500 dark:text-slate-400 truncate">
+                    <%= contact.phoneNumber %>
+                  </p>
+                </div>
+
+                <!-- Unread badge (placeholder) -->
+                <div class="unread-badge hidden w-6 h-6 rounded-full bg-whatsapp text-white text-xs font-bold flex items-center justify-center notification-badge">
+                  0
+                </div>
+              </div>
+            <% }) %>
+          <% } else { %>
+            <div class="flex flex-col items-center justify-center h-full p-8 text-center">
+              <div class="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
+                <i data-lucide="inbox" class="icon-lg text-slate-400"></i>
+              </div>
+              <p class="text-sm text-slate-500 dark:text-slate-400 font-medium">No hay conversaciones</p>
+              <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Las conversaciones aparecerán aquí</p>
+            </div>
           <% } %>
-          <button type="submit"
-                  class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 backdrop-blur-sm text-white py-2.5 text-sm font-medium transition-all shadow-lg hover:shadow-xl">
-            <i data-lucide="log-out" class="w-4 h-4"></i> 
-            <span>Cerrar sesión</span>
-          </button>
-        </form>
-      </div>
-    </aside>
-
-    <!-- Main Content -->
-    <main id="main-content" class="flex-1 p-4 md:p-6 w-full overflow-hidden">
-
-      <!-- Header -->
-      <header class="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 px-6 py-4 mb-6">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <button id="open-sidebar-btn"
-                    class="md:hidden inline-flex items-center justify-center rounded-xl text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 p-2.5 shadow-soft transition"
-                    aria-label="Abrir menú">
-              <i data-lucide="menu" class="w-6 h-6"></i>
-            </button>
-            
-            <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <i data-lucide="messages-square" class="w-6 h-6 text-primary"></i>
-              Conversaciones
-            </h1>
-          </div>
-
-          <!-- Notification Settings -->
-          <div class="flex items-center gap-3">
-            <button id="toggleNotifications"
-                    class="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition shadow-soft"
-                    onclick="toggleNotifications()">
-              <i data-lucide="bell" class="w-4 h-4" id="bellIcon"></i>
-              <span id="notificationStatus">Sonido ON</span>
-            </button>
-          </div>
         </div>
-      </header>
+      </div>
 
-      <!-- Chat Container -->
-      <div class="chat-container">
+      <!-- Chat Panel -->
+      <div id="chatPanel" class="bg-white dark:bg-slate-900 rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 flex flex-col overflow-hidden">
         
-        <!-- Contacts Panel -->
-        <div class="contacts-panel bg-white dark:bg-slate-900 rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 flex flex-col overflow-hidden">
-          
-          <!-- Search -->
-          <div class="p-4 border-b border-slate-200 dark:border-slate-700">
-            <div class="relative">
-              <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
-              <input
-                id="searchInput"
-                type="text"
-                class="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 pl-10 pr-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                placeholder="Buscar contacto..."
-                onkeyup="filterContacts()"
-              />
-            </div>
+        <!-- Empty State -->
+        <div id="emptyState" class="flex flex-col items-center justify-center h-full p-8 text-center">
+          <div class="w-24 h-24 rounded-full bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center mb-6">
+            <i data-lucide="message-circle" class="w-12 h-12 text-primary"></i>
           </div>
-
-          <!-- Contact List -->
-          <div id="contactList" class="flex-1 overflow-y-auto">
-            <% if (convList.length > 0) { %>
-              <% convList.forEach((contact, idx) => { %>
-                <div
-                  class="contact-item flex items-center gap-3 p-4 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition"
-                  data-phone="<%= contact.phoneNumber %>"
-                  data-name="<%= contact.name || contact.phoneNumber %>"
-                  onclick="openChat('<%= contact.phoneNumber %>', '<%= contact.name || contact.phoneNumber %>')"
-                >
-                  <!-- Avatar -->
-                  <div class="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-primary-700 flex items-center justify-center text-white font-semibold flex-shrink-0">
-                    <%= (contact.name || contact.phoneNumber).substring(0, 2).toUpperCase() %>
-                  </div>
-
-                  <!-- Info -->
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center justify-between mb-1">
-                      <h3 class="font-semibold text-slate-900 dark:text-white truncate">
-                        <%= contact.name || contact.phoneNumber %>
-                      </h3>
-                      <span class="text-xs text-slate-500">
-                        <%= fmtTime(contact.updatedAt) %>
-                      </span>
-                    </div>
-                    <p class="text-sm text-slate-500 dark:text-slate-400 truncate">
-                      <%= contact.phoneNumber %>
-                    </p>
-                  </div>
-
-                  <!-- Unread badge (placeholder) -->
-                  <div class="unread-badge hidden w-6 h-6 rounded-full bg-whatsapp text-white text-xs font-bold flex items-center justify-center notification-badge">
-                    0
-                  </div>
-                </div>
-              <% }) %>
-            <% } else { %>
-              <div class="flex flex-col items-center justify-center h-full p-8 text-center">
-                <i data-lucide="inbox" class="w-16 h-16 text-slate-300 dark:text-slate-700 mb-4"></i>
-                <p class="text-slate-500 dark:text-slate-400 font-medium">No hay conversaciones</p>
-                <p class="text-sm text-slate-400 dark:text-slate-500 mt-1">Las conversaciones aparecerán aquí</p>
-              </div>
-            <% } %>
-          </div>
+          <h2 class="text-2xl font-bold text-slate-800 dark:text-white mb-2">Selecciona una conversación</h2>
+          <p class="text-slate-500 dark:text-slate-400">Elige un contacto para ver el historial y enviar mensajes</p>
         </div>
 
-        <!-- Chat Panel -->
-        <div id="chatPanel" class="bg-white dark:bg-slate-900 rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 flex flex-col overflow-hidden">
+        <!-- Active Chat (hidden by default) -->
+        <div id="activeChat" class="hidden h-full flex flex-col">
           
-          <!-- Empty State -->
-          <div id="emptyState" class="flex flex-col items-center justify-center h-full p-8 text-center">
-            <div class="w-24 h-24 rounded-full bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center mb-6">
-              <i data-lucide="message-circle" class="w-12 h-12 text-primary"></i>
+          <!-- Chat Header -->
+          <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50">
+            <div class="flex items-center gap-3">
+              <button class="md:hidden" onclick="closeChat()">
+                <i data-lucide="arrow-left" class="w-5 h-5"></i>
+              </button>
+              <div class="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary-700 flex items-center justify-center text-white font-semibold">
+                <span id="chatAvatar">A</span>
+              </div>
+              <div>
+                <h3 id="chatName" class="font-bold text-slate-900 dark:text-white">Contacto</h3>
+                <p id="chatPhone" class="text-sm text-slate-500 dark:text-slate-400">+51 999 999 999</p>
+              </div>
             </div>
-            <h2 class="text-2xl font-bold text-slate-800 dark:text-white mb-2">Selecciona una conversación</h2>
-            <p class="text-slate-500 dark:text-slate-400">Elige un contacto para ver el historial y enviar mensajes</p>
+
+            <div class="flex items-center gap-2">
+              <button
+                class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium bg-rose-500 hover:bg-rose-600 text-white transition shadow-soft"
+                onclick="deleteCurrentConversation()">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Eliminar</span>
+              </button>
+            </div>
           </div>
 
-          <!-- Active Chat (hidden by default) -->
-          <div id="activeChat" class="hidden h-full flex flex-col">
+          <!-- Messages Container -->
+          <div id="messagesContainer" class="flex-1 overflow-y-auto p-6 space-y-3 bg-slate-50 dark:bg-slate-900 chat-messages">
+            <!-- Messages will be loaded here -->
+          </div>
+
+          <!-- Typing Indicator -->
+          <div id="typingIndicator" class="hidden px-6 py-2">
+            <div class="typing-indicator">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+
+          <!-- Message Input -->
+          <div class="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
             
-            <!-- Chat Header -->
-            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-              <div class="flex items-center gap-3">
-                <button class="md:hidden" onclick="closeChat()">
-                  <i data-lucide="arrow-left" class="w-5 h-5"></i>
-                </button>
-                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary-700 flex items-center justify-center text-white font-semibold">
-                  <span id="chatAvatar">A</span>
+            <!-- File Preview -->
+            <div id="filePreviewContainer" class="hidden mb-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
+              <div class="flex items-start gap-3">
+                <div id="filePreview" class="file-preview"></div>
+                <div class="flex-1">
+                  <p id="fileName" class="text-sm font-medium text-slate-700 dark:text-slate-300"></p>
+                  <p id="fileSize" class="text-xs text-slate-500"></p>
                 </div>
-                <div>
-                  <h3 id="chatName" class="font-bold text-slate-900 dark:text-white">Contacto</h3>
-                  <p id="chatPhone" class="text-sm text-slate-500 dark:text-slate-400">+51 999 999 999</p>
-                </div>
-              </div>
-
-              <div class="flex items-center gap-2">
-                <button
-                  class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium bg-rose-500 hover:bg-rose-600 text-white transition shadow-soft"
-                  onclick="deleteCurrentConversation()">
-                  <i data-lucide="trash-2" class="w-4 h-4"></i>
-                  <span class="hidden sm:inline">Eliminar</span>
+                <button onclick="removeFile()" class="text-rose-500 hover:text-rose-600">
+                  <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
               </div>
             </div>
 
-            <!-- Messages Container -->
-            <div id="messagesContainer" class="flex-1 overflow-y-auto p-6 space-y-3 bg-slate-50 dark:bg-slate-900 chat-messages">
-              <!-- Messages will be loaded here -->
-            </div>
-
-            <!-- Typing Indicator -->
-            <div id="typingIndicator" class="hidden px-6 py-2">
-              <div class="typing-indicator">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-            </div>
-
-            <!-- Message Input -->
-            <div class="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
+            <form id="messageForm" class="flex items-end gap-2">
+              <input type="file" id="fileInput" class="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.zip" onchange="handleFileSelect(event)">
               
-              <!-- File Preview -->
-              <div id="filePreviewContainer" class="hidden mb-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
-                <div class="flex items-start gap-3">
-                  <div id="filePreview" class="file-preview"></div>
-                  <div class="flex-1">
-                    <p id="fileName" class="text-sm font-medium text-slate-700 dark:text-slate-300"></p>
-                    <p id="fileSize" class="text-xs text-slate-500"></p>
-                  </div>
-                  <button onclick="removeFile()" class="text-rose-500 hover:text-rose-600">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                  </button>
-                </div>
+              <button type="button"
+                      class="flex-shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 transition"
+                      onclick="document.getElementById('fileInput').click()">
+                <i data-lucide="paperclip" class="w-5 h-5"></i>
+              </button>
+
+              <div class="flex-1 relative">
+                <textarea
+                  id="messageInput"
+                  rows="1"
+                  class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-sm outline-none focus:border-primary transition resize-none"
+                  placeholder="Escribe un mensaje..."
+                  onkeydown="handleKeyDown(event)"
+                  oninput="autoResize(this)"
+                ></textarea>
               </div>
 
-              <form id="messageForm" class="flex items-end gap-2">
-                <input type="file" id="fileInput" class="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.zip" onchange="handleFileSelect(event)">
-                
-                <button type="button"
-                        class="flex-shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 transition"
-                        onclick="document.getElementById('fileInput').click()">
-                  <i data-lucide="paperclip" class="w-5 h-5"></i>
-                </button>
+              <button type="submit"
+                      class="flex-shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-lg bg-whatsapp hover:bg-whatsapp-dark text-white transition shadow-soft">
+                <i data-lucide="send" class="w-5 h-5"></i>
+              </button>
+            </form>
 
-                <div class="flex-1 relative">
-                  <textarea
-                    id="messageInput"
-                    rows="1"
-                    class="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
-                    placeholder="Escribe un mensaje..."
-                    onkeydown="handleKeyDown(event)"
-                    oninput="autoResize(this)"
-                  ></textarea>
-                </div>
-
-                <button type="submit"
-                        class="flex-shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-lg bg-whatsapp hover:bg-whatsapp-dark text-white transition shadow-soft">
-                  <i data-lucide="send" class="w-5 h-5"></i>
-                </button>
-              </form>
-
-              <div id="sendStatus" class="hidden mt-2 text-xs text-center"></div>
-            </div>
+            <div id="sendStatus" class="hidden mt-2 text-xs text-center"></div>
           </div>
         </div>
       </div>
-    </main>
-  </div>
+    </div>
+  </main>
 
   <script>
     // Global state
@@ -573,34 +431,13 @@
     let notificationsEnabled = localStorage.getItem('notificationsEnabled') !== 'false';
     let lastMessageCheck = new Date().toISOString();
     let selectedFile = null;
-    let isTyping = false;
-    let typingTimeout = null;
 
     // Initialize
-    window.lucide && lucide.createIcons();
-    updateNotificationButton();
-    startMessagePolling();
-
-    // Sidebar mobile
-    (function(){
-      const sidebar = document.getElementById('sidebar');
-      const overlay = document.getElementById('mobile-sidebar-overlay');
-      const openBtn = document.getElementById('open-sidebar-btn');
-      const closeBtn = document.getElementById('close-sidebar-btn');
-
-      function openSidebar(){
-        sidebar.classList.remove('-translate-x-full');
-        overlay.classList.remove('opacity-0','pointer-events-none');
-      }
-      function closeSidebar(){
-        sidebar.classList.add('-translate-x-full');
-        overlay.classList.add('opacity-0','pointer-events-none');
-      }
-
-      if (openBtn) openBtn.addEventListener('click', openSidebar);
-      if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
-      if (overlay) overlay.addEventListener('click', closeSidebar);
-    })();
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
+      updateNotificationButton();
+      startMessagePolling();
+    });
 
     // Notification toggle
     function toggleNotifications() {
@@ -610,7 +447,7 @@
       
       if (notificationsEnabled) {
         showToast('✅ Notificaciones activadas', 'success');
-        playNotificationSound(); // Test sound
+        playNotificationSound();
       } else {
         showToast('🔕 Notificaciones desactivadas', 'info');
       }
@@ -631,7 +468,7 @@
         status.textContent = 'Sonido OFF';
       }
       
-      window.lucide && lucide.createIcons();
+      if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
     }
 
     // Play notification sound
@@ -665,28 +502,23 @@
       currentPhone = phone;
       currentName = name;
 
-      // Update UI
       document.getElementById('emptyState').classList.add('hidden');
       document.getElementById('activeChat').classList.remove('hidden');
       document.getElementById('chatName').textContent = name;
       document.getElementById('chatPhone').textContent = phone;
       document.getElementById('chatAvatar').textContent = name.substring(0, 2).toUpperCase();
 
-      // Mark as active
       document.querySelectorAll('.contact-item').forEach(item => {
         item.classList.remove('bg-primary/10');
       });
       document.querySelector(`[data-phone="${phone}"]`)?.classList.add('bg-primary/10');
 
-      // Hide on mobile
       if (window.innerWidth < 768) {
         document.querySelector('.contacts-panel').classList.add('hidden-mobile');
       }
 
-      // Load messages
       await loadMessages(phone);
 
-      // Clear unread badge
       const badge = document.querySelector(`[data-phone="${phone}"] .unread-badge`);
       if (badge) {
         badge.classList.add('hidden');
@@ -722,7 +554,7 @@
           `;
         }
 
-        window.lucide && lucide.createIcons();
+        if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
         scrollToBottom();
       } catch (error) {
         console.error('Error loading messages:', error);
@@ -752,7 +584,6 @@
 
       selectedFile = file;
 
-      // Show preview
       const container = document.getElementById('filePreviewContainer');
       const preview = document.getElementById('filePreview');
       const fileName = document.getElementById('fileName');
@@ -761,7 +592,6 @@
       fileName.textContent = file.name;
       fileSize.textContent = formatFileSize(file.size);
 
-      // Image preview
       if (file.type.startsWith('image/')) {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -770,7 +600,7 @@
         reader.readAsDataURL(file);
       } else {
         preview.innerHTML = `<div class="w-16 h-16 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center"><i data-lucide="file" class="w-8 h-8 text-slate-400"></i></div>`;
-        window.lucide && lucide.createIcons();
+        if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
       }
 
       container.classList.remove('hidden');
@@ -800,13 +630,11 @@
       const input = document.getElementById('messageInput');
       const message = input.value.trim();
 
-      // Send file if selected
       if (selectedFile) {
         await sendFile();
         return;
       }
 
-      // Send text message
       if (!message) return;
 
       try {
@@ -824,7 +652,6 @@
           input.value = '';
           input.style.height = 'auto';
           
-          // Add message to UI
           const container = document.getElementById('messagesContainer');
           const emptyMsg = container.querySelector('.flex.flex-col.items-center');
           if (emptyMsg) container.innerHTML = '';
@@ -835,7 +662,7 @@
             createdAt: new Date().toISOString()
           });
 
-          window.lucide && lucide.createIcons();
+          if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
           scrollToBottom();
           showSendStatus('✓ Enviado', 'success');
           
@@ -871,7 +698,6 @@
           document.getElementById('messageInput').value = '';
           removeFile();
 
-          // Add to UI
           const container = document.getElementById('messagesContainer');
           container.innerHTML += renderMessage({
             role: 'ASSISTANT',
@@ -879,7 +705,7 @@
             createdAt: new Date().toISOString()
           });
 
-          window.lucide && lucide.createIcons();
+          if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
           scrollToBottom();
           showSendStatus('✓ Archivo enviado', 'success');
           
@@ -940,7 +766,6 @@
           showToast('✅ Conversación eliminada', 'success');
           closeChat();
           
-          // Remove from list
           document.querySelector(`[data-phone="${currentPhone}"]`)?.remove();
         } else {
           showToast('❌ Error al eliminar', 'error');
@@ -953,7 +778,7 @@
 
     // Message polling
     function startMessagePolling() {
-      setInterval(checkNewMessages, 3000); // Check every 3 seconds
+      setInterval(checkNewMessages, 3000);
     }
 
     async function checkNewMessages() {
@@ -963,11 +788,8 @@
 
         if (data.hasNew && data.messages.length > 0) {
           lastMessageCheck = new Date().toISOString();
-
-          // Play sound for new messages
           playNotificationSound();
 
-          // Update badges
           data.messages.forEach(msg => {
             const badge = document.querySelector(`[data-phone="${msg.phoneNumber}"] .unread-badge`);
             if (badge) {
@@ -977,7 +799,6 @@
             }
           });
 
-          // If chat is open, reload messages
           if (currentPhone && data.messages.some(m => m.phoneNumber === currentPhone)) {
             await loadMessages(currentPhone);
           }

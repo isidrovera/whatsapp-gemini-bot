@@ -1,4 +1,4 @@
-// src/models/messageTemplate.ts
+// src/models/template.ts
 import { getPrismaClient } from '../config/database'   // ⬅️ sin .js
 import { logger } from '../utils/logger'               // ⬅️ sin .js
 import type { Prisma, MessageTemplate } from '@prisma/client'

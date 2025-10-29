@@ -1,21 +1,66 @@
 // src/index.ts
 import { logger } from './utils/logger.js'
 import { getPrismaClient, disconnectDatabase } from './config/database.js'
-import { initializeWhatsApp, disconnect as disconnectWhatsApp, getConnectionStatus } from './services/whatsapp.js'
+import {
+  initializeWhatsApp,
+  disconnect as disconnectWhatsApp,
+  getConnectionStatus
+} from './services/whatsapp.js'
 import { startWebServer } from './web/server.js'
 
 import * as systemVarModel from './models/systemVar.js'
 import * as conversationModel from './models/conversation.js'
 import * as adminModel from './models/admin.js'
 import * as workingHoursModel from './models/workingHours.js'
-import * as calendarModel from './models/calendar.js'             // 🆕 para mostrar evento de hoy
-import * as holidaySync from './services/holidaySync.js'          // 🆕 sincronización de feriados
+import * as calendarModel from './models/calendar.js'
+import * as holidaySync from './services/holidaySync.js'
 
-// 🆕 NUEVOS MODELOS / SERVICIOS DE NEGOCIO
-import * as configModel from './models/configuration.js'          // claves de configuración unificadas
-import * as departmentModel from './models/department.js'         // departamentos (routing)
-import { initializeGemini } from './config/gemini.js'             // inicialización de Gemini
-import { initializeOdoo } from './services/odoo.js'               // inicialización de Odoo
+import * as configModel from './models/configuration.js'
+import * as departmentModel from './models/department.js'
+import { initializeGemini } from './config/gemini.js'
+import { initializeOdoo } from './services/odoo.js'
+
+// ==============================
+// Protección contra hot-reload
+// ==============================
+declare global {
+  var __appInitialized: boolean | undefined
+  var __appIntervals: NodeJS.Timeout[] | undefined
+}
+
+// Limpiar intervalos anteriores si existen (por hot-reload)
+if (global.__appIntervals && global.__appIntervals.length > 0) {
+  logger.warn(`⚠️  Hot-reload detected. Cleaning ${global.__appIntervals.length} old intervals...`)
+  global.__appIntervals.forEach(clearInterval)
+  global.__appIntervals = []
+}
+
+// Prevenir re-inicialización completa en hot-reload
+if (global.__appInitialized) {
+  logger.warn('⚠️  App already initialized. Skipping re-initialization (hot-reload detected).')
+  logger.warn('   To force full restart, stop the process completely (Ctrl+C) and restart.')
+  process.exit(0) // Salir para que tsx watch reinicie limpio
+}
+
+// Inicializar array de intervalos
+if (!global.__appIntervals) {
+  global.__appIntervals = []
+}
+
+// Flags por ENV
+const ENABLE_HOLIDAYS_RESYNC = (process.env.ENABLE_HOLIDAYS_RESYNC ?? 'false').toLowerCase() === 'true'
+const ENABLE_HEARTBEAT = (process.env.ENABLE_HEARTBEAT ?? 'false').toLowerCase() === 'true'
+
+// Periodos (ms)
+const HOLIDAYS_RESYNC_MS = Math.max(
+  1000 * 60 * 60 * 24 * 7, 
+  Number(process.env.HOLIDAYS_RESYNC_MS || (1000 * 60 * 60 * 24 * 30))
+) // >= 7 días
+
+const HEARTBEAT_MS = Math.max(
+  60_000, 
+  Number(process.env.HEARTBEAT_MS || 300_000)
+) // >= 60s
 
 async function main() {
   try {
@@ -31,13 +76,14 @@ async function main() {
     // 2) Admin
     logger.info('👤 Initializing admin users...')
     await adminModel.initDefaultAdmin()
+    logger.info('✅ Admin users initialized')
 
-    // 3) 🆕 Inicializar configuraciones unificadas
+    // 3) Configuraciones unificadas
     logger.info('⚙️  Initializing configurations...')
     await configModel.initDefaults()
     logger.info('✅ Configurations initialized')
 
-    // 4) Variables de sistema (legacy / compat)
+    // 4) Variables de sistema
     logger.info('⚙️  Initializing system variables...')
     await systemVarModel.initDefaults()
     logger.info('✅ System variables initialized')
@@ -47,24 +93,21 @@ async function main() {
     await workingHoursModel.initDefaults()
     logger.info('✅ Working hours initialized')
 
-    // 6) 🆕 Departamentos
+    // 6) Departamentos
     logger.info('🏢 Initializing departments...')
     await departmentModel.initDefaults()
     logger.info('✅ Departments initialized')
 
-    // 7) 🗓️ Sincronización de feriados (no bloqueante si falla)
+    // 7) Sincronización de feriados (UNA SOLA VEZ al inicio)
+    logger.info('🗓️  Syncing public holidays...')
     try {
-      logger.info('🗓️ Syncing public holidays...')
       await holidaySync.syncPublicHolidays()
       logger.info('✅ Public holidays synced')
     } catch (e) {
-      logger.warn('⚠️ Holiday sync failed (non-blocking):', e)
+      logger.warn('⚠️  Holiday sync failed (non-blocking):', e)
     }
 
-    // (Opcional) Re-sincronizar cada mes
-    // setInterval(() => holidaySync.syncPublicHolidays().catch(() => {}), 1000 * 60 * 60 * 24 * 30)
-
-    // 8) 🆕 Gemini
+    // 8) Gemini
     logger.info('🤖 Initializing Gemini AI...')
     try {
       await initializeGemini()
@@ -74,7 +117,7 @@ async function main() {
       logger.warn(`   Visit: http://localhost:${process.env.WEB_PORT || 3000}/settings`)
     }
 
-    // 9) 🆕 Odoo
+    // 9) Odoo
     logger.info('🏢 Initializing Odoo ERP...')
     try {
       await initializeOdoo()
@@ -83,47 +126,80 @@ async function main() {
       logger.warn('⚠️  Odoo initialization failed. Configure credentials in Settings.')
     }
 
-    // 10) Limpiar conversaciones antiguas (>30 días)
+    // 10) Limpiar conversaciones antiguas
     logger.info('🧹 Cleaning old conversations...')
     const deletedCount = await conversationModel.deleteOld(30)
     logger.info(`✅ Deleted ${deletedCount} old conversations`)
 
-    // 11) WhatsApp
+    // 11) Web server
+    logger.info('🌐 Starting web admin panel...')
+    startWebServer()
+    logger.info('✅ Web admin panel started')
+
+    // 12) WhatsApp
     logger.info('📱 Initializing WhatsApp client...')
     await initializeWhatsApp()
 
-    // Esperar conexión
     let attempts = 0
     while (!getConnectionStatus() && attempts < 60) {
       await new Promise((resolve) => setTimeout(resolve, 1000))
       attempts++
+      if (attempts % 10 === 0) {
+        logger.info(`⏳ Waiting for WhatsApp connection... (${attempts}s)`)
+      }
     }
 
     if (getConnectionStatus()) {
       logger.info('✅ WhatsApp client ready')
     } else {
-      logger.warn('⚠️  WhatsApp client initialized but not connected yet')
-      logger.warn('   Please scan the QR code at: http://localhost:3000/auth/qr')
+      logger.warn('⚠️  WhatsApp did not connect within 60s')
+      logger.warn(`   Please scan the QR code at: http://localhost:${process.env.WEB_PORT || 3000}/auth/qr`)
     }
 
-    // 12) Web
-    logger.info('🌐 Starting web admin panel...')
-    startWebServer()
-
-    // 13) Info final
+    // 13) Logs finales
     logger.info('='.repeat(50))
     logger.info('🤖 Bot is running and ready to receive messages!')
     logger.info('📱 WhatsApp: ' + (getConnectionStatus() ? 'Connected ✅' : 'Waiting for QR scan ⏳'))
-    logger.info(`🌐 Web Panel: http://localhost:${process.env.WEB_PORT || 3000}`)
-    logger.info(`🔐 Login: http://localhost:${process.env.WEB_PORT || 3000}/auth/login`)
-    logger.info(`⚙️  Settings: http://localhost:${process.env.WEB_PORT || 3000}/settings`)
+    logger.info(`🌐 Web Panel:  http://localhost:${process.env.WEB_PORT || 3000}`)
+    logger.info(`🔐 Login:      http://localhost:${process.env.WEB_PORT || 3000}/auth/login`)
+    logger.info(`⚙️  Settings:   http://localhost:${process.env.WEB_PORT || 3000}/settings`)
     logger.info('='.repeat(50))
 
-    // 14) Mostrar configuración útil (estado de atención + servicios + stats)
+    // 14) Config info
     await displayConfigInfo()
 
-    // 15) Señales de terminación
+    // 15) Heartbeat (solo si está habilitado)
+    if (ENABLE_HEARTBEAT) {
+      const heartbeatInterval = setInterval(() => {
+        logger.info(`🫀 Health: WhatsApp=${getConnectionStatus() ? 'Connected' : 'Disconnected'}`)
+      }, HEARTBEAT_MS)
+      
+      global.__appIntervals!.push(heartbeatInterval)
+      logger.info(`🫀 Heartbeat enabled (every ${Math.round(HEARTBEAT_MS / 1000)}s)`)
+    } else {
+      logger.info('🫀 Heartbeat disabled (set ENABLE_HEARTBEAT=true to enable)')
+    }
+
+    // 16) Re-sincronización de feriados (solo si está habilitado)
+    if (ENABLE_HOLIDAYS_RESYNC) {
+      const holidaysInterval = setInterval(() => {
+        holidaySync
+          .syncPublicHolidays()
+          .then(() => logger.info('🗓️  Monthly public holidays re-sync: ✅ OK'))
+          .catch((e) => logger.warn('⚠️  Monthly holiday re-sync failed:', e))
+      }, HOLIDAYS_RESYNC_MS)
+      
+      global.__appIntervals!.push(holidaysInterval)
+      logger.info(`🗓️  Holiday re-sync enabled (every ${Math.round(HOLIDAYS_RESYNC_MS / (1000 * 60 * 60 * 24))} days)`)
+    } else {
+      logger.info('🗓️  Holiday re-sync disabled (set ENABLE_HOLIDAYS_RESYNC=true to enable)')
+    }
+
+    // 17) Señales de terminación
     setupGracefulShutdown()
+
+    // Marcar como inicializado
+    global.__appInitialized = true
 
   } catch (error) {
     logger.error('❌ Fatal error starting bot:', error)
@@ -131,7 +207,6 @@ async function main() {
   }
 }
 
-// 🆕 Mostrar estado de horarios/feriados, servicios y datos de negocio
 async function displayConfigInfo() {
   try {
     const now = new Date()
@@ -160,13 +235,12 @@ async function displayConfigInfo() {
       logger.info(`   Calendar: ${todayEvent.title} (${todayEvent.type})`)
     }
 
-    logger.info(`   Status: ${status.isOpen ? '✅ Open' : '🔒 Closed'}`)
+    logger.info(`   Status: ${status.isOpen ? '✅ Open' : `🔒 Closed (${status.reason || 'unknown'})`}`)
 
     if (!status.isOpen && nextOpen) {
       logger.info(`   Next open: ${workingHoursModel.formatDateTime(nextOpen, tz)}`)
     }
 
-    // ======= NUEVO: Estado de servicios y validaciones =======
     logger.info('')
     logger.info('🔧 Services Status:')
 
@@ -175,8 +249,19 @@ async function displayConfigInfo() {
     const apisToken = await configModel.get('external_api', 'apis_token')
 
     logger.info(`   Gemini AI: ${geminiApiKey ? '✅ Configured' : '⚠️  Not configured'}`)
+    if (!geminiApiKey) {
+      logger.warn(`   🔧 Configure at /settings → category: gemini, key: api_key`)
+    }
+
     logger.info(`   Odoo ERP: ${odooUrl ? '✅ Configured' : '⚠️  Not configured'}`)
+    if (!odooUrl) {
+      logger.warn(`   🔧 Configure at /settings → category: odoo, key: url`)
+    }
+
     logger.info(`   APIs.net.pe: ${apisToken ? '✅ Configured' : '⚠️  Not configured'}`)
+    if (!apisToken) {
+      logger.warn(`   🔧 Configure at /settings → category: external_api, key: apis_token`)
+    }
 
     const validation = await configModel.validateCritical()
     if (!validation.isValid) {
@@ -190,11 +275,10 @@ async function displayConfigInfo() {
     logger.info('')
     logger.info('📊 Configuration Stats:')
     logger.info(`   Total configs: ${stats.total}`)
-    logger.info(`   Configured: ${stats.configured}`)
-    logger.info(`   Pending: ${stats.pending}`)
-    logger.info(`   Encrypted: ${stats.encrypted}`)
+    logger.info(`   Configured:    ${stats.configured}`)
+    logger.info(`   Pending:       ${stats.pending}`)
+    logger.info(`   Encrypted:     ${stats.encrypted}`)
 
-    // ======= NUEVO: Departamentos activos =======
     const departments = await departmentModel.getActive()
     logger.info('')
     logger.info('🏢 Active Departments:')
@@ -219,13 +303,21 @@ function setupGracefulShutdown() {
     logger.info(`\n${signal} received. Shutting down gracefully...`)
 
     try {
-      // WhatsApp
+      // Limpiar intervalos
+      if (global.__appIntervals && global.__appIntervals.length > 0) {
+        logger.info(`🧹 Clearing ${global.__appIntervals.length} intervals...`)
+        global.__appIntervals.forEach(clearInterval)
+        global.__appIntervals = []
+      }
+
       logger.info('Disconnecting WhatsApp...')
       await disconnectWhatsApp()
 
-      // DB
       logger.info('Disconnecting database...')
       await disconnectDatabase()
+
+      // Resetear flag
+      global.__appInitialized = false
 
       logger.info('✅ Shutdown complete')
       process.exit(0)
@@ -248,5 +340,4 @@ function setupGracefulShutdown() {
   })
 }
 
-// Iniciar bot
 main()
