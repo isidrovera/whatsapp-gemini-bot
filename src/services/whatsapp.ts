@@ -14,16 +14,29 @@ import { logger } from '../utils/logger.js';
 import * as blockedModel from '../models/blocked.js';
 import * as contactModel from '../models/contact.js';
 import * as geminiService from './gemini.js';
-import * as imageProcessor from './imageProcessor.js';
+
+// ⬇️ NUEVO: importamos tipos y helpers estructurados
+import {
+  getMediaType,
+  processImage,
+  processVideo,
+  processAudio,
+  processDocument,
+  extractAnydeskCodeFromAnalysis,
+  type MediaAnalysisResult,
+} from './imageProcessor.js';
+
 import {
   isGroupJid,
   normalizePhone,
-  extractPhoneFromJid, // lo seguimos usando solo en casos estables (bot self-id)
+  extractPhoneFromJid,
 } from '../utils/validators.js';
 
-// Horarios / Plantillas
+// Horarios / Plantillas / Config Dinámica
 import * as workingHoursModel from '../models/workingHours.js';
 import * as systemVarModel from '../models/systemVar.js';
+import * as configurationModel from '../models/configuration.js';
+import * as messageTemplateModel from '../models/template.js';
 
 // Odoo
 import {
@@ -36,10 +49,13 @@ import {
 import * as autoResponseModel from '../models/autoResponse.js';
 import { replaceVariables } from '../utils/formatters.js';
 
-// 🔄 DNI/RUC externo (RENIEC / SUNAT)
+// DNI/RUC externo
 import * as external from './external.js';
 
-// ⭐ MOD: necesitamos acceso directo a prisma aquí para guardar RUC provisional
+// Tags (HUMANO / URGENTE / etc)
+import * as tagModel from '../models/tag.js';
+
+// Prisma directo (para guardar RUC provisional)
 import { getPrismaClient } from '../config/database.js';
 const prisma = getPrismaClient();
 
@@ -47,23 +63,21 @@ const prisma = getPrismaClient();
 // ESTADO INTERNO WHATSAPP
 // ==================================================
 let sock: WASocket | null = null;
-let isReady = false; // = conectado OK
+let isReady = false;
 let botPhoneNumber: string | null = null;
 const startTime = Date.now();
 
-// Estado QR / conexión
-let currentQR: string | null = null; // string crudo que entrega Baileys
-let qrDataURL: string | null = null; // data:image/png;base64,...
+let currentQR: string | null = null;
+let qrDataURL: string | null = null;
 
-// takeover helpers internos
 const HUMAN_TAKEOVER_COMMAND = '/humano';
 const RELEASE_TAKEOVER_COMMAND = '/auto';
 
-const botSentMessageIds = new Map<string, number>(); // id -> expiresAt
+const botSentMessageIds = new Map<string, number>();
 const BOT_ID_TTL_MS = 5 * 60 * 1000;
 
 // ==================================================
-// HELPERS INTERNOS
+// HELPERS INTERNOS BASE
 // ==================================================
 function markBotMessageId(id: string) {
   botSentMessageIds.set(id, Date.now() + BOT_ID_TTL_MS);
@@ -81,35 +95,64 @@ function isFromBotById(id?: string | null) {
 
 type UpsertType = 'notify' | 'append' | 'replace' | string;
 
-/**
- * normaliza un remoteJid tipo
- *   "51924894829@s.whatsapp.net"
- *   "51924894829:10@s.whatsapp.net"
- *   "51924894829:10@newsletter.whatsapp.net"
- * a solo "51924894829"
- */
 function normalizeJidToPhone(remoteJid: string): string {
   if (!remoteJid) return '';
-  // Parte izquierda antes del "@"
-  const leftSide = remoteJid.split('@')[0]; // "5192...:10"
-  // Quita sufijo ":10"
-  const justNumber = leftSide.split(':')[0]; // "5192..."
-  // Asegura dígitos
+  const leftSide = remoteJid.split('@')[0];
+  const justNumber = leftSide.split(':')[0];
   return justNumber.replace(/\D/g, '');
 }
 
-/**
- * Construye el menú interactivo para el cliente.
- * MOSTRAMOS SIEMPRE que ya está registrado.
- */
-function buildMainMenu(contact: any): string {
-  // intentamos mostrar la empresa primaria:
+// ==================================================
+// HELPER: detectar mensaje urgente
+// ==================================================
+function esUrgente(text: string): boolean {
+  const lower = (text || '').toLowerCase();
+  return (
+    lower.includes('urgente') ||
+    lower.includes('es urgente') ||
+    lower.includes('emergencia') ||
+    lower.includes('soporte urgente') ||
+    lower.includes('ayuda urgente')
+  );
+}
+
+// ==================================================
+// MENSAJE / MENÚ PRINCIPAL (DINÁMICO SI EXISTE PLANTILLA)
+// ==================================================
+async function buildMainMenu(contact: any): Promise<string> {
+  // intentamos información de empresa activa
   const { companyName } = contactModel.resolvePrimaryCompany(contact) || {};
 
+  // Intentar plantilla dinámica desde configuration/messageTemplate.
+  // Priorizamos configuration.templates.main_menu
+  let dynamicMenu: string | null = null;
+
+  // 1) configuration: category 'templates', key 'main_menu'
+  const configMainMenu = await configurationModel.get('templates', 'main_menu');
+  if (configMainMenu && configMainMenu.trim().length > 0) {
+    dynamicMenu = configMainMenu;
+  } else {
+    // 2) messageTemplate: category='menu', name='main_menu'
+    const tplList = await messageTemplateModel.getByCategory('menu');
+    const tpl = tplList.find((t) => t.name === 'main_menu');
+    if (tpl?.content) {
+      dynamicMenu = tpl.content;
+    }
+  }
+
+  const varsBase = {
+    customer_name: contact?.name || '',
+    company_name: companyName || contact?.companyName || '',
+  };
+
+  if (dynamicMenu) {
+    return messageTemplateModel.render(dynamicMenu, varsBase);
+  }
+
+  // Fallback HARDCODEADO
   return (
-    `👋 Hola ${contact.name || ''}${
-      companyName ? ` (${companyName})` : ''
-    }\n\n` +
+    `👋 Hola ${varsBase.customer_name || ''}` +
+    `${varsBase.company_name ? ` (${varsBase.company_name})` : ''}\n\n` +
     `Por favor elige una opción:\n` +
     `1️⃣ Solicitud de *servicio técnico en sitio*\n` +
     `2️⃣ Solicitud de *tóner / suministros*\n` +
@@ -119,9 +162,9 @@ function buildMainMenu(contact: any): string {
   );
 }
 
-/**
- * Menú para elegir empresa activa cuando el contacto tiene varias.
- */
+// ==================================================
+// MENÚ PARA ELEGIR EMPRESA
+// ==================================================
 function buildCompanySelectionMenu(contact: any): string {
   if (!contact.companies || contact.companies.length === 0) {
     return 'No encuentro empresas asociadas a tu número 😕';
@@ -137,9 +180,9 @@ function buildCompanySelectionMenu(contact: any): string {
   return msg;
 }
 
-/**
- * Envía mensaje fuera de horario usando plantillas configurables.
- */
+// ==================================================
+// PLANTILLA FUERA DE HORARIO
+// ==================================================
 async function replyOutOfHours(jid: string) {
   const status = await workingHoursModel.getStatusInfo(new Date());
   const [nextOpen, tz, aftTpl, brTpl, holTpl] = await Promise.all([
@@ -196,9 +239,67 @@ async function replyOutOfHours(jid: string) {
   await sendMessage(jid, msg);
 }
 
-/**
- * Extrae el texto limpio de un mensaje entrante de WhatsApp.
- */
+// ==================================================
+// ESCALAMIENTO HUMANO URGENTE (FUERA DE HORARIO)
+// ==================================================
+async function escalarUrgenteFueraDeHorario(
+  jid: string,
+  phoneE164: string
+) {
+  // 1. Crear / asegurar tag HUMANO
+  let allTags = await tagModel.getAll();
+  let humanTag = allTags.find(
+    (t: any) => (t.name || '').toUpperCase() === 'HUMANO'
+  );
+
+  if (!humanTag) {
+    humanTag = await tagModel.create({
+      name: 'HUMANO',
+      color: '#ff0000',
+      description: 'Escalado a soporte humano urgente',
+    });
+  }
+
+  const existingTags = await tagModel.getByConversation(phoneE164);
+  const alreadyTagged = existingTags.some(
+    (t: any) => (t.name || '').toUpperCase() === 'HUMANO'
+  );
+  if (!alreadyTagged) {
+    await tagModel.assignToConversation(phoneE164, humanTag.id);
+  }
+
+  // 2. takeover humano en el contacto
+  await contactModel.setHumanTakeover(phoneE164);
+
+  // 3. Mensaje dinámico de escalada
+  let escaladaTpl =
+    (await configurationModel.get('templates', 'urgent_human_message')) || '';
+
+  if (!escaladaTpl) {
+    const tplList = await messageTemplateModel.getByCategory('templates');
+    const found = tplList.find((t) => t.name === 'urgent_human_message');
+    if (found?.content) {
+      escaladaTpl = found.content;
+    }
+  }
+
+  if (!escaladaTpl) {
+    escaladaTpl =
+      '⚠ Entendido. Estoy derivando tu caso a soporte humano ahora mismo. Un técnico te responderá en breve.';
+  }
+
+  const sysVars = await configurationModel.getForSystemVariables();
+  const rendered = messageTemplateModel.render(escaladaTpl, {
+    company_name: sysVars.company_name || '',
+    company_phone: sysVars.company_phone || '',
+  });
+
+  await sendMessage(jid, rendered);
+}
+
+// ==================================================
+// EXTRACCIÓN CONTENIDO MENSAJE
+// ==================================================
 function extractMessageText(message: proto.IWebMessageInfo): string {
   const messageContent = message.message;
   if (!messageContent) return '';
@@ -216,9 +317,9 @@ function extractMessageText(message: proto.IWebMessageInfo): string {
   return '';
 }
 
-/**
- * Genera la URL única de servicio / tóner en base a la empresa primaria del contacto.
- */
+// ==================================================
+// LINK A ODOO
+// ==================================================
 async function generateOdooLinkForContact(contact: any, phone: string) {
   const { companyName } = contactModel.resolvePrimaryCompany(contact);
   if (!companyName) return null;
@@ -226,7 +327,7 @@ async function generateOdooLinkForContact(contact: any, phone: string) {
   return await getOdooServiceLink(companyName, userName, phone);
 }
 
-// ⭐ MOD: guarda el RUC provisional cuando el RUC no existe en BD aún
+// guarda RUC provisional en contacto
 async function saveProvisionalRUC(phoneE164: string, ruc: string) {
   try {
     await prisma.contact.update({
@@ -239,7 +340,7 @@ async function saveProvisionalRUC(phoneE164: string, ruc: string) {
 }
 
 // ==================================================
-// INICIALIZACIÓN WHATSAPP (Baileys)
+// INICIALIZACIÓN WHATSAPP (BAILEYS)
 // ==================================================
 export async function initializeWhatsApp() {
   try {
@@ -261,7 +362,6 @@ export async function initializeWhatsApp() {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        // QR recibido → aún no conectado
         logger.info('QR Code received, scan to authenticate:');
         qrcode.generate(qr, { small: true });
 
@@ -284,15 +384,12 @@ export async function initializeWhatsApp() {
 
         logger.warn('Connection closed. Reconnecting:', shouldReconnect);
 
-        // Marcar estado desconectado
         isReady = false;
         botPhoneNumber = null;
 
         if (shouldReconnect) {
-          // Reintentar conexión
           setTimeout(() => initializeWhatsApp(), 3000);
         } else {
-          // loggedOut => hay que borrar baileys_auth manualmente
           logger.error(
             'Logged out. Please delete baileys_auth folder and restart.'
           );
@@ -302,14 +399,12 @@ export async function initializeWhatsApp() {
       }
 
       if (connection === 'open') {
-        // Conexión OK
         logger.info('✅ WhatsApp connected successfully!');
         isReady = true;
         currentQR = null;
         qrDataURL = null;
 
         if (sock?.user?.id) {
-          // Acá podemos usar extractPhoneFromJid porque el jid de "yo" no viene con :10
           botPhoneNumber = extractPhoneFromJid(sock.user.id);
           logger.info(`📱 Bot phone number: ${botPhoneNumber}`);
         }
@@ -330,7 +425,7 @@ export async function initializeWhatsApp() {
 }
 
 // ==================================================
-// MENSAJES QUE ENVÍA EL HUMANO DESDE EL MISMO NÚMERO (fromMe)
+// MENSAJES DESDE EL MISMO NÚMERO DEL BOT (HUMANO)
 // ==================================================
 async function handleAgentMessageFromMe(
   senderJid: string,
@@ -339,16 +434,13 @@ async function handleAgentMessageFromMe(
   const messageText = extractMessageText(message);
   const textLower = (messageText || '').toLowerCase().trim();
 
-  // usamos normalizeJidToPhone para cubrir casos tipo ":10@s.whatsapp.net"
   const phoneNumber = normalizeJidToPhone(senderJid);
   const normalizedPhone = normalizePhone(phoneNumber);
 
-  // comandos manuales takeover
+  // takeover manual
   if (textLower === HUMAN_TAKEOVER_COMMAND) {
     await contactModel.setHumanTakeover(normalizedPhone);
-    logger.info(
-      `[HUMAN-TAKEOVER] ✋ Manually activated for ${normalizedPhone}`
-    );
+    logger.info(`[HUMAN-TAKEOVER] ✋ Manually activated for ${normalizedPhone}`);
     return;
   }
 
@@ -360,10 +452,9 @@ async function handleAgentMessageFromMe(
     return;
   }
 
-  // cualquier mensaje del humano = activar / renovar takeover
+  // cualquier mensaje del humano renueva takeover
   if (messageText && messageText.trim().length > 0) {
     const contact = await contactModel.findByPhone(normalizedPhone);
-
     const now = new Date();
     const oneHourInMs = 60 * 60 * 1000;
 
@@ -397,13 +488,13 @@ async function handleIncomingMessage(
   upsertType?: UpsertType
 ) {
   try {
-    // Ignorar mensajes anteriores al arranque del proceso
+    // ignorar mensajes viejos
     if ((message.messageTimestamp as number) * 1000 < startTime) return;
 
     const senderJid = message.key.remoteJid;
     if (!senderJid) return;
 
-    // Evitar eco de mensajes que nosotros mismos acabamos de mandar
+    // ignorar eco propio
     if (upsertType === 'append') {
       logger.debug('Ignoring local append upsert (likely our own send)');
       return;
@@ -415,13 +506,13 @@ async function handleIncomingMessage(
       return;
     }
 
-    // Mensajes enviados por el mismo número del bot (agente humano respondiendo manualmente)
+    // mensaje del mismo número del bot => humano contestando
     if (message.key.fromMe) {
       await handleAgentMessageFromMe(senderJid, message);
       return;
     }
 
-    // Ignorar / bloquear grupos
+    // ignorar / bloquear grupos
     if (isGroupJid(senderJid)) {
       logger.info(`Message from group ${senderJid} - ignoring`);
       const isBlockedGroup = await blockedModel.isBlocked(senderJid);
@@ -436,8 +527,7 @@ async function handleIncomingMessage(
       return;
     }
 
-    // === Cliente real / chat 1 a 1 ===
-    // IMPORTANTE: usamos normalizeJidToPhone para soportar JIDs con sufijos tipo ":10"
+    // normalizamos número
     const phoneNumberRaw = normalizeJidToPhone(senderJid);
     const normalizedPhone = normalizePhone(phoneNumberRaw);
 
@@ -448,16 +538,14 @@ async function handleIncomingMessage(
       return;
     }
 
-    // Está bloqueado?
+    // bloqueado?
     const isBlockedNum = await blockedModel.isBlocked(normalizedPhone);
     if (isBlockedNum) {
-      logger.info(
-        `Message from blocked number ${normalizedPhone} - ignoring`
-      );
+      logger.info(`Message from blocked number ${normalizedPhone} - ignoring`);
       return;
     }
 
-    // takeover humano activo?
+    // takeover humano?
     const shouldRespond = await contactModel.shouldBotRespond(normalizedPhone);
     if (!shouldRespond) {
       logger.info(
@@ -466,63 +554,71 @@ async function handleIncomingMessage(
       return;
     }
 
-    // horario de atención (defensivo)
-    const status = await workingHoursModel.getStatusInfo(new Date());
-    if (!status || status.isOpen === false) {
-      await replyOutOfHours(senderJid);
-      return;
-    }
-
-    // Extraer contenido
+    // ==========================================================
+    // EXTRAER TEXTO Y ANALIZAR MEDIA CON GEMINI MULTIMODAL
+    // ==========================================================
     const rawText = extractMessageText(message);
-    const mediaType = imageProcessor.getMediaType(message);
+    const mediaType = getMediaType(message);
 
-    let mediaAnalysis: string | null = null;
+    // NUEVO: resultado estructurado de media (imagen/audio/video/documento)
+    let mediaAnalysisResult: MediaAnalysisResult | null = null;
     let anydeskCode: string | null = null;
+    let finalMessageTextFromMedia: string | null = null;
 
     if (mediaType) {
       logger.info(
         `[WHATSAPP] Processing ${mediaType} from ${normalizedPhone}...`
       );
 
-      switch (mediaType) {
-        case 'image': {
-          mediaAnalysis = await imageProcessor.processImage(message);
-          if (mediaAnalysis) {
-            anydeskCode = imageProcessor.extractAnydeskCode(mediaAnalysis);
-            if (anydeskCode) {
-              logger.info(`[ANYDESK] Code extracted: ${anydeskCode}`);
-            }
-          }
-          break;
+      try {
+        if (mediaType === 'image') {
+          mediaAnalysisResult = await processImage(message);
+        } else if (mediaType === 'audio') {
+          mediaAnalysisResult = await processAudio(message);
+        } else if (mediaType === 'video') {
+          mediaAnalysisResult = await processVideo(message);
+        } else if (mediaType === 'document') {
+          mediaAnalysisResult = await processDocument(message);
         }
-        case 'video':
-          mediaAnalysis = await imageProcessor.processVideo(message);
-          break;
-        case 'audio':
-          mediaAnalysis = await imageProcessor.processAudio(message);
-          break;
-        case 'document':
-          mediaAnalysis = await imageProcessor.processDocument(message);
-          break;
+
+        if (mediaAnalysisResult) {
+          // anydesk detectado
+          anydeskCode = extractAnydeskCodeFromAnalysis(mediaAnalysisResult);
+          if (anydeskCode) {
+            logger.info(`[ANYDESK] Code extracted: ${anydeskCode}`);
+          }
+
+          // texto base si el usuario no escribió nada
+          finalMessageTextFromMedia =
+            mediaAnalysisResult.ocrText ||
+            mediaAnalysisResult.rawSummary ||
+            null;
+
+          // log técnico
+          logger.info('[WHATSAPP] Media analysis summary:', {
+            summary: mediaAnalysisResult.rawSummary,
+            serial: mediaAnalysisResult.detectedSerial,
+            errorCode: mediaAnalysisResult.detectedErrorCode,
+            anydesk: mediaAnalysisResult.detectedAnydesk,
+            class: mediaAnalysisResult.mediaTypeClass,
+          });
+        }
+      } catch (err: any) {
+        logger.error('[WHATSAPP] Media processing error:', {
+          message: err?.message,
+          stack: err?.stack,
+        });
       }
     }
 
-    // mensaje final de texto para procesar
-    let finalMessageText = rawText;
-    if (!finalMessageText || finalMessageText.trim().length === 0) {
-      if (mediaAnalysis) {
-        finalMessageText = mediaAnalysis;
+    // mensaje final para el flujo
+    let finalMessageText = (rawText || '').trim();
+
+    if (!finalMessageText) {
+      if (finalMessageTextFromMedia) {
+        finalMessageText = finalMessageTextFromMedia.trim();
       } else if (mediaType) {
-        finalMessageText = `[El usuario envió ${
-          mediaType === 'image'
-            ? 'una imagen'
-            : mediaType === 'video'
-            ? 'un video'
-            : mediaType === 'audio'
-            ? 'un audio'
-            : 'un documento'
-        }]`;
+        finalMessageText = `[El usuario envió ${mediaType} con información técnica detectada]`;
       } else {
         logger.info('Empty message received - ignoring');
         return;
@@ -532,57 +628,68 @@ async function handleIncomingMessage(
     logger.info(
       `Message from ${normalizedPhone}: ${finalMessageText.substring(
         0,
-        80
+        120
       )}... ${mediaType ? `[+${mediaType.toUpperCase()}]` : ''}`
     );
 
-    // Asegurar contacto en BD (esto crea el contacto si es la primera vez)
+    // asegurar contacto
     await contactModel.getOrCreate(normalizedPhone);
     let contact = await contactModel.findByPhone(normalizedPhone);
     let state = contact?.state || 'NEW';
 
-    // --------------------------------------------
-    // 1. AUTO-RESPUESTAS
-    // --------------------------------------------
-    const autoResp = await autoResponseModel.findByTrigger(finalMessageText);
-    if (autoResp) {
-      logger.info(
-        `[AUTO-RESPONSE] Matched trigger "${autoResp.trigger}" for ${normalizedPhone}`
-      );
+    // ==========================================================
+    // 0. HORARIO / URGENCIA
+    // ==========================================================
+    const status = await workingHoursModel.getStatusInfo(new Date());
+    const negocioCerrado = !status?.isOpen;
 
-      const systemVars = await systemVarModel.getVariablesForPrompt();
-      const responseText = replaceVariables(autoResp.response, {
-        ...systemVars,
-        name: contact?.name || 'Usuario',
-        company_name_user: contact?.companyName || 'su empresa',
-        phone: normalizedPhone,
-      });
+    if (negocioCerrado) {
+      // fuera de horario:
+      if (esUrgente(finalMessageText)) {
+        // escalar a humano y NO mandar "Aún no abrimos"
+        await escalarUrgenteFueraDeHorario(senderJid, normalizedPhone);
+        return;
+      }
 
-      await sendMessage(senderJid, responseText);
-      logger.info(
-        `[AUTO-RESPONSE] Sent response (category: ${
-          autoResp.category || 'none'
-        })`
-      );
+      // no urgente => respuesta fuera de horario
+      await replyOutOfHours(senderJid);
       return;
     }
 
-    // --------------------------------------------
-    // 2. FLUJO DE REGISTRO (DNI -> nombre -> RUC -> empresa)
-    //
-    // Estados manejados aquí:
-    //   - NEW
-    //   - WAITING_DNI
-    //   - WAITING_RUC
-    //   - WAITING_COMPANY_NAME  ⭐ MOD (nuevo estado intermedio)
-    //   - SELECTING_COMPANY
-    //   - MENU / REGISTERED
-    //   - WAITING_REMOTE_INFO
-    // --------------------------------------------
+    // ==========================================================
+    // 1. AUTO-RESPUESTAS DINÁMICAS (base de datos)
+    // ==========================================================
+    const autoResp = await autoResponseModel.findAndProcessResponse(
+      finalMessageText,
+      {
+        contact: {
+          name: contact?.name || null,
+          dni: contact?.dni || null,
+          phoneNumber: normalizedPhone,
+          companyName: contact?.companyName || null,
+          ruc: contact?.ruc || null,
+        },
+        company: {
+          razonSocial: contact?.companyName || null,
+          numeroDoc: contact?.ruc || null,
+          name: contact?.companyName || null,
+          ruc: contact?.ruc || null,
+        },
+        customVars: {},
+      }
+    );
 
-    //
-    // 2.a) Si es NEW -> pasamos a pedir DNI
-    //
+    if (autoResp) {
+      logger.info(
+        `[AUTO-RESPONSE] Sent auto-response for ${normalizedPhone}`
+      );
+      await sendMessage(senderJid, autoResp);
+      return;
+    }
+
+    // ==========================================================
+    // 2. FLUJO DE REGISTRO (DNI / RUC / EMPRESA / MENU)
+    // ==========================================================
     if (state === 'NEW') {
       await contactModel.updateState(normalizedPhone, 'WAITING_DNI');
       await sendMessage(
@@ -592,9 +699,6 @@ async function handleIncomingMessage(
       return;
     }
 
-    //
-    // 2.b) WAITING_DNI -> validar DNI con RENIEC vía external.validateDNI
-    //
     if (state === 'WAITING_DNI') {
       const dniCandidate = finalMessageText.trim();
       const isDniValid = /^\d{8}$/.test(dniCandidate);
@@ -607,7 +711,6 @@ async function handleIncomingMessage(
         return;
       }
 
-      // 🔎 Consultamos RENIEC
       const persona = await external.validateDNI(dniCandidate);
 
       if (!persona) {
@@ -633,23 +736,6 @@ async function handleIncomingMessage(
       return;
     }
 
-    //
-    // 2.c) WAITING_RUC
-    //
-    // ⭐ MOD IMPORTANTE:
-    // Antes tú SIEMPRE ibas directo a SUNAT y luego a updateRUC().
-    // Problema: si el RUC YA EXISTE en BD, igual intentabas recrear todo
-    // y el flujo se trababa.
-    //
-    // Ahora:
-    //   1. Intentamos vincular a una empresa EXISTENTE con ese RUC
-    //      contactModel.linkExistingCompanyByRucAndSetPrimary()
-    //      - esto solo linkea, no crea
-    //   2. Si ok === true => contacto queda REGISTERED / MENU
-    //   3. Si no existe esa empresa todavía:
-    //         hacemos la validación SUNAT, pedimos razón social (o la tomamos),
-    //         pero si SUNAT falla igual pedimos razón social manual
-    //
     if (state === 'WAITING_RUC') {
       const rucCandidate = finalMessageText.trim();
       const isRucBasicValid = /^\d{11}$/.test(rucCandidate);
@@ -662,7 +748,7 @@ async function handleIncomingMessage(
         return;
       }
 
-      // 2.c.1: intentar linkear con empresa YA existente
+      // Intentar linkear con empresa ya existente
       const linkRes =
         await contactModel.linkExistingCompanyByRucAndSetPrimary(
           normalizedPhone,
@@ -670,13 +756,13 @@ async function handleIncomingMessage(
         );
 
       if (linkRes.ok === true) {
-        // ya quedó asociada la empresa primaria, y contacto.state pasa a REGISTERED internamente
-        // recargamos contacto
         contact = await contactModel.findByPhone(normalizedPhone);
 
-        // si tiene varias empresas → seleccionar
         if (contact?.companies && contact.companies.length > 1) {
-          await contactModel.updateState(normalizedPhone, 'SELECTING_COMPANY');
+          await contactModel.updateState(
+            normalizedPhone,
+            'SELECTING_COMPANY'
+          );
 
           await sendMessage(
             senderJid,
@@ -686,31 +772,25 @@ async function handleIncomingMessage(
           return;
         }
 
-        // si tiene 1 sola → vamos directo a MENU
         await contactModel.updateState(normalizedPhone, 'MENU');
-
         contact = await contactModel.findByPhone(normalizedPhone);
 
         await sendMessage(
           senderJid,
           `¡Excelente! Quedaste registrado con ${contact.companyName} ✅`
         );
-        await sendMessage(senderJid, buildMainMenu(contact));
+        await sendMessage(senderJid, await buildMainMenu(contact));
         return;
       }
 
-      // 2.c.2: si NO existe la empresa con ese RUC en BD todavía,
-      // consultamos SUNAT para traer razón social automática.
+      // Empresa NO existe → consultar SUNAT
       const infoRuc = await external.validateRUC(rucCandidate);
 
       if (!infoRuc) {
-        // No pudimos validar SUNAT tampoco.
-        // Pedimos razón social manual.
         await contactModel.updateState(
           normalizedPhone,
           'WAITING_COMPANY_NAME'
         );
-
         await saveProvisionalRUC(normalizedPhone, rucCandidate);
 
         await sendMessage(
@@ -720,7 +800,6 @@ async function handleIncomingMessage(
         return;
       }
 
-      // Si sí tenemos info SUNAT, ya podemos registrar directo usando updateRUC()
       const razonSocial =
         infoRuc.razonSocial || `Empresa ${rucCandidate}`.trim();
 
@@ -732,9 +811,11 @@ async function handleIncomingMessage(
 
       contact = await contactModel.findByPhone(normalizedPhone);
 
-      // ¿tiene más de una empresa asociada?
       if (contact?.companies && contact.companies.length > 1) {
-        await contactModel.updateState(normalizedPhone, 'SELECTING_COMPANY');
+        await contactModel.updateState(
+          normalizedPhone,
+          'SELECTING_COMPANY'
+        );
 
         await sendMessage(
           senderJid,
@@ -744,38 +825,24 @@ async function handleIncomingMessage(
         return;
       }
 
-      // si sólo tiene una → listo, pasa a MENU
       await contactModel.updateState(normalizedPhone, 'MENU');
-
       contact = await contactModel.findByPhone(normalizedPhone);
 
       await sendMessage(
         senderJid,
         `¡Excelente! Quedaste registrado con ${contact.companyName} ✅`
       );
-      await sendMessage(senderJid, buildMainMenu(contact));
+      await sendMessage(senderJid, await buildMainMenu(contact));
       return;
     }
 
-    //
-    // ⭐ MOD NUEVO ESTADO:
-    // 2.c.bis) WAITING_COMPANY_NAME
-    //
-    // Entramos acá cuando:
-    //  - El usuario ya dio RUC válido
-    //  - Esa empresa NO existía en BD
-    //  - SUNAT tampoco devolvió datos
-    //  - Le pedimos manualmente la razón social
-    //
     if (state === 'WAITING_COMPANY_NAME') {
       const razonSocialManual = finalMessageText.trim();
 
-      // leemos el contacto actual para extraer el RUC provisional que guardamos
       contact = await contactModel.findByPhone(normalizedPhone);
       const provisionalRuc = contact?.ruc || '';
 
       if (!provisionalRuc || provisionalRuc.length !== 11) {
-        // si por algún motivo no tenemos el ruc, pedimos de nuevo
         await contactModel.updateState(normalizedPhone, 'WAITING_RUC');
         await sendMessage(
           senderJid,
@@ -784,7 +851,6 @@ async function handleIncomingMessage(
         return;
       }
 
-      // ahora sí creamos esa empresa con (RUC provisional + razón social manual)
       await contactModel.updateRUC(
         normalizedPhone,
         provisionalRuc,
@@ -793,9 +859,11 @@ async function handleIncomingMessage(
 
       contact = await contactModel.findByPhone(normalizedPhone);
 
-      // ¿tiene varias empresas?
       if (contact?.companies && contact.companies.length > 1) {
-        await contactModel.updateState(normalizedPhone, 'SELECTING_COMPANY');
+        await contactModel.updateState(
+          normalizedPhone,
+          'SELECTING_COMPANY'
+        );
 
         await sendMessage(
           senderJid,
@@ -805,22 +873,17 @@ async function handleIncomingMessage(
         return;
       }
 
-      // si sólo tiene una → pasa a MENU
       await contactModel.updateState(normalizedPhone, 'MENU');
-
       contact = await contactModel.findByPhone(normalizedPhone);
 
       await sendMessage(
         senderJid,
         `¡Excelente! Quedaste registrado con ${contact.companyName} ✅`
       );
-      await sendMessage(senderJid, buildMainMenu(contact));
+      await sendMessage(senderJid, await buildMainMenu(contact));
       return;
     }
 
-    //
-    // 2.d) SELECTING_COMPANY -> usuario elige cuál es su empresa activa
-    //
     if (state === 'SELECTING_COMPANY') {
       const idxChosen = parseInt(finalMessageText.trim(), 10) - 1;
       const empresas = contact?.companies || [];
@@ -839,13 +902,13 @@ async function handleIncomingMessage(
 
       const chosenPivot = empresas[idxChosen];
 
-      // marcamos esa empresa como primaria
-      await contactModel.setPrimaryCompany(contact.id, chosenPivot.companyId);
+      await contactModel.setPrimaryCompany(
+        contact.id,
+        chosenPivot.companyId
+      );
 
-      // pasamos al estado MENU
       await contactModel.updateState(normalizedPhone, 'MENU');
 
-      // recargar contacto con la nueva empresa primaria reflejada
       contact = await contactModel.findByPhone(normalizedPhone);
 
       await sendMessage(
@@ -853,22 +916,23 @@ async function handleIncomingMessage(
         `Perfecto 👍 Ahora usaré *${contact.companyName}* como tu empresa activa.`
       );
 
-      await sendMessage(senderJid, buildMainMenu(contact));
+      await sendMessage(senderJid, await buildMainMenu(contact));
       return;
     }
 
-    // --------------------------------------------
-    // 3. ESTADOS YA REGISTRADOS: MENU / REGISTERED
-    // --------------------------------------------
+    // ==========================================================
+    // 3. ESTADOS OPERATIVOS (MENU / REGISTERED)
+    // ==========================================================
     if (state === 'MENU' || state === 'REGISTERED') {
-      // si dice "menu" / "hola" / etc -> reenviar menú
-      if (/^(menu|hola|buenas|hi)$/i.test(finalMessageText.trim())) {
-        await sendMessage(senderJid, buildMainMenu(contact));
+      const trimmed = finalMessageText.trim();
+
+      if (/^(menu|hola|buenas|hi)$/i.test(trimmed)) {
+        await sendMessage(senderJid, await buildMainMenu(contact));
         return;
       }
 
-      // opción 1: servicio técnico en sitio
-      if (finalMessageText.trim() === '1') {
+      // 1️⃣ Servicio técnico en sitio
+      if (trimmed === '1') {
         const link = await generateOdooLinkForContact(
           contact,
           normalizedPhone
@@ -890,8 +954,8 @@ async function handleIncomingMessage(
         return;
       }
 
-      // opción 2: tóner / suministros
-      if (finalMessageText.trim() === '2') {
+      // 2️⃣ Tóner / insumos
+      if (trimmed === '2') {
         const link = await generateOdooLinkForContact(
           contact,
           normalizedPhone
@@ -913,9 +977,12 @@ async function handleIncomingMessage(
         return;
       }
 
-      // opción 3: asistencia remota / AnyDesk
-      if (finalMessageText.trim() === '3') {
-        await contactModel.updateState(normalizedPhone, 'WAITING_REMOTE_INFO');
+      // 3️⃣ Asistencia remota / AnyDesk
+      if (trimmed === '3') {
+        await contactModel.updateState(
+          normalizedPhone,
+          'WAITING_REMOTE_INFO'
+        );
         await sendMessage(
           senderJid,
           '💻 *Asistencia remota*\n' +
@@ -925,8 +992,8 @@ async function handleIncomingMessage(
         return;
       }
 
-      // opción 4: cambiar empresa activa
-      if (finalMessageText.trim() === '4') {
+      // 4️⃣ Cambiar empresa activa
+      if (trimmed === '4') {
         const empresas = contact.companies || [];
         if (empresas.length <= 1) {
           await sendMessage(
@@ -943,8 +1010,8 @@ async function handleIncomingMessage(
         return;
       }
 
-      // opción 5: hablar con técnico
-      if (finalMessageText.trim() === '5') {
+      // 5️⃣ Hablar con técnico
+      if (trimmed === '5') {
         await contactModel.setHumanTakeover(normalizedPhone);
         await sendMessage(
           senderJid,
@@ -953,7 +1020,7 @@ async function handleIncomingMessage(
         return;
       }
 
-      // mensaje libre que suena a servicio técnico
+      // mensaje libre cercano a servicio técnico
       if (detectServiceIntent(finalMessageText)) {
         const link = await generateOdooLinkForContact(
           contact,
@@ -976,7 +1043,7 @@ async function handleIncomingMessage(
         return;
       }
 
-      // mensaje libre que suena a pedido de tóner / insumos
+      // mensaje libre cercano a tóner
       if (detectTonerIntent(finalMessageText)) {
         const link = await generateOdooLinkForContact(
           contact,
@@ -998,34 +1065,32 @@ async function handleIncomingMessage(
         return;
       }
 
-      // si nada matchea menú ni intenciones → pasamos a Gemini
+      // Gemini como fallback inteligente
       const responseFromGemini = await geminiService.processMessage(
         normalizedPhone,
         finalMessageText,
         !!mediaType,
-        mediaAnalysis,
-        anydeskCode
+        // ⬇️ le pasamos TODO el análisis estructurado como JSON string legible
+        mediaAnalysisResult
+          ? JSON.stringify(mediaAnalysisResult, null, 2)
+          : null,
+        anydeskCode || null
       );
 
       await sendMessage(senderJid, responseFromGemini);
       return;
     }
 
-    // --------------------------------------------
-    // 4. ESPERANDO INFO REMOTA (WAITING_REMOTE_INFO)
-    // --------------------------------------------
+    // ==========================================================
+    // 4. ESPERANDO INFO REMOTA
+    // ==========================================================
     if (state === 'WAITING_REMOTE_INFO') {
-      // asumimos que ya envió el ID de AnyDesk o la foto
-      // 1) marcamos takeover humano
       await contactModel.setHumanTakeover(normalizedPhone);
 
-      // 2) volvemos el estado al menú normal
       await contactModel.updateState(normalizedPhone, 'MENU');
 
-      // refrescamos contacto
       contact = await contactModel.findByPhone(normalizedPhone);
 
-      // respondemos
       await sendMessage(
         senderJid,
         '✅ Gracias. Ya tengo la información para soporte remoto.\n' +
@@ -1034,15 +1099,15 @@ async function handleIncomingMessage(
       return;
     }
 
-    // --------------------------------------------
-    // 5. Cualquier estado raro → forzamos MENU
-    // --------------------------------------------
+    // ==========================================================
+    // 5. Estado raro → forzamos MENU
+    // ==========================================================
     logger.warn(
       `[BOT] Estado desconocido "${state}" para ${normalizedPhone}, forzando MENU`
     );
     await contactModel.updateState(normalizedPhone, 'MENU');
     contact = await contactModel.findByPhone(normalizedPhone);
-    await sendMessage(senderJid, buildMainMenu(contact));
+    await sendMessage(senderJid, await buildMainMenu(contact));
     return;
   } catch (error: any) {
     const debugInfo = {
@@ -1054,19 +1119,14 @@ async function handleIncomingMessage(
     };
 
     logger.error(
-      'Error handling incoming message: ' +
-        JSON.stringify(debugInfo, null, 2)
+      'Error handling incoming message: ' + JSON.stringify(debugInfo, null, 2)
     );
   }
 }
 
 // ==================================================
-// ENVÍO DE MENSAJES (TEXTO / MEDIA) Y HELPERS DE ESTADO
+// ENVÍO DE MENSAJES
 // ==================================================
-
-/**
- * Enviar mensaje de texto usando el jid completo "51XXXX@s.whatsapp.net"
- */
 export async function sendMessage(jid: string, text: string): Promise<void> {
   if (!sock || !isReady) {
     logger.error('WhatsApp client not ready');
@@ -1087,14 +1147,7 @@ export async function sendMessage(jid: string, text: string): Promise<void> {
   }
 }
 
-/**
- * Enviar mensaje directo usando solo número E164 (sin '+')
- * Ej: "51987654321".
- */
-export async function sendDirectMessage(
-  phoneE164: string,
-  text: string
-) {
+export async function sendDirectMessage(phoneE164: string, text: string) {
   if (!sock || !isReady) {
     logger.error('WhatsApp client not ready');
     throw new Error('WhatsApp client not ready');
@@ -1123,10 +1176,9 @@ export async function sendDirectMessage(
   }
 }
 
-// ====================
-// Envío de media
-// ====================
-
+// ==================================================
+// ENVÍO DE MEDIA
+// ==================================================
 export type SendMediaPayload = {
   buffer: Buffer;
   mime: string;
@@ -1135,10 +1187,7 @@ export type SendMediaPayload = {
   kind?: 'image' | 'video' | 'audio' | 'application';
 };
 
-export async function sendMedia(
-  jid: string,
-  payload: SendMediaPayload
-) {
+export async function sendMedia(jid: string, payload: SendMediaPayload) {
   if (!sock || !isReady) {
     logger.error('WhatsApp client not ready (sendMedia)');
     throw new Error('WhatsApp client not ready (sendMedia)');
@@ -1200,10 +1249,6 @@ export async function sendMedia(
   }
 }
 
-/**
- * Igual que sendMedia(), pero pasando solo el número (E164 "51..."),
- * no el jid completo.
- */
 export async function sendMediaToPhone(
   phoneE164: string,
   payload: SendMediaPayload
@@ -1219,14 +1264,12 @@ export async function sendMediaToPhone(
   return sendMedia(jid, payload);
 }
 
-// ====================
-// Helpers de estado / conexión / QR
-// ====================
-
-/**
- * Verifica si un número existe en WhatsApp.
- */
-export async function onWhatsAppExists(e164: string): Promise<boolean> {
+// ==================================================
+// ESTADO / QR / CONEXIÓN
+// ==================================================
+export async function onWhatsAppExists(
+  e164: string
+): Promise<boolean> {
   if (!sock) return false;
   try {
     const res = await sock.onWhatsApp(e164);
@@ -1238,24 +1281,14 @@ export async function onWhatsAppExists(e164: string): Promise<boolean> {
   }
 }
 
-/**
- * ¿Está listo para enviar mensajes?
- */
 export function getConnectionStatus(): boolean {
   return isReady;
 }
 
-/**
- * Teléfono del bot (ej. "51987654321") si ya está logueado.
- */
 export function getBotPhoneNumber(): string | null {
   return botPhoneNumber;
 }
 
-/**
- * QR "crudo" (texto) y QR como dataURL (imagen base64 embebible)
- * para la vista /auth/qr
- */
 export function getQRCode(): string | null {
   return currentQR;
 }
@@ -1266,10 +1299,6 @@ export function hasQR(): boolean {
   return currentQR !== null;
 }
 
-/**
- * Devuelve el objeto que le pasas al dashboard (whatsappStatus)
- * para pintar el badge, número del bot y botones.
- */
 export function getStatusForDashboard() {
   return {
     connected: isReady,
@@ -1278,9 +1307,6 @@ export function getStatusForDashboard() {
   };
 }
 
-/**
- * Desconectar sesión actual (logout Baileys) y limpiar estado en memoria.
- */
 export async function disconnectSession(): Promise<void> {
   if (sock) {
     try {
@@ -1291,7 +1317,6 @@ export async function disconnectSession(): Promise<void> {
     }
   }
 
-  // limpiamos referencias
   sock = null;
   isReady = false;
   botPhoneNumber = null;
@@ -1299,9 +1324,6 @@ export async function disconnectSession(): Promise<void> {
   qrDataURL = null;
 }
 
-/**
- * Fuerza el estado de "necesitamos nuevo QR".
- */
 export async function forceNewQRState(): Promise<void> {
   try {
     await initializeWhatsApp();
@@ -1309,15 +1331,13 @@ export async function forceNewQRState(): Promise<void> {
       'forceNewQRState(): WhatsApp client reinitialized, waiting for QR scan'
     );
   } catch (err) {
-    logger.error('forceNewQRState() failed to reinitialize WhatsApp:', err);
-    // Si falla, igual nos quedamos desconectados.
+    logger.error(
+      'forceNewQRState() failed to reinitialize WhatsApp:',
+      err
+    );
   }
 }
 
-/**
- * Compatibilidad con tu método antiguo disconnect()
- * Ahora solo llama a disconnectSession()
- */
 export async function disconnect(): Promise<void> {
   await disconnectSession();
 }

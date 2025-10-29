@@ -247,3 +247,68 @@ export async function getNextOpenDateTime(from: Date = new Date()): Promise<Date
   }
   return null;
 }
+
+// ======================================
+// CONTEXTO DE HORARIO PARA IA
+// ======================================
+
+/**
+ * Genera el bloque de texto que se inyecta como {{schedule_context}}.
+ * Explica al modelo:
+ * - si estamos atendiendo ahora o no
+ * - cuál es el horario de hoy
+ * - cuándo volvemos a estar disponibles si estamos cerrados
+ *
+ * Esto reemplaza la parte fija de horarios que tenías quemada en el SYSTEM_PROMPT.
+ */
+export async function getScheduleContextForAI(): Promise<string> {
+  try {
+    const now = new Date();
+    const status = await getStatusInfo(now);
+
+    const dayHours = status.todayHours;
+    const openTime = dayHours?.openTime ?? '--:--';
+    const closeTime = dayHours?.closeTime ?? '--:--';
+    const breakStart = dayHours?.breakStart ?? null;
+    const breakEnd = dayHours?.breakEnd ?? null;
+
+    let line1 = '';
+    if (status.isOpen) {
+      line1 = 'En este momento estamos atendiendo ✅.';
+    } else {
+      // razón puede ser: feriado, break, fuera de horario, etc.
+      if (status.reason === 'holiday' || status.reason === 'closure') {
+        line1 = 'En este momento no estamos atendiendo (cierre programado / feriado).';
+      } else if (status.reason === 'break') {
+        line1 = 'En este momento estamos en break / almuerzo y retomamos en breve.';
+      } else if (status.reason === 'before_open') {
+        line1 = 'Aún no abrimos, pero abrimos más tarde hoy.';
+      } else if (status.reason === 'after_close') {
+        line1 = 'Ya cerramos por hoy.';
+      } else if (status.reason === 'non_workday') {
+        line1 = 'Hoy no es día laboral.';
+      } else {
+        line1 = 'En este momento no estamos atendiendo.';
+      }
+    }
+
+    let line2 = `Horario de hoy: ${openTime} - ${closeTime}`;
+    if (breakStart && breakEnd) {
+      line2 += ` (break ${breakStart}-${breakEnd})`;
+    }
+
+    let line3 = '';
+    if (!status.isOpen) {
+      const next = await getNextOpenDateTime(now);
+      if (next) {
+        line3 = `Volvemos a estar disponibles el ${formatDateTime(next, 'America/Lima')}.`;
+      }
+    }
+
+    // concatenar
+    return [line1, line2, line3].filter(Boolean).join('\n');
+  } catch (error) {
+    logger.error('Error building schedule context for AI:', error);
+    return 'Información de horario no disponible en este momento.';
+  }
+}

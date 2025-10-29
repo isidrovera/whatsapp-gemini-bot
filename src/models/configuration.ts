@@ -1,4 +1,3 @@
-// src/models/configuration.ts
 import { getPrismaClient } from '../config/database.js'
 import { logger } from '../utils/logger.js'
 import crypto from 'crypto'
@@ -9,11 +8,9 @@ const prisma = getPrismaClient()
 // Encriptación
 // ==============================
 
-// Clave de encriptación (debe estar en .env). Para AES-256 necesitamos 32 bytes.
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'default-encryption-key-change-me-32ch'
 const ALGORITHM = 'aes-256-cbc'
 
-// Helpers
 function toKey32(key: string): Buffer {
   return Buffer.from(key.padEnd(32, '0').slice(0, 32))
 }
@@ -21,7 +18,6 @@ function safeTrim(v: string | null | undefined): string {
   return (v ?? '').trim()
 }
 
-// Encriptar valor sensible
 function encrypt(text: string): string {
   const key = toKey32(ENCRYPTION_KEY)
   const iv = crypto.randomBytes(16)
@@ -31,7 +27,6 @@ function encrypt(text: string): string {
   return iv.toString('hex') + ':' + encrypted
 }
 
-// Desencriptar valor sensible
 function decrypt(text: string): string {
   try {
     const key = toKey32(ENCRYPTION_KEY)
@@ -44,7 +39,6 @@ function decrypt(text: string): string {
     return decrypted
   } catch (error) {
     logger.error('Error decrypting value:', error)
-    // Como fallback, retorna tal cual
     return text
   }
 }
@@ -53,12 +47,6 @@ function decrypt(text: string): string {
 // Defaults & Bootstrap
 // ==============================
 
-/**
- * Inicializa las configuraciones por defecto de forma idempotente.
- * - Usa upsert por (category, key)
- * - NO sobreescribe valores existentes del usuario
- * - Encripta valores por defecto que deban ser sensibles
- */
 export async function initDefaults(): Promise<void> {
   try {
     logger.info('Initializing default configurations...')
@@ -86,24 +74,33 @@ export async function initDefaults(): Promise<void> {
       { category: 'system', key: 'auto_response_enabled', value: 'true', isEncrypted: false, description: 'Habilitar respuestas automáticas' },
       { category: 'system', key: 'department_routing_enabled', value: 'true', isEncrypted: false, description: 'Habilitar enrutamiento por departamentos' },
 
-      // EMPRESA
+      // EMPRESA (identidad pública de quien atiende)
       { category: 'company', key: 'name', value: 'Mi Empresa', isEncrypted: false, description: 'Nombre de la empresa' },
       { category: 'company', key: 'description', value: 'Empresa de servicios', isEncrypted: false, description: 'Descripción de la empresa' },
       { category: 'company', key: 'address', value: '', isEncrypted: false, description: 'Dirección' },
       { category: 'company', key: 'email', value: '', isEncrypted: false, description: 'Email de contacto' },
       { category: 'company', key: 'website', value: '', isEncrypted: false, description: 'Sitio web' },
       { category: 'company', key: 'main_phone', value: '', isEncrypted: false, description: 'Teléfono principal' },
+
+      // POLÍTICAS / TONO (lo que antes estaba quemado en el prompt)
+      { category: 'policy', key: 'tone_style', value: 'profesional_cercano_con_emojis', isEncrypted: false, description: 'Tono de respuesta (ej: formal_sin_emojis / profesional_cercano_con_emojis)' },
+      { category: 'policy', key: 'link_label', value: 'enlace del sistema', isEncrypted: false, description: 'Cómo debe llamar el bot al link de tickets (ej: formulario / enlace del sistema / portal de servicio)' },
+      { category: 'policy', key: 'remote_tool_name', value: 'AnyDesk', isEncrypted: false, description: 'Herramienta de soporte remoto que se usa (ej: AnyDesk / TeamViewer)' },
+      { category: 'policy', key: 'allow_direct_phone_share', value: 'true', isEncrypted: false, description: '¿Puede dar números directos de áreas?' },
+      { category: 'policy', key: 'allow_field_visit_commitment', value: 'false', isEncrypted: false, description: '¿El bot puede prometer visita técnica inmediata?' },
+
+      // PROMPT BASE DEL ASISTENTE
+      { category: 'ai_prompt', key: 'system_prompt', value: '', isEncrypted: false, description: 'System prompt base que define el rol, estilo y reglas del asistente' },
     ] as const
 
     for (const cfg of defaults) {
-      // Si el default tiene valor y es sensible, lo encriptamos antes de crear
       const valueToStore =
         cfg.isEncrypted && safeTrim(cfg.value).length > 0
           ? encrypt(cfg.value)
           : cfg.value
 
       await prisma.configuration.upsert({
-        where: { category_key: { category: cfg.category, key: cfg.key } }, // @@unique([category, key])
+        where: { category_key: { category: cfg.category, key: cfg.key } },
         create: {
           category: cfg.category,
           key: cfg.key,
@@ -112,10 +109,7 @@ export async function initDefaults(): Promise<void> {
           description: cfg.description,
         },
         update: {
-          // No tocar el value existente del usuario; solo metadatos
           description: cfg.description,
-          // Opcionalmente podrías normalizar isEncrypted si cambió en schema de defaults
-          // isEncrypted: cfg.isEncrypted,
         },
       })
     }
@@ -123,8 +117,6 @@ export async function initDefaults(): Promise<void> {
     logger.info('✅ Default configurations initialized')
   } catch (error) {
     logger.error('Error initializing configurations:', error)
-    // Si prefieres que index.ts detecte y no imprima "✅", descomenta:
-    // throw error
   }
 }
 
@@ -148,14 +140,12 @@ export async function get(category: string, key: string): Promise<string | null>
       return null;
     }
 
-    // Desencriptar si es necesario
     if (config.isEncrypted && config.value) {
       return decrypt(config.value);
     }
 
     return config.value;
   } catch (error) {
-    // Cambiar de ERROR a DEBUG para no alarmar
     logger.debug(`Config ${category}.${key} not found in database, using fallback`);
     return null;
   }
@@ -217,7 +207,7 @@ export async function getAll() {
       id: config.id,
       category: config.category,
       key: config.key,
-      value: config.isEncrypted ? '********' : config.value, // Ocultar valores encriptados
+      value: config.isEncrypted ? '********' : config.value,
       isEncrypted: config.isEncrypted,
       description: config.description,
       updatedAt: config.updatedAt,
@@ -249,7 +239,6 @@ export async function getAllDecrypted() {
   }
 }
 
-// Obtener múltiples configuraciones a la vez
 export async function getMultiple(configs: Array<{ category: string; key: string }>) {
   try {
     const result: { [key: string]: string | null } = {}
@@ -265,13 +254,11 @@ export async function getMultiple(configs: Array<{ category: string; key: string
   }
 }
 
-// Verificar si una configuración está completa
 export async function isConfigured(category: string, key: string): Promise<boolean> {
   const value = await get(category, key)
   return safeTrim(value).length > 0
 }
 
-// Verificar si una categoría completa está configurada (al menos un valor no vacío)
 export async function isCategoryConfigured(category: string): Promise<boolean> {
   try {
     const configs = await getByCategory(category)
@@ -283,20 +270,36 @@ export async function isCategoryConfigured(category: string): Promise<boolean> {
 }
 
 // ==============================
-// Compat: Variables para SystemVar
+// Variables agregadas para inyectar en IA
 // ==============================
 
+/**
+ * Devuelve variables que el bot usa para hablar en nombre de la empresa.
+ * Incluye identidad (company.*) y políticas de comunicación (policy.*).
+ * Estas variables se pueden interpolar en:
+ * - system_prompt
+ * - messageTemplate.render(...)
+ */
 export async function getForSystemVariables(): Promise<{ [key: string]: string }> {
   try {
     const companyConfigs = await getByCategory('company')
+    const policyConfigs = await getByCategory('policy')
 
     return {
+      // Identidad pública
       company_name: companyConfigs.name || 'Mi Empresa',
       company_description: companyConfigs.description || '',
       company_address: companyConfigs.address || '',
       company_email: companyConfigs.email || '',
       company_website: companyConfigs.website || '',
       company_phone: companyConfigs.main_phone || '',
+
+      // Política / tono (dinámico por empresa)
+      policy_tone_style: policyConfigs.tone_style || 'profesional_cercano_con_emojis',
+      policy_link_label: policyConfigs.link_label || 'enlace del sistema',
+      policy_remote_tool_name: policyConfigs.remote_tool_name || 'AnyDesk',
+      policy_allow_direct_phone_share: policyConfigs.allow_direct_phone_share || 'true',
+      policy_allow_field_visit_commitment: policyConfigs.allow_field_visit_commitment || 'false',
     }
   } catch (error) {
     logger.error('Error getting configs for system variables:', error)
@@ -305,7 +308,7 @@ export async function getForSystemVariables(): Promise<{ [key: string]: string }
 }
 
 // ==============================
-// Import/Export & Reset
+// Import / Export / Reset / Stats  (sin cambios de lógica)
 // ==============================
 
 export async function exportAll() {
@@ -323,7 +326,6 @@ export async function importAll(jsonData: string) {
     const configs = JSON.parse(jsonData)
 
     for (const config of configs) {
-      // Preservar encriptación original del backup
       const isEncrypted = !!config.isEncrypted
       const value = config.value || ''
       await set(config.category, config.key, value, isEncrypted)
@@ -337,7 +339,6 @@ export async function importAll(jsonData: string) {
   }
 }
 
-// Resetear una categoría a valores por defecto
 export async function resetCategory(category: string) {
   try {
     await prisma.configuration.deleteMany({ where: { category } })
@@ -350,18 +351,12 @@ export async function resetCategory(category: string) {
   }
 }
 
-// ==============================
-// Validaciones & Estadísticas
-// ==============================
-
 export async function validateCritical(): Promise<{
   isValid: boolean
   missing: string[]
 }> {
-  // Agrega aquí las claves críticas que quieras exigir
   const critical = [
     { category: 'gemini', key: 'api_key', name: 'Gemini API Key' },
-    // { category: 'odoo', key: 'url', name: 'Odoo URL' }, // si lo quieres obligatorio, descomenta
   ]
 
   const missing: string[] = []

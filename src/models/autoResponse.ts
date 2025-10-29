@@ -6,11 +6,105 @@ const prisma = getPrismaClient();
 
 export type AutoResponseInput = {
   trigger: string;        // palabra, frase o patrón simple
-  response: string;       // texto (puede incluir variables si luego las procesas)
+  response: string;       // texto (puede incluir variables)
   isActive?: boolean;     // por defecto true
   priority?: number;      // menor = más prioridad (1 > 2)
   category?: string | null;
 };
+
+/**
+ * Procesa variables en el texto de respuesta.
+ * Variables soportadas:
+ * - {{nombre}} - Nombre del contacto
+ * - {{dni}} - DNI del contacto
+ * - {{empresa}} o {{companyName}} - Nombre de la empresa
+ * - {{ruc}} - RUC de la empresa
+ * - {{telefono}} o {{phone}} - Teléfono del contacto
+ * - {{fecha}} - Fecha actual
+ * - {{hora}} - Hora actual
+ * - {{producto}} - Nombre del producto
+ * - {{categoria}} - Categoría del producto
+ * - {{precio}} - Precio del producto
+ */
+export function processVariables(
+  text: string,
+  context?: {
+    contact?: {
+      name?: string | null;
+      dni?: string | null;
+      phoneNumber?: string;
+      companyName?: string | null;
+      ruc?: string | null;
+    };
+    company?: {
+      razonSocial?: string | null;
+      numeroDoc?: string | null;
+      name?: string | null;
+      ruc?: string | null;
+    };
+    product?: {
+      name?: string;
+      category?: string;
+      price?: number | null;
+    };
+    customVars?: Record<string, string>;
+  }
+): string {
+  if (!text) return '';
+
+  let result = text;
+
+  // Variables de contacto
+  if (context?.contact) {
+    result = result.replace(/\{\{nombre\}\}/gi, context.contact.name || 'Cliente');
+    result = result.replace(/\{\{dni\}\}/gi, context.contact.dni || 'No registrado');
+    result = result.replace(/\{\{empresa\}\}/gi, context.contact.companyName || 'No registrada');
+    result = result.replace(/\{\{companyName\}\}/gi, context.contact.companyName || 'No registrada');
+    result = result.replace(/\{\{ruc\}\}/gi, context.contact.ruc || 'No registrado');
+    result = result.replace(/\{\{telefono\}\}/gi, context.contact.phoneNumber || '');
+    result = result.replace(/\{\{phone\}\}/gi, context.contact.phoneNumber || '');
+  }
+
+  // Variables de empresa (sobreescriben las del contacto si están presentes)
+  if (context?.company) {
+    result = result.replace(/\{\{empresa\}\}/gi, context.company.razonSocial || context.company.name || 'No registrada');
+    result = result.replace(/\{\{companyName\}\}/gi, context.company.razonSocial || context.company.name || 'No registrada');
+    result = result.replace(/\{\{ruc\}\}/gi, context.company.numeroDoc || context.company.ruc || 'No registrado');
+  }
+
+  // Variables de producto
+  if (context?.product) {
+    result = result.replace(/\{\{producto\}\}/gi, context.product.name || '');
+    result = result.replace(/\{\{categoria\}\}/gi, context.product.category || '');
+    result = result.replace(/\{\{precio\}\}/gi, context.product.price ? `S/ ${context.product.price.toFixed(2)}` : 'Consultar');
+  }
+
+  // Variables de fecha/hora
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('es-PE', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+  const timeStr = now.toLocaleTimeString('es-PE', { 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  });
+
+  result = result.replace(/\{\{fecha\}\}/gi, dateStr);
+  result = result.replace(/\{\{hora\}\}/gi, timeStr);
+
+  // Variables personalizadas
+  if (context?.customVars) {
+    Object.entries(context.customVars).forEach(([key, value]) => {
+      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'gi');
+      result = result.replace(regex, value);
+    });
+  }
+
+  return result;
+}
 
 export async function getAll() {
   try {
@@ -149,6 +243,53 @@ export async function findByTrigger(message: string) {
     return null;
   } catch (error) {
     logger.error('Error searching auto response by trigger:', error);
+    return null;
+  }
+}
+
+/**
+ * Busca respuesta automática Y procesa variables en el texto.
+ * Esta es la función principal que debes usar desde el flujo de WhatsApp.
+ */
+export async function findAndProcessResponse(
+  message: string,
+  context?: {
+    contact?: {
+      name?: string | null;
+      dni?: string | null;
+      phoneNumber?: string;
+      companyName?: string | null;
+      ruc?: string | null;
+    };
+    company?: {
+      razonSocial?: string | null;
+      numeroDoc?: string | null;
+      name?: string | null;
+      ruc?: string | null;
+    };
+    product?: {
+      name?: string;
+      category?: string;
+      price?: number | null;
+    };
+    customVars?: Record<string, string>;
+  }
+): Promise<string | null> {
+  try {
+    const autoResponse = await findByTrigger(message);
+    
+    if (!autoResponse) {
+      return null;
+    }
+
+    // Procesar variables en la respuesta
+    const processedResponse = processVariables(autoResponse.response, context);
+    
+    logger.info(`[AUTO-RESPONSE] Triggered: "${autoResponse.trigger}" -> Response processed with variables`);
+    
+    return processedResponse;
+  } catch (error) {
+    logger.error('Error finding and processing auto response:', error);
     return null;
   }
 }

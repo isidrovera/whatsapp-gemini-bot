@@ -15,7 +15,6 @@ function logError(context: string, error: any) {
       logger.error(`${context}: ${String(error)}`);
     }
   } catch (e) {
-    // Failsafe: ensure we never throw while logging
     console.error('Failed to log error for', context, error, e);
   }
 }
@@ -575,5 +574,61 @@ export async function detectDepartment(message: string) {
   } catch (error) {
     logError('Error detecting department', error);
     return null;
+  }
+}
+
+// ============================================================================
+// DEPARTMENT CONTEXT FOR AI
+// ============================================================================
+
+/**
+ * Genera el bloque de texto que se inyecta en el prompt del asistente:
+ * "DEPARTAMENTOS Y CONTACTOS DISPONIBLES:"
+ * Usa departamentos activos, su descripción y contactos principales.
+ *
+ * Esto reemplaza el hardcode {{departments_context}} que antes vivía en gemini.ts
+ * y permite que cambiar teléfonos / áreas ya no requiera tocar código.
+ */
+export async function getDepartmentsContextForAI(): Promise<string> {
+  try {
+    const activeDepts = await getActive(); // ya existe arriba
+
+    if (!activeDepts || activeDepts.length === 0) {
+      return 'No hay departamentos configurados actualmente.';
+    }
+
+    // armamos líneas legibles
+    const lines: string[] = [];
+
+    for (const dept of activeDepts) {
+      const baseLineParts: string[] = [];
+      baseLineParts.push(`• ${dept.name}: ${dept.description || ''}`.trim());
+
+      // teléfono general del dept
+      if (dept.phoneNumber) {
+        baseLineParts.push(`Teléfono: ${dept.phoneNumber}`);
+      }
+
+      // mejor contacto interno activo (el primero por sortOrder)
+      if (dept.contacts && dept.contacts.length > 0) {
+        const primary = dept.contacts[0];
+        const contactBits: string[] = [];
+        if (primary.nombre) contactBits.push(primary.nombre);
+        if (primary.cargo) contactBits.push(primary.cargo);
+        if (primary.celular) contactBits.push(`Celular ${primary.celular}`);
+        if (primary.whatsapp) contactBits.push(`WhatsApp ${primary.whatsapp}`);
+
+        if (contactBits.length > 0) {
+          baseLineParts.push(`Contacto: ${contactBits.join(' / ')}`);
+        }
+      }
+
+      lines.push(baseLineParts.join(' | '));
+    }
+
+    return lines.join('\n');
+  } catch (error) {
+    logError('Error building departments context for AI', error);
+    return 'Información de departamentos no disponible.';
   }
 }

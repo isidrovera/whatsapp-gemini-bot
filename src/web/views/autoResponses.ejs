@@ -47,7 +47,6 @@
       font-weight:600;
     }
 
-    /* Overlay modal */
     .modal {
       display: none;
       position: fixed;
@@ -57,8 +56,6 @@
       z-index: 1000;
       background: rgba(0,0,0,0.6);
       backdrop-filter: blur(4px);
-
-      /* IMPORTANTE PARA USABILIDAD */
       overflow-y: auto;
       padding: 1rem;
     }
@@ -66,6 +63,32 @@
       display: flex;
       align-items: flex-start;
       justify-content: center;
+    }
+    
+    .variable-tag {
+      display: inline-block;
+      background-color: #e0e7ff;
+      color: #3730a3;
+      padding: 0.125rem 0.5rem;
+      border-radius: 0.375rem;
+      font-size: 0.75rem;
+      font-family: 'Courier New', monospace;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .variable-tag:hover {
+      background-color: #c7d2fe;
+      transform: scale(1.05);
+    }
+    
+    .dark .variable-tag {
+      background-color: #312e81;
+      color: #c7d2fe;
+    }
+    
+    .dark .variable-tag:hover {
+      background-color: #3730a3;
     }
   </style>
 </head>
@@ -100,7 +123,6 @@
           <i data-lucide="bot" class="w-5 h-5"></i> Bot Admin
         </h2>
 
-        <!-- Botón cerrar sidebar móvil -->
         <button id="close-sidebar-btn"
                 class="md:hidden inline-flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 p-2"
                 aria-label="Cerrar menú">
@@ -261,7 +283,6 @@
             <span>Respuestas Automáticas (FAQs)</span>
           </h1>
 
-          <!-- Sidebar móvil -->
           <button id="open-sidebar-btn"
                   class="md:hidden inline-flex items-center justify-center rounded-lg text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 p-2 shadow-soft"
                   aria-label="Abrir menú">
@@ -286,7 +307,7 @@
             <strong class="block font-semibold text-slate-900 dark:text-white">Tip:</strong>
             <span class="text-slate-700 dark:text-slate-300">
               Las respuestas automáticas se activan cuando el cliente escribe una palabra clave específica.
-              Tienen prioridad sobre Gemini AI.
+              Tienen prioridad sobre Gemini AI. <strong>Puedes usar variables</strong> para personalizar las respuestas.
             </span>
           </div>
         </div>
@@ -374,9 +395,8 @@
 
   <!-- Modal Crear/Editar Respuesta -->
   <div id="responseModal" class="modal">
-    <!-- Contenedor del modal (scroll interno propio) -->
     <div
-      class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft w-full max-w-xl border border-slate-200 dark:border-white/10
+      class="bg-white dark:bg-slate-900 rounded-2xl shadow-soft w-full max-w-2xl border border-slate-200 dark:border-white/10
              max-h-[90vh] overflow-y-auto"
     >
       <!-- Header modal sticky -->
@@ -423,9 +443,29 @@
               placeholder="La respuesta que recibirá el cliente..."
               class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0"
             ></textarea>
-            <small class="block text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Puedes usar variables: {{nombre}}, {{empresa}}
-            </small>
+            
+            <!-- Variables disponibles -->
+            <div class="mt-3 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800">
+              <div class="text-xs font-semibold text-indigo-900 dark:text-indigo-200 mb-2 flex items-center gap-2">
+                <i data-lucide="sparkles" class="w-3 h-3"></i>
+                <span>Variables disponibles (haz clic para insertar):</span>
+              </div>
+              <div class="flex flex-wrap gap-1.5">
+                <span class="variable-tag" onclick="insertVariable('{{nombre}}')">{{nombre}}</span>
+                <span class="variable-tag" onclick="insertVariable('{{dni}}')">{{dni}}</span>
+                <span class="variable-tag" onclick="insertVariable('{{empresa}}')">{{empresa}}</span>
+                <span class="variable-tag" onclick="insertVariable('{{ruc}}')">{{ruc}}</span>
+                <span class="variable-tag" onclick="insertVariable('{{telefono}}')">{{telefono}}</span>
+                <span class="variable-tag" onclick="insertVariable('{{producto}}')">{{producto}}</span>
+                <span class="variable-tag" onclick="insertVariable('{{categoria}}')">{{categoria}}</span>
+                <span class="variable-tag" onclick="insertVariable('{{precio}}')">{{precio}}</span>
+                <span class="variable-tag" onclick="insertVariable('{{fecha}}')">{{fecha}}</span>
+                <span class="variable-tag" onclick="insertVariable('{{hora}}')">{{hora}}</span>
+              </div>
+              <small class="block text-xs text-indigo-700 dark:text-indigo-300 mt-2">
+                💡 Las variables se reemplazarán automáticamente con los datos del contacto.
+              </small>
+            </div>
           </div>
 
           <div>
@@ -453,7 +493,7 @@
                 class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0"
               >
               <small class="block text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Mayor número = mayor prioridad
+                Menor número = mayor prioridad
               </small>
             </div>
 
@@ -471,10 +511,10 @@
             </div>
           </div>
 
-          <!-- Sección de prueba -->
+          <!-- Sección de prueba CON VARIABLES -->
           <div class="rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-white/10 p-4">
             <strong class="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-              <span>🧪</span> <span>Probar respuesta</span>
+              <span>🧪</span> <span>Probar respuesta con variables</span>
             </strong>
 
             <div class="mt-3 space-y-3">
@@ -488,10 +528,10 @@
               <button
                 type="button"
                 class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-xs font-semibold shadow-soft transition"
-                onclick="testTrigger()"
+                onclick="testTriggerWithVariables()"
               >
                 <i data-lucide="play-circle" class="w-4 h-4"></i>
-                <span>Probar</span>
+                <span>Probar con Variables</span>
               </button>
 
               <div id="testResult" class="text-sm"></div>
@@ -524,6 +564,21 @@
     // Iconos lucide
     window.lucide && lucide.createIcons();
 
+    // Insertar variable en textarea
+    function insertVariable(variable) {
+      const textarea = document.getElementById('responseContent');
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = textarea.value;
+      
+      textarea.value = text.substring(0, start) + variable + text.substring(end);
+      textarea.focus();
+      textarea.setSelectionRange(start + variable.length, start + variable.length);
+      
+      // Recrear iconos lucide después de insertar
+      setTimeout(() => window.lucide && lucide.createIcons(), 10);
+    }
+
     // Sidebar móvil
     (function(){
       const sidebar   = document.getElementById('sidebar');
@@ -544,10 +599,6 @@
       if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
       if (overlay)  overlay.addEventListener('click', closeSidebar);
     })();
-
-    //
-    // LÓGICA CRUD ORIGINAL (NO CAMBIADA)
-    //
 
     function openNewResponseModal() {
       document.getElementById('responseId').value = '';
@@ -630,7 +681,7 @@
       }
     }
 
-    async function testTrigger() {
+    async function testTriggerWithVariables() {
       const message = document.getElementById('testMessage').value;
       const resultDiv = document.getElementById('testResult');
 
@@ -643,7 +694,7 @@
       }
 
       try {
-        const res = await fetch('/auto-responses/api/test', {
+        const res = await fetch('/auto-responses/api/test-with-variables', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message })
@@ -651,11 +702,14 @@
 
         const result = await res.json();
 
-        if (result && result.response) {
+        if (result && result.found && result.response) {
           resultDiv.innerHTML = `
             <div class="rounded-md bg-emerald-100 text-emerald-700 px-3 py-2 text-xs font-medium leading-relaxed dark:bg-emerald-900/30 dark:text-emerald-300">
               ✅ Se activaría esta respuesta:<br><br>
-              <strong>${result.response}</strong>
+              <div class="font-mono text-xs whitespace-pre-wrap bg-white/50 dark:bg-black/20 p-2 rounded mt-2">
+${result.response}</div>
+              <br>
+              <small class="text-[10px] opacity-75">Datos de prueba: ${result.context.contact.name}, ${result.context.contact.companyName}</small>
             </div>
           `;
         } else {

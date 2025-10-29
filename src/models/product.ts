@@ -204,3 +204,57 @@ export async function getCategories() {
     return [];
   }
 }
+
+// ======================================================
+// CONTEXTO DE PRODUCTOS / SERVICIOS PARA IA
+// ======================================================
+
+/**
+ * Devuelve un resumen legible de los productos/servicios activos,
+ * agrupados por categoría.
+ *
+ * Esto alimenta {{products_context}} en el prompt dinámico.
+ */
+export async function getProductsContextForAI(): Promise<string> {
+  try {
+    const products = await getActive(); // ya existe en tu archivo
+
+    if (!products || products.length === 0) {
+      return 'No hay productos o servicios publicados actualmente.';
+    }
+
+    // agrupar por categoría
+    const byCategory: Record<string, { name: string; description?: string | null }[]> = {};
+
+    for (const p of products) {
+      if (!byCategory[p.category]) {
+        byCategory[p.category] = [];
+      }
+      byCategory[p.category].push({
+        name: p.name,
+        description: p.description || '',
+      });
+    }
+
+    // Formato legible para IA
+    const blocks: string[] = [];
+
+    for (const category of Object.keys(byCategory)) {
+      blocks.push(`Categoría: ${category}`);
+      for (const item of byCategory[category]) {
+        const lineParts: string[] = [];
+        lineParts.push(`- ${item.name}`);
+        if (item.description) {
+          lineParts.push(`${item.description}`);
+        }
+        blocks.push(lineParts.join(' | '));
+      }
+      blocks.push(''); // línea en blanco entre categorías
+    }
+
+    return blocks.join('\n').trim();
+  } catch (error) {
+    logger.error('Error building products context for AI:', error);
+    return 'Catálogo no disponible.';
+  }
+}

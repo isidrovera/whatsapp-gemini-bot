@@ -5,10 +5,8 @@ import { logger } from '../../utils/logger.js';
 const router = express.Router();
 
 // ---------- FORM NUEVA AUTO-RESPUESTA ----------
-// Página para crear nueva respuesta automática
 router.get('/new', async (_req, res) => {
   try {
-    // podrías precargar categorías sugeridas si tienes
     res.render('autoResponse_new', { 
       title: 'Nueva Auto-respuesta',
     });
@@ -130,6 +128,55 @@ router.post('/api/test', async (req, res) => {
   } catch (error) {
     logger.error('Error testing trigger:', error);
     res.status(500).json({ error: 'Error testing trigger' });
+  }
+});
+
+// ---------- API: probar trigger CON VARIABLES ----------
+router.post('/api/test-with-variables', async (req, res) => {
+  try {
+    const { message, context } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    // Si no viene contexto, usar datos de ejemplo
+    const testContext = context || {
+      contact: {
+        name: 'Juan Pérez',
+        dni: '12345678',
+        phoneNumber: '51987654321',
+        companyName: 'Empresa Demo SAC',
+        ruc: '20123456789',
+      },
+      company: {
+        razonSocial: 'Empresa Demo SAC',
+        numeroDoc: '20123456789',
+      },
+      product: {
+        name: 'Impresora Multifuncional HP',
+        category: 'Impresoras',
+        price: 1500.00,
+      },
+    };
+
+    const processedResponse = await autoResponseModel.findAndProcessResponse(
+      message,
+      testContext
+    );
+
+    if (processedResponse) {
+      res.json({ 
+        found: true,
+        response: processedResponse,
+        context: testContext
+      });
+    } else {
+      res.json({ found: false });
+    }
+  } catch (error) {
+    logger.error('Error testing trigger with variables:', error);
+    res.status(500).json({ error: 'Error testing trigger with variables' });
   }
 });
 
