@@ -1,16 +1,16 @@
 <!DOCTYPE html>
 <html lang="es" class="h-full">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title><%= title %> - WhatsApp Bot Admin</title>
 
   <!-- Fuente -->
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <!-- Tailwind (misma config del otro archivo) -->
+  <!-- Tailwind (misma config que el ejemplo que SÍ quieres) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -40,17 +40,11 @@
   <style>
     @media (prefers-reduced-motion: reduce){
       *{
-        animation-duration:.001ms !important;
-        animation-iteration-count:1 !important;
-        transition-duration:.001ms !important;
-        scroll-behavior:auto !important;
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
       }
-    }
-
-    .sidebar-link-active{
-      background-color:rgba(255,255,255,.12);
-      color:#fff !important;
-      font-weight:600;
     }
 
     .gradient-text {
@@ -60,267 +54,102 @@
       background-clip: text;
     }
 
-    .scrollbar-thin::-webkit-scrollbar{height:4px;width:4px}
-    .scrollbar-thin::-webkit-scrollbar-thumb{background:#47556933;border-radius:9999px}
-    .scrollbar-thin::-webkit-scrollbar-track{background:transparent}
+    .icon { width: 1.25rem; height: 1.25rem; }
+    .icon-lg { width: 1.75rem; height: 1.75rem; }
+
+    .hidden-card { display:none; }
   </style>
 </head>
-
 <body class="h-full bg-gradient-to-br from-slate-50 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 text-slate-800 dark:text-slate-100">
-<a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-3 focus:py-2 focus:rounded-lg shadow">
-  Saltar al contenido
-</a>
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-4 focus:py-2 focus:rounded-lg shadow-lg">
+    Saltar al contenido
+  </a>
 
-<%
-  // util para marcar link activo en sidebar
-  function isActive(p){
-    return (page === p || (!page && p==='templates')) ? 'sidebar-link-active' : '';
-  }
+  <%
+    const templatesList = Array.isArray(templates) ? templates : [];
+    function safeVars(v){
+      try {
+        if (!v) return [];
+        return Array.isArray(v) ? v : JSON.parse(v);
+      } catch { return []; }
+    }
+  %>
 
-  // intento de parse seguro de variables por template
-  function parseVars(v){
-    try {
-      if (!v) return [];
-      return Array.isArray(v) ? v : JSON.parse(v);
-    } catch { return []; }
-  }
-%>
+  <main id="main-content" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
-<div class="min-h-screen w-full flex relative">
+    <!-- Volver al Dashboard + breadcrumb -->
+    <div class="flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <a href="/"
+           class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
+          <i data-lucide="arrow-left" class="icon"></i>
+          <span>Volver al Dashboard</span>
+        </a>
+      </div>
 
-  <!-- overlay móvil sidebar -->
-  <div id="mobile-sidebar-overlay"
-       class="fixed inset-0 bg-black/40 z-40 opacity-0 pointer-events-none transition-opacity md:hidden"></div>
-
-  <!-- SIDEBAR -->
-  <aside id="sidebar"
-         class="w-[280px] flex flex-col bg-gradient-to-b from-primary to-secondary text-white shadow-card
-                fixed inset-y-0 left-0 z-50 -translate-x-full transition-transform
-                md:translate-x-0 md:relative md:flex"
-         role="navigation"
-         aria-label="Menú principal">
-
-    <!-- header sidebar -->
-    <div class="px-5 py-6 border-b border-white/10 bg-white/5 backdrop-blur flex items-center justify-between">
-      <h2 class="text-xl font-semibold flex items-center gap-2">
-        <i data-lucide="bot" class="w-5 h-5"></i> Bot Admin
-      </h2>
-
-      <!-- cerrar sidebar en móvil -->
-      <button id="close-sidebar-btn"
-              class="md:hidden inline-flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/10 p-2"
-              aria-label="Cerrar menú">
-        <i data-lucide="x" class="w-5 h-5"></i>
-      </button>
+      <nav aria-label="Breadcrumb" class="text-xs text-slate-500 dark:text-slate-400">
+        <ol class="flex items-center gap-2">
+          <li class="inline-flex items-center gap-1">
+            <a href="/" class="hover:underline inline-flex items-center gap-1">
+              <i data-lucide="home" class="w-3.5 h-3.5"></i> Inicio
+            </a>
+          </li>
+          <li class="select-none">/</li>
+          <li class="inline-flex items-center gap-1">
+            <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
+            <span class="font-medium">Plantillas</span>
+          </li>
+        </ol>
+      </nav>
     </div>
 
-    <!-- nav links -->
-    <nav class="py-4 flex-1 overflow-y-auto text-[15px] leading-5">
-      <ul class="px-2 space-y-1">
-        <li>
-          <a href="/"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('dashboard') %>">
-            <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
-            <span>Dashboard</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/contacts"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('contacts') %>">
-            <i data-lucide="users" class="w-5 h-5"></i>
-            <span>Contactos</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/conversations"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('conversations') %>">
-            <i data-lucide="message-circle" class="w-5 h-5"></i>
-            <span>Conversaciones</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/blocked"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('blocked') %>">
-            <i data-lucide="ban" class="w-5 h-5"></i>
-            <span>Bloqueados</span>
-          </a>
-        </li>
-
-        <li><div class="my-3 h-px bg-white/10"></div></li>
-
-        <li>
-          <a href="/calendar"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('calendar') %>">
-            <i data-lucide="calendar" class="w-5 h-5"></i>
-            <span>Calendario</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/working-hours"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('working-hours') %>">
-            <i data-lucide="clock" class="w-5 h-5"></i>
-            <span>Horarios</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/admin-users"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('admin-users') %>">
-            <i data-lucide="shield" class="w-5 h-5"></i>
-            <span>Usuarios Admin</span>
-          </a>
-        </li>
-
-        <li><div class="my-3 h-px bg-white/10"></div></li>
-
-        <li>
-          <a href="/settings"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('settings') %>">
-            <i data-lucide="settings" class="w-5 h-5"></i>
-            <span>Configuración</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/departments"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('departments') %>">
-            <i data-lucide="building-2" class="w-5 h-5"></i>
-            <span>Departamentos</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/products"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('products') %>">
-            <i data-lucide="package" class="w-5 h-5"></i>
-            <span>Productos</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/auto-responses"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('auto-responses') %>">
-            <i data-lucide="robot" class="w-5 h-5"></i>
-            <span>Auto-respuestas</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/tags"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('tags') %>">
-            <i data-lucide="tags" class="w-5 h-5"></i>
-            <span>Tags</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/templates"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white hover:bg-white/10 transition <%= isActive('templates') %>"
-             aria-current="<%= isActive('templates') ? 'page' : false %>">
-            <i data-lucide="file-text" class="w-5 h-5"></i>
-            <span>Plantillas</span>
-          </a>
-        </li>
-
-        <li>
-          <a href="/metrics"
-             class="group flex items-center gap-3 rounded-lg px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition <%= isActive('metrics') %>">
-            <i data-lucide="line-chart" class="w-5 h-5"></i>
-            <span>Métricas</span>
-          </a>
-        </li>
-      </ul>
-    </nav>
-
-    <!-- footer sidebar -->
-    <div class="mt-auto p-4 bg-white/5 border-t border-white/10">
-      <div class="rounded-xl bg-white/10 p-3">
-        <div class="text-[11px] uppercase tracking-wide opacity-80">Sesión activa</div>
-        <div class="font-semibold text-sm mt-1 flex items-center gap-2">
-          <i data-lucide="user" class="w-4 h-4"></i> <%= user || 'Admin' %>
+    <!-- Header (igual estilo que el ejemplo) -->
+    <header class="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 px-6 py-5">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 class="text-3xl font-bold tracking-tight gradient-text flex items-center gap-3">
+            <i data-lucide="file-text" class="icon-lg text-primary"></i>
+            Plantillas de Mensajes
+          </h1>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Gestión de respuestas rápidas para WhatsApp
+          </p>
         </div>
-      </div>
-      <form method="POST" action="/auth/logout" class="mt-3">
-        <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
-          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-        <% } %>
 
-        <button type="submit"
-                class="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-red-500/20 hover:bg-red-500/30 text-white py-2.5 text-sm font-medium transition">
-          <i data-lucide="log-out" class="w-4 h-4"></i> Cerrar sesión
-        </button>
-      </form>
-    </div>
-  </aside>
-
-  <!-- MAIN -->
-  <main id="main-content" class="flex-1 p-4 md:p-8 w-full md:w-auto md:ml-0 ml-0">
-
-    <!-- HEADER PAGE -->
-    <header class="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 px-6 py-5 mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-      <div class="flex items-start justify-between w-full md:w-auto">
-        <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight gradient-text flex items-center gap-3">
-          <i data-lucide="file-text" class="w-7 h-7 text-primary"></i>
-          Plantillas de Mensajes
-        </h1>
-
-        <!-- abrir sidebar en móvil -->
-        <button id="open-sidebar-btn"
-                class="md:hidden inline-flex items-center justify-center rounded-lg text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 p-2 shadow-soft"
-                aria-label="Abrir menú">
-          <i data-lucide="menu" class="w-6 h-6"></i>
-        </button>
-      </div>
-
-      <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-end w-full md:w-auto">
-        <button
-          class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft transition"
-          onclick="openNewTemplateModal()">
-          <i data-lucide="plus-circle" class="w-4 h-4"></i>
-          Nueva Plantilla
-        </button>
+        <div class="flex flex-wrap items-center gap-3">
+          <button
+            class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft transition"
+            onclick="openTemplateModal()">
+            <i data-lucide="plus-circle" class="icon"></i>
+            <span>Nueva Plantilla</span>
+          </button>
+        </div>
       </div>
     </header>
 
-    <!-- TIP -->
-    <section class="mb-6">
-      <div class="rounded-2xl bg-blue-50 text-blue-900 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-200 dark:border-blue-900/40 px-4 py-3 text-sm font-medium flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 shadow-card">
-        <div class="flex items-start gap-2">
-          <i data-lucide="info" class="w-5 h-5 text-blue-600 dark:text-blue-300 flex-shrink-0"></i>
-          <div>
-            <strong class="font-semibold">Tip:</strong>
-            Usa variables como
-            <code class="bg-white/60 dark:bg-slate-800/60 px-1 py-0.5 rounded text-xs font-mono text-slate-800 dark:text-slate-200">{{nombre}}</code>,
-            <code class="bg-white/60 dark:bg-slate-800/60 px-1 py-0.5 rounded text-xs font-mono text-slate-800 dark:text-slate-200">{{empresa}}</code>,
-            <code class="bg-white/60 dark:bg-slate-800/60 px-1 py-0.5 rounded text-xs font-mono text-slate-800 dark:text-slate-200">{{telefono}}</code>,
-            etc. para personalizar.
+    <!-- Sección de búsqueda / filtros (como el ejemplo) -->
+    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/50 dark:border-white/5 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-white/5 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50">
+        <h2 class="text-lg font-bold flex items-center gap-2.5 text-slate-800 dark:text-white">
+          <div class="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+            <i data-lucide="search" class="icon text-indigo-600 dark:text-indigo-400"></i>
           </div>
-        </div>
+          Buscar plantillas
+        </h2>
       </div>
-    </section>
 
-    <!-- SEARCH + LIST CARD -->
-    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/50 dark:border-white/5 p-6 mb-10">
-
-      <!-- search row -->
-      <div class="flex flex-col lg:flex-row lg:items-center gap-3 mb-5">
-        <div class="flex-1 flex items-stretch gap-2 w-full">
+      <div class="p-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:flex-wrap">
+        <div class="flex-1">
+          <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">
+            Buscar por nombre, categoría o contenido
+          </label>
           <input
-            id="searchInput"
             type="text"
-            placeholder="🔍 Buscar por nombre, categoría o contenido..."
-            class="flex-1 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-4 py-2.5 text-slate-700 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
+            id="searchInput"
             oninput="filterTemplates()"
+            placeholder="🔍 bienvenida, seguimiento, soporte, ventas..."
+            class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0 transition"
           />
-          <button
-            class="inline-flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-3 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 shadow-soft"
-            onclick="clearSearch()">
-            Limpiar
-          </button>
         </div>
 
         <div class="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2">
@@ -330,513 +159,446 @@
             <span>Dar formato al texto</span>
           </label>
         </div>
+
+        <div class="text-sm text-slate-500 dark:text-slate-400">
+          Mostrando:
+          <span id="countVisible" class="font-semibold text-slate-700 dark:text-slate-200"><%= templatesList.length %></span>
+          / <%= templatesList.length %> plantillas
+        </div>
+      </div>
+    </section>
+
+    <!-- Lista de plantillas (igual estructura de tarjeta que el ejemplo) -->
+    <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/50 dark:border-white/5 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 dark:border-white/5 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50">
+        <h2 class="text-lg font-bold flex items-center gap-2.5 text-slate-800 dark:text-white">
+          <div class="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+            <i data-lucide="list" class="icon text-blue-600 dark:text-blue-400"></i>
+          </div>
+          Plantillas disponibles
+        </h2>
       </div>
 
-      <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
-        <div class="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-          <i data-lucide="list" class="w-5 h-5 text-blue-600 dark:text-blue-400"></i>
-        </div>
-        Plantillas disponibles
-      </h2>
-
-      <!-- GRID -->
-      <div id="templatesList"
-           class="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-        <% if (templates && templates.length > 0) { %>
-          <% templates.forEach(t => { const vars = parseVars(t.variables); %>
+      <div class="p-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" id="templatesList">
+        <% if (templatesList.length > 0) { %>
+          <% templatesList.forEach(t => { const vars = safeVars(t.variables); %>
             <div
-              class="group relative rounded-xl border border-slate-200/50 dark:border-white/5 bg-white dark:bg-slate-900 shadow-card p-4 flex flex-col"
+              class="template-card group relative rounded-xl border shadow-card p-5 bg-white dark:bg-slate-900
+                     transition hover:shadow-lg hover:border-indigo-400/60 hover:bg-slate-50/60 dark:hover:bg-white/5
+                     border-slate-200/70 dark:border-slate-700/70"
               data-name="<%= (t.name||'').toLowerCase() %>"
-              data-cat ="<%= (t.category||'').toLowerCase() %>"
-              data-card
-            >
-              <!-- header -->
-              <div class="flex items-start justify-between gap-3 mb-2">
-                <div class="min-w-0">
-                  <div class="flex flex-wrap items-center gap-2 text-slate-900 dark:text-white font-semibold text-sm leading-snug">
-                    <span class="truncate"><%= t.name %></span>
-                    <span class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold
-                                 <%= t.isActive
-                                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                                      : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' %>">
-                      <i data-lucide="<%= t.isActive ? 'check' : 'x' %>" class="w-3.5 h-3.5"></i>
-                      <span><%= t.isActive ? 'Activo' : 'Inactivo' %></span>
-                    </span>
-                  </div>
-                  <div class="text-[12px] leading-4 text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-1">
-                    <i data-lucide="folder" class="w-3.5 h-3.5"></i>
-                    <span class="truncate"><%= t.category %></span>
-                  </div>
+              data-cat ="<%= (t.category||'').toLowerCase() %>">
+
+              <!-- Título + estado -->
+              <div class="flex flex-wrap items-center gap-2 mb-2">
+                <div class="text-base font-semibold text-slate-900 dark:text-white flex-1 truncate">
+                  <%= t.name %>
                 </div>
-
-                <div class="flex flex-wrap gap-2 shrink-0">
-                  <button
-                    class="inline-flex items-center gap-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-2 py-1 text-[12px] font-medium border border-slate-200 dark:border-slate-700"
-                    onclick="copyContent(`<%- (t.content||'').replace(/`/g,'\\`') %>`)">
-                    <i data-lucide="clipboard-copy" class="w-3.5 h-3.5"></i> Copiar
-                  </button>
-
-                  <button
-                    class="inline-flex items-center gap-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 text-[12px] font-medium shadow-soft"
-                    onclick="editTemplate('<%= t.id %>')">
-                    <i data-lucide="pencil" class="w-3.5 h-3.5"></i> Editar
-                  </button>
-
-                  <button
-                    class="inline-flex items-center gap-1 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 dark:text-indigo-300 px-2 py-1 text-[12px] font-medium border border-indigo-200/70 dark:border-indigo-900/50"
-                    onclick="duplicateTemplate('<%= t.id %>')">
-                    <i data-lucide="copy-plus" class="w-3.5 h-3.5"></i> Duplicar
-                  </button>
-
-                  <button
-                    class="inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-2 py-1 text-[12px] font-medium shadow-soft"
-                    onclick="askDeleteTemplate('<%= t.id %>')">
-                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                  </button>
-                </div>
+                <span class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-wide
+                             <%= t.isActive
+                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                  : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' %>">
+                  <i data-lucide="<%= t.isActive ? 'check' : 'x' %>" class="w-3.5 h-3.5"></i>
+                  <%= t.isActive ? 'Activo' : 'Inactivo' %>
+                </span>
               </div>
 
-              <!-- contenido -->
-              <div class="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-[13px] leading-relaxed text-slate-700 dark:text-slate-200 font-mono whitespace-pre-wrap max-h-40 overflow-y-auto scrollbar-thin">
+              <!-- Categoría -->
+              <div class="text-[13px] text-slate-500 dark:text-slate-400 font-medium mb-3 flex items-center gap-1">
+                <i data-lucide="folder" class="w-4 h-4 text-primary"></i>
+                <span><%= t.category || 'general' %></span>
+              </div>
+
+              <!-- Contenido -->
+              <div class="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-[13px] leading-relaxed text-slate-700 dark:text-slate-200 font-mono whitespace-pre-wrap max-h-40 overflow-y-auto">
                 <%= t.content %>
               </div>
 
-              <!-- variables -->
-              <div class="mt-3 min-h-[2rem] text-[12px] leading-4 text-slate-500 dark:text-slate-400">
+              <!-- Variables -->
+              <div class="flex flex-wrap gap-1.5 mt-4 min-h-[28px]">
                 <% if (vars && vars.length) { %>
-                  <div class="flex flex-wrap items-start gap-2">
-                    <span class="uppercase text-[11px] tracking-wide font-semibold text-slate-400 dark:text-slate-500 flex items-center gap-1">
-                      <i data-lucide="code-2" class="w-3.5 h-3.5"></i>
-                      Variables:
+                  <% vars.slice(0,3).forEach(v => { %>
+                    <span class="inline-flex items-center rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-0.5 text-[11px] font-semibold leading-none">
+                      {{<%- v %>}}
                     </span>
-                    <% vars.forEach(v => { %>
-                      <span class="inline-flex items-center rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50 px-2 py-0.5 font-mono text-[11px] font-medium">
-                        {{<%- v %>}}
-                      </span>
-                    <% }) %>
-                  </div>
+                  <% }) %>
+                  <% if (vars.length > 3) { %>
+                    <span class="inline-flex items-center rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-0.5 text-[11px] font-semibold leading-none">
+                      +<%= vars.length - 3 %>
+                    </span>
+                  <% } %>
                 <% } else { %>
-                  <span class="italic text-slate-400 dark:text-slate-600 flex items-center gap-1">
-                    <i data-lucide="minus-circle" class="w-3.5 h-3.5"></i>
-                    Sin variables dinámicas
-                  </span>
+                  <span class="text-[12px] text-slate-400 italic">Sin variables</span>
                 <% } %>
+              </div>
+
+              <!-- Acciones -->
+              <div class="flex flex-wrap gap-2 mt-4">
+                <button
+                  class="inline-flex items-center gap-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-2.5 py-1.5 text-xs font-medium transition"
+                  onclick="copyContent(`<%- (t.content||'').replace(/`/g,'\\`') %>`)">
+                  <i data-lucide="clipboard-copy" class="w-3.5 h-3.5"></i>
+                  Copiar
+                </button>
+
+                <button
+                  class="inline-flex items-center gap-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                  onclick="editTemplate('<%= t.id %>')">
+                  <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                  Editar
+                </button>
+
+                <button
+                  class="inline-flex items-center gap-1 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 dark:text-indigo-300 px-2.5 py-1.5 text-xs font-medium transition"
+                  onclick="duplicateTemplate('<%= t.id %>')">
+                  <i data-lucide="copy-plus" class="w-3.5 h-3.5"></i>
+                  Duplicar
+                </button>
+
+                <button
+                  class="inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                  onclick="askDeleteTemplate('<%= t.id %>')">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                  Eliminar
+                </button>
               </div>
             </div>
           <% }) %>
         <% } else { %>
-          <div class="col-span-full text-center text-slate-500 dark:text-slate-400 py-16 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 shadow-card">
-            <div class="text-base font-semibold text-slate-700 dark:text-white mb-1">No hay plantillas aún</div>
-            <div class="text-sm">Crea tu primera respuesta rápida para WhatsApp.</div>
+          <div class="col-span-full py-16 text-center">
+            <div class="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
+              <i data-lucide="inbox" class="icon-lg text-slate-400"></i>
+            </div>
+            <p class="text-sm text-slate-500 dark:text-slate-400 font-medium">No hay plantillas configuradas</p>
+            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Crea una nueva para comenzar</p>
           </div>
         <% } %>
       </div>
     </section>
   </main>
-</div>
 
-<!-- MODAL CREAR / EDITAR -->
-<div id="templateModal"
-     class="hidden fixed inset-0 z-[1000] flex items-center justify-center p-4">
-  <!-- fondo blur oscurecido -->
-  <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
-
-  <div class="relative w-full max-w-2xl rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/70 dark:border-white/10 flex flex-col max-h-[85vh]">
-    <!-- header -->
-    <div class="px-5 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-start justify-between">
-      <div>
-        <div id="modalTitle" class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          Nueva Plantilla
-        </div>
-        <div class="text-[12px] leading-4 text-slate-500 dark:text-slate-400 mt-1">
-          Usa variables tipo
-          <code class="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50 px-1 py-0.5 rounded font-mono text-[11px]">{{nombre}}</code>
-          para personalizar.
-        </div>
-      </div>
-
-      <div class="flex flex-wrap gap-2">
-        <button
-          class="inline-flex items-center gap-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-2 text-[12px] font-medium border border-slate-200 dark:border-slate-700 shadow-soft"
-          type="button"
-          onclick="copyFromEditor()">
-          <i data-lucide="clipboard-copy" class="w-3.5 h-3.5"></i> Copiar
-        </button>
-
-        <button
-          class="inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 p-2 border border-transparent"
-          type="button"
-          aria-label="Cerrar"
-          onclick="closeTemplateModal()">
-          <i data-lucide="x" class="w-5 h-5"></i>
+  <!-- Modal Crear/Editar -->
+  <div id="templateModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-2xl w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden max-h-[90vh] overflow-y-auto">
+      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="file-text" class="icon text-primary"></i>
+          <span id="modalTitle">Nueva Plantilla</span>
+        </h2>
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="closeTemplateModal()">
+          <i data-lucide="x" class="icon"></i>
         </button>
       </div>
-    </div>
 
-    <!-- body -->
-    <div class="px-5 py-4 overflow-y-auto flex-1 space-y-4">
-      <form id="templateForm" class="space-y-4">
-        <input type="hidden" id="templateId"/>
+      <div class="p-6 space-y-4">
+        <input type="hidden" id="templateId" />
 
-        <div class="grid md:grid-cols-2 gap-4">
-          <div class="space-y-1.5">
-            <label class="text-[13px] font-medium text-slate-700 dark:text-slate-200">Nombre *</label>
-            <input
-              id="templateName"
-              required
-              placeholder="Bienvenida, Seguimiento, Despedida"
-              class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] px-4 py-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
-              type="text">
+        <div class="grid gap-4 md:grid-cols-2">
+          <div>
+            <label class="block text-sm font-semibold mb-2">Nombre *</label>
+            <input id="templateName" type="text" required class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
           </div>
 
-          <div class="space-y-1.5">
-            <label class="text-[13px] font-medium text-slate-700 dark:text-slate-200">Categoría *</label>
-            <input
-              id="templateCategory"
-              required
-              placeholder="greeting / followup / soporte / ventas / ..."
-              class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] px-4 py-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
-              type="text">
+          <div>
+            <label class="block text-sm font-semibold mb-2">Categoría *</label>
+            <input id="templateCategory" type="text" required class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
           </div>
         </div>
 
-        <div class="space-y-2">
-          <div class="flex items-center gap-2 flex-wrap justify-between">
-            <label class="text-[13px] font-medium text-slate-700 dark:text-slate-200">Contenido *</label>
-            <div class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-4 flex-wrap">
-              <span>Vars detectadas:
-                <span id="varsDetected" class="font-semibold text-slate-700 dark:text-white">0</span>
-              </span>
-              <span class="tabular-nums">
-                <span id="charCount" class="font-semibold text-slate-700 dark:text-white">0</span> chars
-              </span>
-            </div>
-          </div>
-
-          <textarea
-            id="templateContent"
-            rows="6"
-            required
-            placeholder="Hola {{nombre}}, gracias por contactarnos..."
-            class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] leading-relaxed px-4 py-2.5 text-slate-800 dark:text-slate-100 font-mono outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition"
-            oninput="updatePreview();updateCounter();detectVariables();">
-          </textarea>
-
-          <div class="text-[12px] leading-4 text-slate-500 dark:text-slate-400">
-            Variables disponibles: {{nombre}}, {{empresa}}, {{telefono}}, {{dni}}, {{ruc}}
-          </div>
+        <div>
+          <label class="block text-sm font-semibold mb-2 flex items-center justify-between gap-2">
+            Contenido *
+            <span class="text-[11px] text-slate-400">
+              Vars: <span id="varsDetected">0</span> · Chars: <span id="charCount">0</span>
+            </span>
+          </label>
+          <textarea id="templateContent" rows="6" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 font-mono" oninput="updatePreview();updateCounter();detectVariables();"></textarea>
         </div>
 
-        <div class="space-y-1.5">
-          <label class="text-[13px] font-medium text-slate-700 dark:text-slate-200">Estado</label>
-          <select
-            id="templateActive"
-            class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[14px] px-4 py-2.5 text-slate-800 dark:text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-400/30 transition">
+        <div>
+          <label class="block text-sm font-semibold mb-2">Estado</label>
+          <select id="templateActive" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
             <option value="true">Activo</option>
             <option value="false">Inactivo</option>
           </select>
         </div>
 
-        <div class="space-y-2">
-          <div class="text-[13px] font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+        <div>
+          <p class="text-sm font-semibold mb-2 flex items-center gap-2">
             <i data-lucide="eye" class="w-4 h-4 text-indigo-500"></i>
             Vista previa
-          </div>
-
-          <div class="rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 p-3 text-[14px] leading-relaxed text-slate-800 dark:text-slate-100"
-               id="templatePreview">
+          </p>
+          <div id="templatePreview" class="rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3 text-sm text-slate-800 dark:text-slate-100">
             Escribe contenido arriba para ver la vista previa...
           </div>
         </div>
-      </form>
-    </div>
-
-    <!-- footer -->
-    <div class="px-5 py-4 border-t border-slate-200/70 dark:border-white/10 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
-      <button
-        type="button"
-        class="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-4 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 shadow-soft w-full sm:w-auto"
-        onclick="closeTemplateModal()">
-        <i data-lucide="x" class="w-4 h-4"></i> Cancelar
-      </button>
-
-      <button
-        type="button"
-        class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold shadow-soft w-full sm:w-auto"
-        onclick="submitTemplateForm()">
-        <i data-lucide="save" class="w-4 h-4"></i> Guardar
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL CONFIRM -->
-<div id="confirmModal"
-     class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4">
-  <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"></div>
-
-  <div class="relative w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/70 dark:border-white/10 flex flex-col">
-    <div class="px-5 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-start justify-between">
-      <div class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-        <i data-lucide="alert-triangle" class="w-5 h-5 text-rose-500"></i>
-        ¿Confirmar?
       </div>
-      <button
-        class="inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 p-2 border border-transparent"
-        onclick="closeConfirmModal()">
-        <i data-lucide="x" class="w-5 h-5"></i>
-      </button>
-    </div>
 
-    <div class="px-5 py-4 text-sm text-slate-600 dark:text-slate-300 leading-relaxed" id="confirmText">
-      Esta acción no se puede deshacer.
-    </div>
+      <div class="p-6 flex justify-end gap-2 border-t border-slate-200 dark:border-slate-700">
+        <button
+          class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition"
+          onclick="closeTemplateModal()">
+          Cancelar
+        </button>
 
-    <div class="px-5 py-4 border-t border-slate-200/70 dark:border-white/10 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
-      <button
-        class="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-4 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 shadow-soft w-full sm:w-auto"
-        onclick="closeConfirmModal()">
-        <i data-lucide="x" class="w-4 h-4"></i> Cancelar
-      </button>
-
-      <button
-        id="confirmOkBtn"
-        class="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 text-sm font-semibold shadow-soft w-full sm:w-auto">
-        <i data-lucide="trash-2" class="w-4 h-4"></i> Aceptar
-      </button>
+        <button
+          class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition"
+          onclick="submitTemplateForm()">
+          Guardar
+        </button>
+      </div>
     </div>
   </div>
-</div>
 
-<script>
-  // ================== SEARCH ==================
-  function filterTemplates(){
-    const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
-    const cards = document.querySelectorAll('#templatesList [data-name]');
-    cards.forEach(card => {
-      const name = card.dataset.name || '';
-      const cat  = card.dataset.cat || '';
-      const content = (card.innerText || '').toLowerCase();
-      const hit = !q || name.includes(q) || cat.includes(q) || content.includes(q);
-      card.style.display = hit ? '' : 'none';
+  <!-- Modal Confirmación -->
+  <div id="confirmModal" class="hidden fixed inset-0 z-[60] items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="alert-triangle" class="icon text-rose-600"></i>
+          <span>¿Confirmar?</span>
+        </h2>
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="closeConfirmModal()">
+          <i data-lucide="x" class="icon"></i>
+        </button>
+      </div>
+
+      <div class="p-6">
+        <div id="confirmText" class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+          Esta acción no se puede deshacer.
+        </div>
+
+        <div class="mt-6 flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <button
+            class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition"
+            onclick="closeConfirmModal()">
+            Cancelar
+          </button>
+          <button
+            id="confirmOkBtn"
+            class="rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition">
+            Aceptar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Iconos
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
     });
-  }
 
-  function clearSearch(){
-    const si = document.getElementById('searchInput');
-    si.value = '';
-    filterTemplates();
-    si.focus();
-  }
+    // FILTRO
+    function filterTemplates(){
+      const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+      const cards = document.querySelectorAll('#templatesList .template-card');
+      let visible = 0;
+      cards.forEach(card => {
+        const name = card.dataset.name || '';
+        const cat  = card.dataset.cat || '';
+        const content = (card.innerText || '').toLowerCase();
+        const hit = !q || name.includes(q) || cat.includes(q) || content.includes(q);
+        card.classList.toggle('hidden-card', !hit);
+        if (hit) visible++;
+      });
+      const countEl = document.getElementById('countVisible');
+      if (countEl) countEl.textContent = visible;
+    }
 
-  // ================== PREVIEW / CONTADOR / VARS ==================
-  function updatePreview() {
-    const content = document.getElementById('templateContent').value;
-    const preview = document.getElementById('templatePreview');
+    // MODALES
+    function openTemplateModal(){
+      const el = document.getElementById('templateModal');
+      el.classList.remove('hidden');
+      el.classList.add('flex');
+      // reset básico
+      document.getElementById('modalTitle').textContent = 'Nueva Plantilla';
+      document.getElementById('templateId').value = '';
+      document.getElementById('templateName').value = '';
+      document.getElementById('templateCategory').value = '';
+      document.getElementById('templateContent').value = '';
+      document.getElementById('templateActive').value = 'true';
+      document.getElementById('templatePreview').textContent = 'Escribe contenido arriba para ver la vista previa...';
+      document.getElementById('varsDetected').textContent = '0';
+      document.getElementById('charCount').textContent = '0';
+    }
 
-    const previewContent = content
-      .replace(/{{\s*nombre\s*}}/gi,  '<span class="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1 py-0.5 text-[12px] font-mono font-semibold">Juan Pérez</span>')
-      .replace(/{{\s*empresa\s*}}/gi, '<span class="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1 py-0.5 text-[12px] font-mono font-semibold">Mi Empresa SAC</span>')
-      .replace(/{{\s*telefono\s*}}/gi,'<span class="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1 py-0.5 text-[12px] font-mono font-semibold">51999888777</span>')
-      .replace(/{{\s*dni\s*}}/gi,     '<span class="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1 py-0.5 text-[12px] font-mono font-semibold">12345678</span>')
-      .replace(/{{\s*ruc\s*}}/gi,     '<span class="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1 py-0.5 text-[12px] font-mono font-semibold">20123456789</span>');
+    function closeTemplateModal(){
+      const el = document.getElementById('templateModal');
+      el.classList.remove('flex');
+      el.classList.add('hidden');
+    }
 
-    preview.innerHTML = previewContent || 'Escribe contenido arriba para ver la vista previa...';
-  }
+    function openConfirmModal(){
+      const el = document.getElementById('confirmModal');
+      el.classList.remove('hidden');
+      el.classList.add('flex');
+    }
 
-  function updateCounter(){
-    const n = document.getElementById('templateContent').value.length;
-    document.getElementById('charCount').textContent = n;
-  }
+    function closeConfirmModal(){
+      const el = document.getElementById('confirmModal');
+      el.classList.remove('flex');
+      el.classList.add('hidden');
+    }
 
-  function detectVariables(){
-    const txt = document.getElementById('templateContent').value;
-    const vars = Array.from(new Set(
-      (txt.match(/{{\s*[\w.-]+\s*}}/g)||[])
-        .map(v=>v.replace(/\s+/g,'')) // quita espacios internos
-    ));
-    document.getElementById('varsDetected').textContent = vars.length;
-  }
+    window.addEventListener('click', (e) => {
+      const tm = document.getElementById('templateModal');
+      const cm = document.getElementById('confirmModal');
+      if (e.target === tm) closeTemplateModal();
+      if (e.target === cm) closeConfirmModal();
+    });
 
-  // ================== MODAL HELPERS ==================
-  function openModal(el){ el.classList.remove('hidden'); }
-  function closeModal(el){ el.classList.add('hidden'); }
+    // CRUD
+    function copyContent(text){ navigator.clipboard.writeText(text||''); }
 
-  function openTemplateModal(){ openModal(document.getElementById('templateModal')); }
-  function closeTemplateModal(){ closeModal(document.getElementById('templateModal')); }
-  function openConfirmModal(){ openModal(document.getElementById('confirmModal')); }
-  function closeConfirmModal(){ closeModal(document.getElementById('confirmModal')); }
+    async function editTemplate(id){
+      try {
+        const res = await fetch(`/templates/api/${id}`);
+        const t = await res.json();
 
-  // cerrar modal haciendo click fuera del cuadro
-  window.addEventListener('click',(e)=>{
-    const tm = document.getElementById('templateModal');
-    const cm = document.getElementById('confirmModal');
-    [tm,cm].forEach(mod=>{
-      if(!mod) return;
-      if(!mod.classList.contains('hidden') && e.target === mod){
-        mod.classList.add('hidden');
+        document.getElementById('modalTitle').textContent = 'Editar Plantilla';
+        document.getElementById('templateId').value = t.id || '';
+        document.getElementById('templateName').value = t.name || '';
+        document.getElementById('templateCategory').value = t.category || '';
+        document.getElementById('templateContent').value = t.content || '';
+        document.getElementById('templateActive').value = t.isActive ? 'true' : 'false';
+
+        updatePreview();
+        updateCounter();
+        detectVariables();
+
+        const el = document.getElementById('templateModal');
+        el.classList.remove('hidden');
+        el.classList.add('flex');
+      } catch (err) {
+        alert('Error cargando plantilla');
+        console.error(err);
       }
-    })
-  });
-
-  // cerrar con ESC
-  window.addEventListener('keydown',(e)=>{
-    if(e.key === 'Escape'){
-      closeTemplateModal();
-      closeConfirmModal();
     }
-  });
 
-  // ================== CRUD TEMPLATE ==================
-  function copyContent(text){ navigator.clipboard.writeText(text||''); }
-  function copyFromEditor(){ copyContent(document.getElementById('templateContent').value); }
+    async function duplicateTemplate(id){
+      try {
+        const res = await fetch(`/templates/api/${id}`);
+        const t = await res.json();
 
-  function openNewTemplateModal() {
-    document.getElementById('modalTitle').textContent = 'Nueva Plantilla';
-    document.getElementById('templateId').value = '';
-    document.getElementById('templateName').value = '';
-    document.getElementById('templateCategory').value = '';
-    document.getElementById('templateContent').value = '';
-    document.getElementById('templateActive').value = 'true';
+        const data = {
+          name: (t.name || 'Plantilla') + ' (copia)',
+          category: t.category || 'general',
+          content: t.content || '',
+          isActive: !!t.isActive
+        };
 
-    document.getElementById('templatePreview').textContent = 'Escribe contenido arriba para ver la vista previa...';
-    updateCounter();
-    detectVariables();
+        const create = await fetch('/templates/api', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(data)
+        });
 
-    openTemplateModal();
-  }
-
-  async function editTemplate(id){
-    try {
-      const res = await fetch(`/templates/api/${id}`);
-      const t = await res.json();
-
-      document.getElementById('modalTitle').textContent = 'Editar Plantilla';
-      document.getElementById('templateId').value = t.id || '';
-      document.getElementById('templateName').value = t.name || '';
-      document.getElementById('templateCategory').value = t.category || '';
-      document.getElementById('templateContent').value = t.content || '';
-      document.getElementById('templateActive').value = t.isActive ? 'true' : 'false';
-
-      updatePreview();
-      updateCounter();
-      detectVariables();
-
-      openTemplateModal();
-    } catch (err) {
-      alert('Error cargando plantilla');
-      console.error(err);
+        if (create.ok) {
+          location.reload();
+        } else {
+          alert('No se pudo duplicar');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
     }
-  }
 
-  async function duplicateTemplate(id){
-    try{
-      const res = await fetch(`/templates/api/${id}`);
-      const t = await res.json();
-
+    async function submitTemplateForm(){
+      const id = document.getElementById('templateId').value;
       const data = {
-        name: (t.name || 'Plantilla') + ' (copia)',
-        category: t.category || 'general',
-        content: t.content || '',
-        isActive: !!t.isActive
+        name:     document.getElementById('templateName').value,
+        category: document.getElementById('templateCategory').value,
+        content:  document.getElementById('templateContent').value,
+        isActive: document.getElementById('templateActive').value === 'true'
       };
 
-      const create = await fetch('/templates/api', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(data)
-      });
+      if (!data.name || !data.category || !data.content){
+        alert('Completa nombre, categoría y contenido');
+        return;
+      }
 
-      if (create.ok) location.reload();
-      else alert('No se pudo duplicar');
-    } catch(e){
-      alert('Error: ' + e.message);
-    }
-  }
-
-  async function submitTemplateForm(){
-    const id = document.getElementById('templateId').value;
-    const data = {
-      name:      document.getElementById('templateName').value,
-      category:  document.getElementById('templateCategory').value,
-      content:   document.getElementById('templateContent').value,
-      isActive:  document.getElementById('templateActive').value === 'true'
-    };
-
-    try {
       const url = id ? `/templates/api/${id}` : '/templates/api';
       const method = id ? 'PUT' : 'POST';
-      const res = await fetch(url, {
-        method,
-        headers:{ 'Content-Type':'application/json' },
-        body:JSON.stringify(data),
-      });
 
-      if (res.ok) {
-        location.reload();
-      } else {
-        alert('Error al guardar plantilla');
-      }
-    } catch (err) {
-      alert('Error: ' + err.message);
-    }
-  }
-
-  function askDeleteTemplate(id){
-    const okBtn = document.getElementById('confirmOkBtn');
-    okBtn.onclick = async () => {
       try {
-        const res = await fetch(`/templates/api/${id}`, { method:'DELETE' });
+        const res = await fetch(url, {
+          method,
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify(data)
+        });
+
         if (res.ok) {
           location.reload();
         } else {
-          alert('No se pudo eliminar la plantilla');
+          alert('No se pudo guardar la plantilla');
         }
-      } catch(err){
-        alert('Error: ' + err.message');
-      }
-    };
-    openConfirmModal();
-  }
-
-  // ================== CTRL/CMD+S GUARDAR EN MODAL ==================
-  window.addEventListener('keydown',(e)=>{
-    const isMac = navigator.platform.toUpperCase().includes('MAC');
-    const saveCombo = (isMac && e.metaKey && e.key.toLowerCase()==='s')
-                   || (!isMac && e.ctrlKey && e.key.toLowerCase()==='s');
-
-    if (saveCombo) {
-      const modalOpen = !document.getElementById('templateModal').classList.contains('hidden');
-      if (modalOpen) {
-        e.preventDefault();
-        submitTemplateForm();
+      } catch (err) {
+        alert('Error: ' + err.message);
       }
     }
-  });
 
-  // ================== SIDEBAR MÓVIL ==================
-  (function(){
-    const sidebar   = document.getElementById('sidebar');
-    const overlay   = document.getElementById('mobile-sidebar-overlay');
-    const openBtn   = document.getElementById('open-sidebar-btn');
-    const closeBtn  = document.getElementById('close-sidebar-btn');
-
-    function openSidebar(){
-      sidebar.classList.remove('-translate-x-full');
-      overlay.classList.remove('opacity-0','pointer-events-none');
+    function askDeleteTemplate(id){
+      document.getElementById('confirmText').textContent = '¿Eliminar esta plantilla? Esta acción no se puede deshacer.';
+      const okBtn = document.getElementById('confirmOkBtn');
+      okBtn.onclick = async () => {
+        try {
+          const res = await fetch(`/templates/api/${id}`, { method:'DELETE' });
+          if (res.ok) {
+            location.reload();
+          } else {
+            alert('No se pudo eliminar la plantilla');
+          }
+        } catch (err) {
+          alert('Error: ' + err.message);
+        }
+      };
+      openConfirmModal();
     }
-    function closeSidebar(){
-      sidebar.classList.add('-translate-x-full');
-      overlay.classList.add('opacity-0','pointer-events-none');
+
+    // PREVIEW / CONTADOR / VARS
+    function updatePreview(){
+      const content = document.getElementById('templateContent').value;
+      const preview = document.getElementById('templatePreview');
+
+      const previewContent = content
+        .replace(/{{\s*nombre\s*}}/gi,  '<span class="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1 py-0.5 text-[12px] font-mono font-semibold">Juan Pérez</span>')
+        .replace(/{{\s*empresa\s*}}/gi, '<span class="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1 py-0.5 text-[12px] font-mono font-semibold">Mi Empresa SAC</span>')
+        .replace(/{{\s*telefono\s*}}/gi,'<span class="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1 py-0.5 text-[12px] font-mono font-semibold">51999888777</span>')
+        .replace(/{{\s*dni\s*}}/gi,     '<span class="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1 py-0.5 text-[12px] font-mono font-semibold">12345678</span>')
+        .replace(/{{\s*ruc\s*}}/gi,     '<span class="inline-flex items-center rounded bg-amber-100 text-amber-800 px-1 py-0.5 text-[12px] font-mono font-semibold">20123456789</span>');
+
+      preview.innerHTML = previewContent || 'Escribe contenido arriba para ver la vista previa...';
     }
 
-    if (openBtn)  openBtn.addEventListener('click', openSidebar);
-    if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
-    if (overlay)  overlay.addEventListener('click', closeSidebar);
-  })();
+    function updateCounter(){
+      const n = document.getElementById('templateContent').value.length;
+      document.getElementById('charCount').textContent = n;
+    }
 
-  // ================== INIT ICONS ==================
-  window.lucide && lucide.createIcons();
-</script>
+    function detectVariables(){
+      const txt = document.getElementById('templateContent').value;
+      const vars = Array.from(new Set(
+        (txt.match(/{{\s*[\w.-]+\s*}}/g)||[]).map(v=>v.replace(/\s+/g,''))
+      ));
+      document.getElementById('varsDetected').textContent = vars.length;
+    }
+
+    // guardar con ctrl+s dentro del modal
+    window.addEventListener('keydown',(e)=>{
+      const isMac = navigator.platform.toUpperCase().includes('MAC');
+      const saveCombo = (isMac && e.metaKey && e.key.toLowerCase()==='s')
+                     || (!isMac && e.ctrlKey && e.key.toLowerCase()==='s');
+
+      if (saveCombo) {
+        const modalOpen = !document.getElementById('templateModal').classList.contains('hidden');
+        if (modalOpen) {
+          e.preventDefault();
+          submitTemplateForm();
+        }
+      }
+    });
+  </script>
 </body>
 </html>

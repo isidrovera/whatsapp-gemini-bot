@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <!-- Tailwind (misma config del dashboard) -->
+  <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -31,11 +31,42 @@
     }
   </script>
 
-  <!-- Utilidades externas del dashboard (card-link, gradient-text, pulse-ring, icon, etc.) -->
+  <!-- Utilidades externas del dashboard -->
   <link rel="stylesheet" href="/css/ui.css">
 
   <!-- Iconos -->
   <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* Animaciones suaves para modales */
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .modal-backdrop {
+      animation: fadeIn 0.2s ease-out;
+    }
+    .modal-content {
+      animation: slideUp 0.3s ease-out;
+    }
+    /* Loading spinner */
+    .spinner {
+      border: 2px solid #f3f3f3;
+      border-top: 2px solid #667eea;
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body class="h-full bg-gradient-to-br from-slate-50 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 text-slate-800 dark:text-slate-100">
   <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-4 focus:py-2 focus:rounded-lg shadow-lg">
@@ -43,12 +74,11 @@
   </a>
 
   <%
-    // ===== Helpers / defaults =====
     const adminsList = Array.isArray(admins) ? admins : [];
     const currentId  = typeof currentUserId !== 'undefined' ? currentUserId : null;
-    const nf = new Intl.NumberFormat('es-PE');
     const df = new Intl.DateTimeFormat('es-PE', { dateStyle: 'short' });
     function fmtDate(d){ try { return df.format(new Date(d)); } catch { return '-'; } }
+    const avatarFallback = (name) => (name || '?').substring(0,1).toUpperCase();
   %>
 
   <main id="main-content" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -57,7 +87,7 @@
     <div class="flex flex-col gap-3">
       <div class="flex items-center justify-between">
         <a href="/"
-           class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
+           class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors">
           <i data-lucide="arrow-left" class="icon"></i>
           <span>Volver al Dashboard</span>
         </a>
@@ -91,7 +121,7 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-3">
-          <button class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft"
+          <button class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft transition-all active:scale-95"
                   onclick="showModal('addModal')">
             <i data-lucide="plus-circle" class="icon"></i>
             <span>Agregar Usuario</span>
@@ -118,6 +148,10 @@
               <tr>
                 <th class="text-left px-6 py-4">Usuario</th>
                 <th class="text-left px-6 py-4">Nombre</th>
+                <th class="text-left px-6 py-4">Contacto</th>
+                <th class="text-left px-6 py-4">Rol</th>
+                <th class="text-left px-6 py-4">Estado</th>
+                <th class="text-left px-6 py-4">2FA</th>
                 <th class="text-left px-6 py-4">Registro</th>
                 <th class="text-left px-6 py-4">Acciones</th>
               </tr>
@@ -125,21 +159,100 @@
             <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
               <% adminsList.forEach(admin => { %>
                 <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                  <td class="px-6 py-4 font-semibold text-slate-900 dark:text-white">
-                    <span><%= admin.username %></span>
-                    <% if (admin.id === currentId) { %>
-                      <span class="ml-2 inline-flex items-center rounded-md bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 px-2 py-0.5 text-[11px] font-semibold leading-none">Tú</span>
+                  <!-- Usuario + avatar -->
+                  <td class="px-6 py-4">
+                    <div class="flex items-center gap-3">
+                      <div class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center overflow-hidden">
+                        <% if (admin.avatarUrl) { %>
+                          <img src="<%= admin.avatarUrl %>" alt="avatar" class="w-10 h-10 object-cover">
+                        <% } else { %>
+                          <span class="text-sm font-semibold text-slate-600 dark:text-slate-200">
+                            <%= avatarFallback(admin.name || admin.username) %>
+                          </span>
+                        <% } %>
+                      </div>
+                      <div>
+                        <div class="flex items-center gap-2">
+                          <span class="font-semibold text-slate-900 dark:text-white"><%= admin.username %></span>
+                          <% if (admin.id === currentId) { %>
+                            <span class="inline-flex items-center rounded-md bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 px-2 py-0.5 text-[11px] font-semibold leading-none">Tú</span>
+                          <% } %>
+                        </div>
+                        <% if (admin.dni) { %>
+                          <p class="text-[11px] text-slate-400 dark:text-slate-500">DNI: <%= admin.dni %></p>
+                        <% } %>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- Nombre -->
+                  <td class="px-6 py-4 text-slate-700 dark:text-slate-300"><%= admin.name || '-' %></td>
+
+                  <!-- Contacto -->
+                  <td class="px-6 py-4">
+                    <div class="flex flex-col gap-1">
+                      <span class="text-slate-700 dark:text-slate-200 text-xs"><%= admin.email || '—' %></span>
+                      <span class="text-slate-400 dark:text-slate-500 text-xs flex items-center gap-1">
+                        <i data-lucide="smartphone" class="w-3 h-3"></i>
+                        <%= admin.phone || '—' %>
+                      </span>
+                    </div>
+                  </td>
+
+                  <!-- Rol -->
+                  <td class="px-6 py-4">
+                    <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold
+                      <%= admin.role === 'SUPER_ADMIN'
+                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/20 dark:text-rose-200'
+                        : admin.role === 'ADMIN'
+                          ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-200'
+                          : 'bg-slate-100 text-slate-700 dark:bg-slate-800/40 dark:text-slate-200' %>">
+                      <i data-lucide="shield-check" class="w-3 h-3"></i>
+                      <%= admin.role || 'ADMIN' %>
+                    </span>
+                  </td>
+
+                  <!-- Estado -->
+                  <td class="px-6 py-4">
+                    <% if (admin.isActive) { %>
+                      <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        Activo
+                      </span>
+                    <% } else { %>
+                      <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800/40 dark:text-slate-200 px-2.5 py-0.5 text-[11px] font-semibold">
+                        <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                        Inactivo
+                      </span>
                     <% } %>
                   </td>
-                  <td class="px-6 py-4 text-slate-700 dark:text-slate-300"><%= admin.name || '-' %></td>
+
+                  <!-- 2FA -->
+                  <td class="px-6 py-4">
+                    <% if (admin.twoFAEnabled) { %>
+                      <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold">
+                        <i data-lucide="lock-keyhole" class="w-3 h-3"></i>
+                        Activo
+                      </span>
+                    <% } else { %>
+                      <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-200 px-2.5 py-0.5 text-[11px] font-semibold">
+                        <i data-lucide="lock" class="w-3 h-3"></i>
+                        No
+                      </span>
+                    <% } %>
+                  </td>
+
+                  <!-- Registro -->
                   <td class="px-6 py-4 text-slate-600 dark:text-slate-400">
                     <time datetime="<%= new Date(admin.createdAt).toISOString() %>"><%= fmtDate(admin.createdAt) %></time>
                   </td>
+
+                  <!-- Acciones -->
                   <td class="px-6 py-4">
                     <div class="flex flex-wrap gap-2">
                       <!-- Editar -->
                       <button
-                        class="inline-flex items-center gap-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                        class="inline-flex items-center gap-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition-all active:scale-95"
                         onclick="editAdmin('<%= admin.id %>')">
                         ✏️ <span>Editar</span>
                       </button>
@@ -147,21 +260,36 @@
                       <% if (admin.id === currentId) { %>
                         <!-- Cambiar mi contraseña -->
                         <button
-                          class="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                          class="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition-all active:scale-95"
                           onclick="changeMyPassword('<%= admin.id %>')">
                           🔑 <span>Cambiar Contraseña</span>
                         </button>
+
+                        <!-- Gestionar 2FA -->
+                        <% if (admin.twoFAEnabled) { %>
+                          <button
+                            class="inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition-all active:scale-95"
+                            onclick="disable2FA('<%= admin.id %>')">
+                            🔓 <span>Desactivar 2FA</span>
+                          </button>
+                        <% } else { %>
+                          <button
+                            class="inline-flex items-center gap-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition-all active:scale-95"
+                            onclick="setup2FA('<%= admin.id %>')">
+                            🔐 <span>Activar 2FA</span>
+                          </button>
+                        <% } %>
                       <% } else { %>
                         <!-- Resetear contraseña -->
                         <button
-                          class="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                          class="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition-all active:scale-95"
                           onclick="resetPassword('<%= admin.id %>')">
-                          🔄 <span>Resetear Contraseña</span>
+                          🔄 <span>Resetear</span>
                         </button>
 
                         <!-- Eliminar -->
                         <button
-                          class="inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                          class="inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition-all active:scale-95"
                           onclick="deleteAdmin('<%= admin.id %>')">
                           🗑️ <span>Eliminar</span>
                         </button>
@@ -185,39 +313,97 @@
     </section>
   </main>
 
-  <!-- Modales (mismos estilos que dashboard: sin CSS inline extra) -->
-  <div id="addModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
-      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
+  <!-- ============================================ -->
+  <!-- MODAL: Agregar Usuario -->
+  <!-- ============================================ -->
+  <div id="addModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm modal-backdrop p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-200/70 dark:border-white/10 modal-content">
+      <div class="sticky top-0 z-10 px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between bg-white dark:bg-slate-900">
         <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
           <i data-lucide="user-plus" class="icon text-primary"></i> Agregar Usuario Admin
         </h2>
-        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="hideModal('addModal')">
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors" onclick="hideModal('addModal')" type="button">
           <i data-lucide="x" class="icon"></i>
         </button>
       </div>
       <div class="p-6">
         <form onsubmit="addAdmin(event)" class="space-y-4">
+          <!-- DNI con búsqueda -->
           <div>
-            <label for="username" class="block text-sm font-semibold mb-2">Usuario *</label>
-            <input id="username" type="text" required placeholder="Ej: admin2"
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+            <label for="dni" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">DNI</label>
+            <div class="flex gap-2">
+              <input id="dni" type="text" placeholder="12345678" maxlength="8" pattern="[0-9]{8}"
+                class="flex-1 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+              <button type="button" onclick="consultarDNI()" 
+                class="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-sm font-medium shadow-soft transition-all active:scale-95">
+                <i data-lucide="search" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Consultar RENIEC</span>
+                <span class="sm:hidden">Buscar</span>
+              </button>
+            </div>
+            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Ingresa el DNI y haz clic en Consultar para autocompletar los datos</p>
           </div>
-          <div>
-            <label for="name" class="block text-sm font-semibold mb-2">Nombre Completo</label>
-            <input id="name" type="text" placeholder="Ej: Juan Pérez"
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="sm:col-span-2">
+              <label for="name" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Nombre Completo</label>
+              <input id="name" type="text" placeholder="Ej: Juan Pérez"
+                class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+            </div>
+            
+            <div class="sm:col-span-2">
+              <label for="username" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Usuario *</label>
+              <input id="username" type="text" required placeholder="Ej: admin2"
+                class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+            </div>
+
+            <div>
+              <label for="email" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Correo</label>
+              <input id="email" type="email" placeholder="admin@empresa.com"
+                class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+            </div>
+
+            <div>
+              <label for="phone" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Teléfono / WhatsApp</label>
+              <input id="phone" type="text" placeholder="999999999"
+                class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+            </div>
+
+            <div class="sm:col-span-2">
+              <label for="avatarUrl" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">URL de foto / avatar</label>
+              <input id="avatarUrl" type="text" placeholder="https://..."
+                class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+            </div>
+
+            <div>
+              <label for="role" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Rol</label>
+              <select id="role"
+                class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+                <option value="ADMIN">ADMIN</option>
+                <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+                <option value="OPERATOR">OPERATOR</option>
+                <option value="TECH">TECH</option>
+              </select>
+            </div>
+
+            <div class="flex items-center gap-2 pt-6">
+              <input id="isActive" type="checkbox" checked
+                class="w-4 h-4 rounded border-slate-300 text-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors">
+              <label for="isActive" class="text-sm text-slate-700 dark:text-slate-200">Activo</label>
+            </div>
+
+            <div class="sm:col-span-2">
+              <label for="password" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Contraseña *</label>
+              <input id="password" type="password" required minlength="6" placeholder="Mínimo 6 caracteres"
+                class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+            </div>
           </div>
-          <div>
-            <label for="password" class="block text-sm font-semibold mb-2">Contraseña *</label>
-            <input id="password" type="password" required minlength="6" placeholder="Mínimo 6 caracteres"
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
-          </div>
-          <div class="flex justify-end gap-2 pt-2">
-            <button type="button" class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white" onclick="hideModal('addModal')">
+
+          <div class="flex justify-end gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <button type="button" class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-4 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition-colors" onclick="hideModal('addModal')">
               Cancelar
             </button>
-            <button type="submit" class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-3 py-2 shadow-soft">
+            <button type="submit" class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 shadow-soft transition-all active:scale-95">
               Crear Usuario
             </button>
           </div>
@@ -226,34 +412,92 @@
     </div>
   </div>
 
-  <div id="editModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
-      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
+  <!-- ============================================ -->
+  <!-- MODAL: Editar Usuario -->
+  <!-- ============================================ -->
+  <div id="editModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm modal-backdrop p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-200/70 dark:border-white/10 modal-content">
+      <div class="sticky top-0 z-10 px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between bg-white dark:bg-slate-900">
         <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
           <i data-lucide="pencil" class="icon text-amber-600"></i> Editar Usuario
         </h2>
-        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="hideModal('editModal')">
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors" onclick="hideModal('editModal')" type="button">
           <i data-lucide="x" class="icon"></i>
         </button>
       </div>
       <div class="p-6">
         <form onsubmit="updateAdmin(event)" class="space-y-4">
           <input id="edit-id" type="hidden">
+
+          <!-- DNI con búsqueda -->
           <div>
-            <label for="edit-username" class="block text-sm font-semibold mb-2">Usuario</label>
-            <input id="edit-username" type="text" required
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+            <label for="edit-dni" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">DNI</label>
+            <div class="flex gap-2">
+              <input id="edit-dni" type="text" maxlength="8" pattern="[0-9]{8}"
+                class="flex-1 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+              <button type="button" onclick="consultarDNIEdit()" 
+                class="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 text-sm font-medium shadow-soft transition-all active:scale-95">
+                <i data-lucide="search" class="w-4 h-4"></i>
+                <span class="hidden sm:inline">Consultar RENIEC</span>
+                <span class="sm:hidden">Buscar</span>
+              </button>
+            </div>
           </div>
-          <div>
-            <label for="edit-name" class="block text-sm font-semibold mb-2">Nombre Completo</label>
-            <input id="edit-name" type="text"
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="sm:col-span-2">
+              <label for="edit-name" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Nombre Completo</label>
+              <input id="edit-name" type="text"
+                class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+            </div>
+
+            <div class="sm:col-span-2">
+              <label for="edit-username" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Usuario</label>
+              <input id="edit-username" type="text" required
+                class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+            </div>
+
+            <div>
+              <label for="edit-email" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Correo</label>
+              <input id="edit-email" type="email"
+                class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+            </div>
+
+            <div>
+              <label for="edit-phone" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Teléfono / WhatsApp</label>
+              <input id="edit-phone" type="text"
+                class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+            </div>
+
+            <div class="sm:col-span-2">
+              <label for="edit-avatarUrl" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">URL de foto / avatar</label>
+              <input id="edit-avatarUrl" type="text"
+                class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+            </div>
+
+            <div>
+              <label for="edit-role" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Rol</label>
+              <select id="edit-role"
+                class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+                <option value="ADMIN">ADMIN</option>
+                <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+                <option value="OPERATOR">OPERATOR</option>
+                <option value="TECH">TECH</option>
+              </select>
+            </div>
+
+            <div class="flex items-center gap-2 pt-6">
+              <input id="edit-isActive" type="checkbox"
+                class="w-4 h-4 rounded border-slate-300 text-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-colors">
+              <label for="edit-isActive" class="text-sm text-slate-700 dark:text-slate-200">Activo</label>
+            </div>
           </div>
-          <div class="flex justify-end gap-2 pt-2">
-            <button type="button" class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white" onclick="hideModal('editModal')">
+
+          <div class="flex justify-end gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <button type="button" class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-4 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition-colors" onclick="hideModal('editModal')">
               Cancelar
             </button>
-            <button type="submit" class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-3 py-2 shadow-soft">
+            <button type="submit" class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 shadow-soft transition-all active:scale-95">
               Actualizar
             </button>
           </div>
@@ -262,13 +506,16 @@
     </div>
   </div>
 
-  <div id="changePasswordModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
-      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
+  <!-- ============================================ -->
+  <!-- MODAL: Cambiar mi contraseña -->
+  <!-- ============================================ -->
+  <div id="changePasswordModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm modal-backdrop p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-full max-h-[90vh] overflow-y-auto border border-slate-200/70 dark:border-white/10 modal-content">
+      <div class="sticky top-0 z-10 px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between bg-white dark:bg-slate-900">
         <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
           <i data-lucide="key-round" class="icon text-emerald-600"></i> Cambiar Mi Contraseña
         </h2>
-        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="hideModal('changePasswordModal')">
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors" onclick="hideModal('changePasswordModal')" type="button">
           <i data-lucide="x" class="icon"></i>
         </button>
       </div>
@@ -279,25 +526,25 @@
             💡 Debes ingresar tu contraseña actual para confirmar el cambio
           </div>
           <div>
-            <label for="currentPassword" class="block text-sm font-semibold mb-2">Contraseña Actual *</label>
+            <label for="currentPassword" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Contraseña Actual *</label>
             <input id="currentPassword" type="password" required
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
           </div>
           <div>
-            <label for="newPassword" class="block text-sm font-semibold mb-2">Nueva Contraseña *</label>
+            <label for="newPassword" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Nueva Contraseña *</label>
             <input id="newPassword" type="password" required minlength="6" placeholder="Mínimo 6 caracteres"
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
           </div>
           <div>
-            <label for="confirmPassword" class="block text-sm font-semibold mb-2">Confirmar Nueva Contraseña *</label>
+            <label for="confirmPassword" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Confirmar Nueva Contraseña *</label>
             <input id="confirmPassword" type="password" required minlength="6"
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
           </div>
-          <div class="flex justify-end gap-2 pt-2">
-            <button type="button" class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white" onclick="hideModal('changePasswordModal')">
+          <div class="flex justify-end gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <button type="button" class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-4 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition-colors" onclick="hideModal('changePasswordModal')">
               Cancelar
             </button>
-            <button type="submit" class="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3 py-2 shadow-soft">
+            <button type="submit" class="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 shadow-soft transition-all active:scale-95">
               Cambiar Contraseña
             </button>
           </div>
@@ -306,13 +553,16 @@
     </div>
   </div>
 
-  <div id="resetPasswordModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
-    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
-      <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
+  <!-- ============================================ -->
+  <!-- MODAL: Resetear contraseña -->
+  <!-- ============================================ -->
+  <div id="resetPasswordModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm modal-backdrop p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-full max-h-[90vh] overflow-y-auto border border-slate-200/70 dark:border-white/10 modal-content">
+      <div class="sticky top-0 z-10 px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between bg-white dark:bg-slate-900">
         <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
           <i data-lucide="rotate-ccw" class="icon text-amber-600"></i> Resetear Contraseña
         </h2>
-        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="hideModal('resetPasswordModal')">
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors" onclick="hideModal('resetPasswordModal')" type="button">
           <i data-lucide="x" class="icon"></i>
         </button>
       </div>
@@ -323,16 +573,121 @@
             ⚠️ Estás reseteando la contraseña de otro usuario. Asegúrate de comunicarle la nueva contraseña.
           </div>
           <div>
-            <label for="resetNewPassword" class="block text-sm font-semibold mb-2">Nueva Contraseña *</label>
+            <label for="resetNewPassword" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Nueva Contraseña *</label>
             <input id="resetNewPassword" type="password" required minlength="6" placeholder="Mínimo 6 caracteres"
-              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
           </div>
-          <div class="flex justify-end gap-2 pt-2">
-            <button type="button" class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white" onclick="hideModal('resetPasswordModal')">
+          <div class="flex justify-end gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <button type="button" class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-4 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition-colors" onclick="hideModal('resetPasswordModal')">
               Cancelar
             </button>
-            <button type="submit" class="rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold px-3 py-2 shadow-soft">
+            <button type="submit" class="rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold px-4 py-2 shadow-soft transition-all active:scale-95">
               Resetear Contraseña
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- MODAL: Activar 2FA -->
+  <!-- ============================================ -->
+  <div id="setup2FAModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm modal-backdrop p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-full max-h-[90vh] overflow-y-auto border border-slate-200/70 dark:border-white/10 modal-content">
+      <div class="sticky top-0 z-10 px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between bg-white dark:bg-slate-900">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="shield" class="icon text-indigo-600"></i> Activar Verificación en 2 Pasos
+        </h2>
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors" onclick="hideModal('setup2FAModal')" type="button">
+          <i data-lucide="x" class="icon"></i>
+        </button>
+      </div>
+      <div class="p-6">
+        <div id="2fa-step1" class="space-y-4">
+          <div class="rounded-lg border border-indigo-300/40 bg-indigo-50 text-indigo-800 text-sm px-3 py-2 dark:bg-indigo-900/30 dark:text-indigo-200 dark:border-indigo-700/40">
+            🔐 La verificación en 2 pasos añade una capa extra de seguridad a tu cuenta
+          </div>
+          <ol class="space-y-2 text-sm text-slate-600 dark:text-slate-400 list-decimal list-inside">
+            <li>Instala una app de autenticación (Google Authenticator, Authy, etc.)</li>
+            <li>Escanea el código QR que aparecerá</li>
+            <li>Ingresa el código de 6 dígitos para verificar</li>
+          </ol>
+          <button onclick="generateQRCode()" 
+            class="w-full rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-3 shadow-soft transition-all active:scale-95 flex items-center justify-center gap-2">
+            <i data-lucide="qr-code" class="w-4 h-4"></i>
+            Generar Código QR
+          </button>
+        </div>
+
+        <div id="2fa-step2" class="hidden space-y-4">
+          <div class="flex flex-col items-center gap-4">
+            <p class="text-sm text-slate-600 dark:text-slate-400 text-center">
+              Escanea este código QR con tu aplicación de autenticación:
+            </p>
+            <div id="qrCodeContainer" class="bg-white p-4 rounded-lg border-2 border-slate-200 dark:border-slate-700">
+              <!-- QR code will be inserted here -->
+            </div>
+            <details class="w-full">
+              <summary class="text-xs text-slate-500 dark:text-slate-400 cursor-pointer hover:text-slate-700 dark:hover:text-slate-200">
+                ¿No puedes escanear? Ingresa el código manualmente
+              </summary>
+              <div class="mt-2 p-3 bg-slate-100 dark:bg-slate-800 rounded text-xs font-mono break-all" id="manualSecret"></div>
+            </details>
+          </div>
+
+          <form onsubmit="verify2FACode(event)" class="space-y-4">
+            <input id="2fa-setup-id" type="hidden">
+            <div>
+              <label for="2fa-code" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Código de Verificación</label>
+              <input id="2fa-code" type="text" required pattern="[0-9]{6}" maxlength="6" placeholder="000000"
+                class="w-full text-center text-2xl tracking-widest font-mono rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-3 outline-none focus:border-indigo-500 transition-colors">
+              <p class="text-xs text-slate-400 dark:text-slate-500 mt-1 text-center">Ingresa el código de 6 dígitos</p>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+              <button type="button" class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-4 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition-colors" onclick="hideModal('setup2FAModal')">
+                Cancelar
+              </button>
+              <button type="submit" class="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 shadow-soft transition-all active:scale-95">
+                Verificar y Activar
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================ -->
+  <!-- MODAL: Desactivar 2FA -->
+  <!-- ============================================ -->
+  <div id="disable2FAModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm modal-backdrop p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-full max-h-[90vh] overflow-y-auto border border-slate-200/70 dark:border-white/10 modal-content">
+      <div class="sticky top-0 z-10 px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between bg-white dark:bg-slate-900">
+        <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+          <i data-lucide="shield-off" class="icon text-rose-600"></i> Desactivar Verificación en 2 Pasos
+        </h2>
+        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors" onclick="hideModal('disable2FAModal')" type="button">
+          <i data-lucide="x" class="icon"></i>
+        </button>
+      </div>
+      <div class="p-6">
+        <form onsubmit="disable2FASubmit(event)" class="space-y-4">
+          <input id="disable-2fa-id" type="hidden">
+          <div class="rounded-lg border border-rose-300/40 bg-rose-50 text-rose-800 text-sm px-3 py-2 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-700/40">
+            ⚠️ Al desactivar 2FA, tu cuenta será menos segura. Deberás confirmar con tu contraseña actual.
+          </div>
+          <div>
+            <label for="disable2fa-password" class="block text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">Contraseña Actual *</label>
+            <input id="disable2fa-password" type="password" required
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 transition-colors">
+          </div>
+          <div class="flex justify-end gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <button type="button" class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-4 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition-colors" onclick="hideModal('disable2FAModal')">
+              Cancelar
+            </button>
+            <button type="submit" class="rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold px-4 py-2 shadow-soft transition-all active:scale-95">
+              Desactivar 2FA
             </button>
           </div>
         </form>
@@ -347,46 +702,181 @@
       if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
     });
 
-    // ====== Lógica CRUD (sin cambios) ======
+    // ====== Utilidades ======
+    function showLoading(button) {
+      button.disabled = true;
+      button.dataset.originalText = button.innerHTML;
+      button.innerHTML = '<div class="spinner"></div><span class="ml-2">Cargando...</span>';
+    }
+
+    function hideLoading(button) {
+      if (button.dataset.originalText) {
+        button.innerHTML = button.dataset.originalText;
+        button.disabled = false;
+      }
+    }
+
+    function showToast(message, type = 'success') {
+      const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+      alert(`${icon} ${message}`);
+    }
+
+    // ====== Consultar DNI ======
+    async function consultarDNI() {
+      const dni = document.getElementById('dni').value.trim();
+      if (!dni || !/^\d{8}$/.test(dni)) {
+        showToast('Por favor ingresa un DNI válido de 8 dígitos', 'error');
+        return;
+      }
+
+      try {
+        const res = await fetch('/admin-users/api/validate-dni', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dni })
+        });
+
+        const result = await res.json();
+
+        if (result.success && result.data) {
+          document.getElementById('name').value = result.data.name;
+          showToast('Datos cargados desde RENIEC', 'success');
+        } else {
+          showToast(result.error || 'DNI no encontrado', 'error');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Error al consultar DNI', 'error');
+      }
+    }
+
+    async function consultarDNIEdit() {
+      const dni = document.getElementById('edit-dni').value.trim();
+      if (!dni || !/^\d{8}$/.test(dni)) {
+        showToast('Por favor ingresa un DNI válido de 8 dígitos', 'error');
+        return;
+      }
+
+      try {
+        const res = await fetch('/admin-users/api/validate-dni', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dni })
+        });
+
+        const result = await res.json();
+
+        if (result.success && result.data) {
+          document.getElementById('edit-name').value = result.data.name;
+          showToast('Datos cargados desde RENIEC', 'success');
+        } else {
+          showToast(result.error || 'DNI no encontrado', 'error');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Error al consultar DNI', 'error');
+      }
+    }
+
+    // ====== CRUD Admins ======
     async function addAdmin(e) {
       e.preventDefault();
+      const button = e.target.querySelector('button[type="submit"]');
+      showLoading(button);
+
       const data = {
         username: document.getElementById('username').value,
         name: document.getElementById('name').value,
-        password: document.getElementById('password').value
+        password: document.getElementById('password').value,
+        email: document.getElementById('email').value,
+        phone: document.getElementById('phone').value,
+        avatarUrl: document.getElementById('avatarUrl').value,
+        dni: document.getElementById('dni').value,
+        role: document.getElementById('role').value,
+        isActive: document.getElementById('isActive').checked
       };
+
       try {
-        const res = await fetch('/admin-users/api', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+        const res = await fetch('/admin-users/api', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
         const result = await res.json();
-        if (result.success) { alert('✅ Usuario creado exitosamente'); location.reload(); }
-        else { alert('❌ Error: ' + (result.error || 'No se pudo crear')); }
-      } catch (err) { alert('❌ Error al crear usuario'); console.error(err); }
+
+        if (result.success) {
+          showToast('Usuario creado exitosamente', 'success');
+          location.reload();
+        } else {
+          showToast(result.error || 'No se pudo crear', 'error');
+        }
+      } catch (err) {
+        showToast('Error al crear usuario', 'error');
+        console.error(err);
+      } finally {
+        hideLoading(button);
+      }
     }
 
     async function editAdmin(id) {
       try {
         const res = await fetch(`/admin-users/api/${id}`);
         const admin = await res.json();
+
         document.getElementById('edit-id').value = admin.id;
         document.getElementById('edit-username').value = admin.username;
         document.getElementById('edit-name').value = admin.name || '';
+        document.getElementById('edit-email').value = admin.email || '';
+        document.getElementById('edit-phone').value = admin.phone || '';
+        document.getElementById('edit-avatarUrl').value = admin.avatarUrl || '';
+        document.getElementById('edit-dni').value = admin.dni || '';
+        document.getElementById('edit-role').value = admin.role || 'ADMIN';
+        document.getElementById('edit-isActive').checked = admin.isActive !== false;
+
         showModal('editModal');
-      } catch (err) { alert('❌ Error al cargar usuario'); console.error(err); }
+      } catch (err) {
+        showToast('Error al cargar usuario', 'error');
+        console.error(err);
+      }
     }
 
     async function updateAdmin(e) {
       e.preventDefault();
+      const button = e.target.querySelector('button[type="submit"]');
+      showLoading(button);
+
       const id = document.getElementById('edit-id').value;
       const data = {
         username: document.getElementById('edit-username').value,
-        name: document.getElementById('edit-name').value
+        name: document.getElementById('edit-name').value,
+        email: document.getElementById('edit-email').value,
+        phone: document.getElementById('edit-phone').value,
+        avatarUrl: document.getElementById('edit-avatarUrl').value,
+        dni: document.getElementById('edit-dni').value,
+        role: document.getElementById('edit-role').value,
+        isActive: document.getElementById('edit-isActive').checked
       };
+
       try {
-        const res = await fetch(`/admin-users/api/${id}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+        const res = await fetch(`/admin-users/api/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
         const result = await res.json();
-        if (result.success) { alert('✅ Usuario actualizado'); location.reload(); }
-        else { alert('❌ Error al actualizar'); }
-      } catch (err) { alert('❌ Error al actualizar usuario'); console.error(err); }
+
+        if (result.success) {
+          showToast('Usuario actualizado', 'success');
+          location.reload();
+        } else {
+          showToast('Error al actualizar', 'error');
+        }
+      } catch (err) {
+        showToast('Error al actualizar usuario', 'error');
+        console.error(err);
+      } finally {
+        hideLoading(button);
+      }
     }
 
     function changeMyPassword(id) {
@@ -399,17 +889,44 @@
 
     async function changePassword(e) {
       e.preventDefault();
+      const button = e.target.querySelector('button[type="submit"]');
+
       const newPassword = document.getElementById('newPassword').value;
       const confirmPassword = document.getElementById('confirmPassword').value;
-      if (newPassword !== confirmPassword) { alert('❌ Las contraseñas no coinciden'); return; }
-      const data = { currentPassword: document.getElementById('currentPassword').value, newPassword };
+
+      if (newPassword !== confirmPassword) {
+        showToast('Las contraseñas no coinciden', 'error');
+        return;
+      }
+
+      showLoading(button);
+
+      const data = {
+        currentPassword: document.getElementById('currentPassword').value,
+        newPassword
+      };
       const id = document.getElementById('change-id').value;
+
       try {
-        const res = await fetch(`/admin-users/api/${id}/change-password`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+        const res = await fetch(`/admin-users/api/${id}/change-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
         const result = await res.json();
-        if (result.success) { alert('✅ Contraseña cambiada exitosamente'); hideModal('changePasswordModal'); }
-        else { alert('❌ Error: ' + (result.error || 'No se pudo cambiar')); }
-      } catch (err) { alert('❌ Error al cambiar contraseña'); console.error(err); }
+
+        if (result.success) {
+          showToast('Contraseña cambiada exitosamente', 'success');
+          hideModal('changePasswordModal');
+        } else {
+          showToast(result.error || 'No se pudo cambiar', 'error');
+        }
+      } catch (err) {
+        showToast('Error al cambiar contraseña', 'error');
+        console.error(err);
+      } finally {
+        hideLoading(button);
+      }
     }
 
     function resetPassword(id) {
@@ -420,41 +937,189 @@
 
     async function resetPasswordSubmit(e) {
       e.preventDefault();
+      const button = e.target.querySelector('button[type="submit"]');
+      showLoading(button);
+
       const id = document.getElementById('reset-id').value;
-      const data = { newPassword: document.getElementById('resetNewPassword').value };
+      const data = {
+        newPassword: document.getElementById('resetNewPassword').value
+      };
+
       try {
-        const res = await fetch(`/admin-users/api/${id}/reset-password`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+        const res = await fetch(`/admin-users/api/${id}/reset-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
         const result = await res.json();
-        if (result.success) { alert('✅ Contraseña reseteada exitosamente'); hideModal('resetPasswordModal'); }
-        else { alert('❌ Error: ' + (result.error || 'No se pudo resetear')); }
-      } catch (err) { alert('❌ Error al resetear contraseña'); console.error(err); }
+
+        if (result.success) {
+          showToast('Contraseña reseteada exitosamente', 'success');
+          hideModal('resetPasswordModal');
+        } else {
+          showToast(result.error || 'No se pudo resetear', 'error');
+        }
+      } catch (err) {
+        showToast('Error al resetear contraseña', 'error');
+        console.error(err);
+      } finally {
+        hideLoading(button);
+      }
     }
 
     async function deleteAdmin(id) {
       if (!confirm('¿Eliminar este usuario administrador?\n\nEsta acción no se puede deshacer.')) return;
+
       try {
-        const res = await fetch(`/admin-users/api/${id}`, { method:'DELETE' });
+        const res = await fetch(`/admin-users/api/${id}`, { method: 'DELETE' });
         const result = await res.json();
-        if (result.success) { alert('✅ Usuario eliminado'); location.reload(); }
-        else { alert('❌ Error: ' + (result.error || 'No se pudo eliminar')); }
-      } catch (err) { alert('❌ Error al eliminar usuario'); console.error(err); }
+
+        if (result.success) {
+          showToast('Usuario eliminado', 'success');
+          location.reload();
+        } else {
+          showToast(result.error || 'No se pudo eliminar', 'error');
+        }
+      } catch (err) {
+        showToast('Error al eliminar usuario', 'error');
+        console.error(err);
+      }
     }
 
-    // Modales (usamos clases Tailwind en lugar de CSS propio)
-    function showModal(id){
+    // ====== 2FA ======
+    function setup2FA(id) {
+      document.getElementById('2fa-setup-id').value = id;
+      document.getElementById('2fa-step1').classList.remove('hidden');
+      document.getElementById('2fa-step2').classList.add('hidden');
+      showModal('setup2FAModal');
+    }
+
+    async function generateQRCode() {
+      const id = document.getElementById('2fa-setup-id').value;
+
+      try {
+        const res = await fetch(`/admin-users/api/${id}/2fa/setup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await res.json();
+
+        if (result.success) {
+          document.getElementById('qrCodeContainer').innerHTML = `<img src="${result.qrCode}" alt="QR Code" class="w-48 h-48">`;
+          document.getElementById('manualSecret').textContent = result.secret;
+          document.getElementById('2fa-step1').classList.add('hidden');
+          document.getElementById('2fa-step2').classList.remove('hidden');
+        } else {
+          showToast(result.error || 'Error al generar QR', 'error');
+        }
+      } catch (err) {
+        showToast('Error al generar código QR', 'error');
+        console.error(err);
+      }
+    }
+
+    async function verify2FACode(e) {
+      e.preventDefault();
+      const button = e.target.querySelector('button[type="submit"]');
+      showLoading(button);
+
+      const id = document.getElementById('2fa-setup-id').value;
+      const code = document.getElementById('2fa-code').value;
+
+      try {
+        const res = await fetch(`/admin-users/api/${id}/2fa/enable`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code })
+        });
+        const result = await res.json();
+
+        if (result.success) {
+          showToast('2FA activado exitosamente', 'success');
+          hideModal('setup2FAModal');
+          location.reload();
+        } else {
+          showToast(result.error || 'Código incorrecto', 'error');
+        }
+      } catch (err) {
+        showToast('Error al verificar código', 'error');
+        console.error(err);
+      } finally {
+        hideLoading(button);
+      }
+    }
+
+    function disable2FA(id) {
+      document.getElementById('disable-2fa-id').value = id;
+      document.getElementById('disable2fa-password').value = '';
+      showModal('disable2FAModal');
+    }
+
+    async function disable2FASubmit(e) {
+      e.preventDefault();
+      const button = e.target.querySelector('button[type="submit"]');
+      showLoading(button);
+
+      const id = document.getElementById('disable-2fa-id').value;
+      const currentPassword = document.getElementById('disable2fa-password').value;
+
+      try {
+        const res = await fetch(`/admin-users/api/${id}/2fa/disable`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentPassword })
+        });
+        const result = await res.json();
+
+        if (result.success) {
+          showToast('2FA desactivado exitosamente', 'success');
+          hideModal('disable2FAModal');
+          location.reload();
+        } else {
+          showToast(result.error || 'Error al desactivar 2FA', 'error');
+        }
+      } catch (err) {
+        showToast('Error al desactivar 2FA', 'error');
+        console.error(err);
+      } finally {
+        hideLoading(button);
+      }
+    }
+
+    // ====== Modales ======
+    function showModal(id) {
       const el = document.getElementById(id);
       el.classList.remove('hidden');
       el.classList.add('flex');
+      document.body.style.overflow = 'hidden';
+      
+      // Actualizar iconos después de mostrar modal
+      setTimeout(() => {
+        if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
+      }, 50);
     }
-    function hideModal(id){
+
+    function hideModal(id) {
       const el = document.getElementById(id);
       el.classList.remove('flex');
       el.classList.add('hidden');
+      document.body.style.overflow = '';
     }
+
+    // Cerrar modal al hacer clic fuera
     window.addEventListener('click', (e) => {
-      document.querySelectorAll('#addModal,#editModal,#changePasswordModal,#resetPasswordModal').forEach(m => {
+      document.querySelectorAll('[id$="Modal"]').forEach(m => {
         if (e.target === m) hideModal(m.id);
       });
+    });
+
+    // Cerrar modal con ESC
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('[id$="Modal"]').forEach(m => {
+          if (!m.classList.contains('hidden')) hideModal(m.id);
+        });
+      }
     });
   </script>
 </body>

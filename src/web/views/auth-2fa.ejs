@@ -1,0 +1,109 @@
+<!--src/web/views/auth-2fa.ejs-->
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title><%= title || 'Verificación 2FA' %> - WhatsApp Bot Admin</title>
+
+  <!-- Fuente + Tailwind -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'media',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter','ui-sans-serif','system-ui'] },
+          colors: {
+            brandA: '#667eea',
+            brandB: '#764ba2',
+          },
+        }
+      }
+    };
+  </script>
+
+  <style>
+    @media (prefers-reduced-motion: reduce){
+      *{
+        animation-duration:.001ms!important;
+        animation-iteration-count:1!important;
+        transition-duration:.001ms!important;
+        scroll-behavior:auto!important
+      }
+    }
+    @keyframes slideIn {
+      from { opacity:0; transform:translateY(20px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 flex items-center justify-center py-10">
+
+  <div class="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-100 p-8 animate-[slideIn_.4s_ease-out]">
+    <!-- Header -->
+    <div class="flex flex-col items-center mb-8">
+      <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-brandA to-brandB flex items-center justify-center text-white text-2xl shadow-md mb-3">
+        🔐
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 text-center">Verificación en 2 pasos</h1>
+      <p class="text-sm text-slate-500 text-center mt-2">
+        Ingresa el código de 6 dígitos generado por tu aplicación de autenticación.
+      </p>
+    </div>
+
+    <!-- Error Alert -->
+    <% if (error) { %>
+      <div class="mb-6 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3" role="alert">
+        <span class="text-base">⚠️</span>
+        <span class="flex-1"><%= error %></span>
+      </div>
+    <% } %>
+
+    <!-- Form -->
+    <form method="POST" action="/auth/2fa" class="space-y-5">
+      <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <% } %>
+
+      <div>
+        <label for="code" class="block text-sm font-medium text-slate-700 mb-2">
+          Código de autenticación
+        </label>
+        <input
+          type="text"
+          id="code"
+          name="code"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          maxlength="6"
+          required
+          autofocus
+          placeholder="000000"
+          class="block w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-center tracking-[0.4em] text-lg font-mono text-slate-900 outline-none focus:border-brandA focus:ring-2 focus:ring-brandA/20"
+        />
+        <p class="text-xs text-slate-400 mt-2">
+          Consejo: el código cambia cada 30 segundos. Si expira, ingresa el nuevo.
+        </p>
+      </div>
+
+      <button
+        type="submit"
+        class="w-full rounded-lg bg-gradient-to-r from-brandA to-brandB text-white font-medium text-sm py-3 shadow-md hover:shadow-lg active:scale-[.98] transition-all"
+      >
+        Verificar código
+      </button>
+    </form>
+
+    <div class="mt-6 flex items-center justify-between text-xs text-slate-400">
+      <a href="/auth/login" class="hover:text-slate-600 transition">← Cambiar de usuario</a>
+      <span>© 2025 WhatsApp Bot Admin</span>
+    </div>
+  </div>
+
+</body>
+</html>

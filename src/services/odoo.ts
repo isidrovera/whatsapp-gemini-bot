@@ -266,7 +266,7 @@ export function detectServiceIntent(message: string): boolean {
 export function detectTonerIntent(message: string): boolean {
   const tonerKeywords = [
     'toner', 'tóner', 'tonner', 'tinta', 'cartucho',
-    'consumible', 'consumibles', 'recarga', 'comprar',
+    'consumible', 'consumibles', 'recarga',
   ];
   const lowerMessage = message.toLowerCase();
   return tonerKeywords.some(k => lowerMessage.includes(k));

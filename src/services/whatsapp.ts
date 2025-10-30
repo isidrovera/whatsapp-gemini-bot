@@ -11,6 +11,9 @@ import qrcode from 'qrcode-terminal';
 import QRCode from 'qrcode';
 import { logger } from '../utils/logger.js';
 
+import fs from 'fs';
+import path from 'path';
+
 import * as blockedModel from '../models/blocked.js';
 import * as contactModel from '../models/contact.js';
 import * as geminiService from './gemini.js';
@@ -75,6 +78,24 @@ const RELEASE_TAKEOVER_COMMAND = '/auto';
 
 const botSentMessageIds = new Map<string, number>();
 const BOT_ID_TTL_MS = 5 * 60 * 1000;
+
+// ==================================================
+// AUTH FOLDER HELPERS (NUEVO)
+// ==================================================
+const AUTH_FOLDER = path.resolve('./baileys_auth');
+
+async function ensureCleanAuthFolder() {
+  try {
+    if (fs.existsSync(AUTH_FOLDER)) {
+      fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+      logger.warn('🗑️ AUTH anterior eliminada.');
+    }
+    fs.mkdirSync(AUTH_FOLDER, { recursive: true });
+    logger.info('📁 AUTH folder creada nuevamente (clean).');
+  } catch (err) {
+    logger.error('No se pudo limpiar/recrear AUTH_FOLDER:', err);
+  }
+}
 
 // ==================================================
 // HELPERS INTERNOS BASE
@@ -342,9 +363,16 @@ async function saveProvisionalRUC(phoneE164: string, ruc: string) {
 // ==================================================
 // INICIALIZACIÓN WHATSAPP (BAILEYS)
 // ==================================================
-export async function initializeWhatsApp() {
+export async function initializeWhatsApp(forceNew: boolean = false) {
   try {
-    logger.info('Initializing WhatsApp client (Baileys v7)...');
+    logger.info(
+      `Initializing WhatsApp client (Baileys v7)... forceNew=${forceNew}`
+    );
+
+    // si queremos forzar nueva sesión, limpiamos carpeta
+    if (forceNew) {
+      await ensureCleanAuthFolder();
+    }
 
     const { state, saveCreds } = await useMultiFileAuthState('./baileys_auth');
 
@@ -361,6 +389,7 @@ export async function initializeWhatsApp() {
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
+      // QR recibido
       if (qr) {
         logger.info('QR Code received, scan to authenticate:');
         qrcode.generate(qr, { small: true });
@@ -378,26 +407,52 @@ export async function initializeWhatsApp() {
         botPhoneNumber = null;
       }
 
+      // conexión cerrada
       if (connection === 'close') {
         const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-        logger.warn('Connection closed. Reconnecting:', shouldReconnect);
+        // caso: cerraste sesión desde el teléfono / escaneaste en otro lado
+        if (statusCode === DisconnectReason.loggedOut) {
+          logger.warn(
+            '⚠️ WhatsApp dijo: loggedOut (device_removed). Limpiando auth y reiniciando para QR nuevo...'
+          );
+
+          // limpiar estado actual
+          sock = null;
+          isReady = false;
+          botPhoneNumber = null;
+          currentQR = null;
+          qrDataURL = null;
+
+          // reiniciar en modo forzado → mostrará QR
+          setTimeout(() => {
+            initializeWhatsApp(true).catch((err) =>
+              logger.error(
+                'Error reinitializing WhatsApp after loggedOut:',
+                err
+              )
+            );
+          }, 1000);
+
+          return;
+        }
+
+        // otros errores → reconectar normal
+        logger.warn('Connection closed. Reconnecting...', statusCode);
 
         isReady = false;
         botPhoneNumber = null;
+        currentQR = null;
+        qrDataURL = null;
 
-        if (shouldReconnect) {
-          setTimeout(() => initializeWhatsApp(), 3000);
-        } else {
-          logger.error(
-            'Logged out. Please delete baileys_auth folder and restart.'
+        setTimeout(() => {
+          initializeWhatsApp().catch((err) =>
+            logger.error('Error reinitializing WhatsApp:', err)
           );
-          currentQR = null;
-          qrDataURL = null;
-        }
+        }, 3000);
       }
 
+      // conexión abierta
       if (connection === 'open') {
         logger.info('✅ WhatsApp connected successfully!');
         isReady = true;
@@ -1326,7 +1381,7 @@ export async function disconnectSession(): Promise<void> {
 
 export async function forceNewQRState(): Promise<void> {
   try {
-    await initializeWhatsApp();
+    await initializeWhatsApp(true); // 👈 forzado
     logger.info(
       'forceNewQRState(): WhatsApp client reinitialized, waiting for QR scan'
     );

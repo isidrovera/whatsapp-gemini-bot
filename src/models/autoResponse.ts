@@ -5,28 +5,152 @@ import { logger } from '../utils/logger.js';
 const prisma = getPrismaClient();
 
 export type AutoResponseInput = {
-  trigger: string;        // palabra, frase o patrón simple
-  response: string;       // texto (puede incluir variables)
-  isActive?: boolean;     // por defecto true
-  priority?: number;      // menor = más prioridad (1 > 2)
+  trigger: string;
+  response: string;
+  isActive?: boolean;
+  priority?: number;
   category?: string | null;
 };
 
 /**
- * Procesa variables en el texto de respuesta.
- * Variables soportadas:
- * - {{nombre}} - Nombre del contacto
- * - {{dni}} - DNI del contacto
- * - {{empresa}} o {{companyName}} - Nombre de la empresa
- * - {{ruc}} - RUC de la empresa
- * - {{telefono}} o {{phone}} - Teléfono del contacto
- * - {{fecha}} - Fecha actual
- * - {{hora}} - Hora actual
- * - {{producto}} - Nombre del producto
- * - {{categoria}} - Categoría del producto
- * - {{precio}} - Precio del producto
+ * SISTEMA DE VARIABLES DINÁMICO
+ * 
+ * Detecta automáticamente qué variables usa la respuesta y carga los datos necesarios.
+ * 
+ * VARIABLES BÁSICAS (siempre disponibles):
+ * - {{nombre}}, {{dni}}, {{telefono}}, {{empresa}}, {{ruc}}
+ * - {{fecha}}, {{hora}}
+ * - {{producto}}, {{categoria}}, {{precio}}
+ * 
+ * VARIABLES DINÁMICAS (se cargan automáticamente si se usan):
+ * - {{departamentos}} - Lista completa de departamentos con contactos
+ * - {{ventas_nombre}}, {{ventas_telefono}}, {{ventas_contactos}}
+ * - {{soporte_nombre}}, {{soporte_telefono}}, {{soporte_contactos}}
+ * - {{alquiler_nombre}}, {{alquiler_telefono}}, {{alquiler_contactos}}
+ * - {{facturacion_nombre}}, {{facturacion_telefono}}, {{facturacion_contactos}}
+ * - {{horario_hoy}}, {{horario_apertura}}, {{horario_cierre}}
+ * - {{break_inicio}}, {{break_fin}}, {{esta_abierto}}
+ * - {{catalogo}} - Lista de productos activos
  */
-export function processVariables(
+
+/**
+ * Detecta qué variables dinámicas usa el template
+ */
+function detectRequiredData(text: string): {
+  needsDepartments: boolean;
+  needsWorkingHours: boolean;
+  needsProducts: boolean;
+} {
+  const lower = text.toLowerCase();
+  
+  return {
+    needsDepartments: 
+      /\{\{departamentos\}\}/.test(lower) ||
+      /\{\{ventas_/.test(lower) ||
+      /\{\{soporte_/.test(lower) ||
+      /\{\{alquiler_/.test(lower) ||
+      /\{\{facturacion_/.test(lower) ||
+      /\{\{[a-z_]+_nombre\}\}/.test(lower) ||
+      /\{\{[a-z_]+_telefono\}\}/.test(lower) ||
+      /\{\{[a-z_]+_contactos\}\}/.test(lower),
+    
+    needsWorkingHours:
+      /\{\{horario_/.test(lower) ||
+      /\{\{break_/.test(lower) ||
+      /\{\{esta_abierto\}\}/.test(lower),
+    
+    needsProducts:
+      /\{\{catalogo\}\}/.test(lower)
+  };
+}
+
+/**
+ * Carga datos dinámicos según lo que necesite el template
+ */
+async function loadDynamicData(required: ReturnType<typeof detectRequiredData>) {
+  const data: any = {};
+
+  try {
+    // Cargar departamentos si se necesitan
+    if (required.needsDepartments) {
+      const departmentModel = await import('./department.js');
+      const departments = await departmentModel.getActive();
+      
+      // Lista completa formateada
+      data.departamentos = departments
+        .map((d: any, i: number) => {
+          const contacts = d.contacts
+            ?.map((c: any) => `  📱 ${c.name}: ${c.phoneNumber || c.whatsapp || 'Sin contacto'}`)
+            .join('\n') || '  (Sin contactos disponibles)';
+          
+          return `${i + 1}️⃣ *${d.name}*\n   ${d.description || ''}\n${contacts}`;
+        })
+        .join('\n\n');
+
+      // Variables por departamento específico (dinámico para CUALQUIER departamento)
+      for (const dept of departments) {
+        // Normalizar nombre del departamento a clave válida
+        // "Soporte Técnico" → "soporte_tecnico"
+        const key = dept.name
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '') // quitar acentos
+          .replace(/\s+/g, '_'); // espacios a guión bajo
+
+        data[`${key}_nombre`] = dept.name;
+        data[`${key}_telefono`] = dept.phoneNumber || 'No disponible';
+        data[`${key}_contactos`] = dept.contacts
+          ?.map((c: any) => `${c.name}: ${c.phoneNumber || c.whatsapp || 'Sin teléfono'}`)
+          .join('\n') || 'Sin contactos disponibles';
+      }
+    }
+
+    // Cargar horarios si se necesitan
+    if (required.needsWorkingHours) {
+      const workingHoursModel = await import('./workingHours.js');
+      const todayHours = await workingHoursModel.getTodayHours();
+      const isOpen = await workingHoursModel.isWorkingNow();
+
+      if (todayHours) {
+        data.horario_apertura = todayHours.openTime || '--:--';
+        data.horario_cierre = todayHours.closeTime || '--:--';
+        data.break_inicio = todayHours.breakStart || 'No aplica';
+        data.break_fin = todayHours.breakEnd || 'No aplica';
+        data.horario_hoy = todayHours.isWorkday
+          ? `${todayHours.openTime} - ${todayHours.closeTime}${
+              todayHours.breakStart ? ` (break ${todayHours.breakStart}-${todayHours.breakEnd})` : ''
+            }`
+          : 'Cerrado';
+        data.esta_abierto = isOpen ? '✅ Abierto' : '🔒 Cerrado';
+      }
+    }
+
+    // Cargar productos si se necesitan
+    if (required.needsProducts) {
+      const productModel = await import('./product.js');
+      const products = await productModel.getActive();
+
+      // Catálogo general (primeros 10)
+      data.catalogo = products
+        .slice(0, 10)
+        .map((p: any, i: number) => {
+          const price = p.price ? ` - S/ ${p.price.toFixed(2)}` : '';
+          return `${i + 1}. ${p.name}${price}`;
+        })
+        .join('\n');
+    }
+
+  } catch (error) {
+    logger.error('[AUTO-RESPONSE] Error loading dynamic data:', error);
+  }
+
+  return data;
+}
+
+/**
+ * Procesa TODAS las variables (básicas + dinámicas)
+ */
+async function processVariables(
   text: string,
   context?: {
     contact?: {
@@ -49,12 +173,15 @@ export function processVariables(
     };
     customVars?: Record<string, string>;
   }
-): string {
+): Promise<string> {
   if (!text) return '';
 
   let result = text;
 
-  // Variables de contacto
+  // ==========================================
+  // VARIABLES BÁSICAS (contacto, empresa, etc)
+  // ==========================================
+  
   if (context?.contact) {
     result = result.replace(/\{\{nombre\}\}/gi, context.contact.name || 'Cliente');
     result = result.replace(/\{\{dni\}\}/gi, context.contact.dni || 'No registrado');
@@ -65,31 +192,29 @@ export function processVariables(
     result = result.replace(/\{\{phone\}\}/gi, context.contact.phoneNumber || '');
   }
 
-  // Variables de empresa (sobreescriben las del contacto si están presentes)
   if (context?.company) {
     result = result.replace(/\{\{empresa\}\}/gi, context.company.razonSocial || context.company.name || 'No registrada');
     result = result.replace(/\{\{companyName\}\}/gi, context.company.razonSocial || context.company.name || 'No registrada');
     result = result.replace(/\{\{ruc\}\}/gi, context.company.numeroDoc || context.company.ruc || 'No registrado');
   }
 
-  // Variables de producto
   if (context?.product) {
     result = result.replace(/\{\{producto\}\}/gi, context.product.name || '');
     result = result.replace(/\{\{categoria\}\}/gi, context.product.category || '');
     result = result.replace(/\{\{precio\}\}/gi, context.product.price ? `S/ ${context.product.price.toFixed(2)}` : 'Consultar');
   }
 
-  // Variables de fecha/hora
+  // Fecha/hora
   const now = new Date();
-  const dateStr = now.toLocaleDateString('es-PE', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
+  const dateStr = now.toLocaleDateString('es-PE', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
   });
-  const timeStr = now.toLocaleTimeString('es-PE', { 
-    hour: '2-digit', 
-    minute: '2-digit' 
+  const timeStr = now.toLocaleTimeString('es-PE', {
+    hour: '2-digit',
+    minute: '2-digit',
   });
 
   result = result.replace(/\{\{fecha\}\}/gi, dateStr);
@@ -103,8 +228,28 @@ export function processVariables(
     });
   }
 
+  // ==========================================
+  // VARIABLES DINÁMICAS (departamentos, horarios, productos)
+  // ==========================================
+  
+  const required = detectRequiredData(result);
+  
+  if (required.needsDepartments || required.needsWorkingHours || required.needsProducts) {
+    const dynamicData = await loadDynamicData(required);
+    
+    // Reemplazar todas las variables dinámicas
+    for (const [key, value] of Object.entries(dynamicData)) {
+      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'gi');
+      result = result.replace(regex, String(value));
+    }
+  }
+
   return result;
 }
+
+// ==========================================
+// FUNCIONES PÚBLICAS (CRUD)
+// ==========================================
 
 export async function getAll() {
   try {
@@ -183,13 +328,6 @@ export async function remove(id: string) {
   }
 }
 
-/**
- * Busca la MEJOR coincidencia para un mensaje dado:
- * - Solo respuestas activas
- * - Orden: priority ASC, luego trigger más largo (más específico)
- * - Coincidencia case-insensitive: igualdad exacta o "incluye"
- * - Si el trigger empieza y termina con /.../ se interpreta como RegExp simple
- */
 export async function findByTrigger(message: string) {
   const text = (message || '').trim();
   if (!text) return null;
@@ -201,8 +339,6 @@ export async function findByTrigger(message: string) {
     });
 
     const lower = text.toLowerCase();
-
-    // ordenar por prioridad y especificidad del trigger (más largo primero)
     const ordered = candidates.sort((a, b) => {
       if (a.priority !== b.priority) return a.priority - b.priority;
       return (b.trigger?.length || 0) - (a.trigger?.length || 0);
@@ -212,7 +348,7 @@ export async function findByTrigger(message: string) {
       const raw = (r.trigger || '').trim();
       if (!raw) continue;
 
-      // Soporte para patrón /regex/i
+      // Soporte regex
       if (raw.startsWith('/') && raw.lastIndexOf('/') > 0) {
         const last = raw.lastIndexOf('/');
         const body = raw.slice(1, last);
@@ -221,19 +357,15 @@ export async function findByTrigger(message: string) {
           const re = new RegExp(body, flags.includes('i') ? flags : flags + 'i');
           if (re.test(text)) return r;
         } catch {
-          // si el regex es inválido, seguimos como texto normal
+          // regex inválido, continuar
         }
       }
 
       const trig = raw.toLowerCase();
 
-      // Igualdad exacta
       if (lower === trig) return r;
-
-      // "Incluye" (palabra/frase)
       if (lower.includes(trig)) return r;
 
-      // Lista separada por comas | punto y coma
       if (trig.includes(',') || trig.includes(';') || trig.includes('|')) {
         const parts = trig.split(/[,;|]/).map(s => s.trim()).filter(Boolean);
         if (parts.some(p => lower.includes(p))) return r;
@@ -248,8 +380,8 @@ export async function findByTrigger(message: string) {
 }
 
 /**
- * Busca respuesta automática Y procesa variables en el texto.
- * Esta es la función principal que debes usar desde el flujo de WhatsApp.
+ * FUNCIÓN PRINCIPAL
+ * Busca auto-respuesta y procesa TODAS las variables dinámicamente
  */
 export async function findAndProcessResponse(
   message: string,
@@ -277,16 +409,16 @@ export async function findAndProcessResponse(
 ): Promise<string | null> {
   try {
     const autoResponse = await findByTrigger(message);
-    
+
     if (!autoResponse) {
       return null;
     }
 
-    // Procesar variables en la respuesta
-    const processedResponse = processVariables(autoResponse.response, context);
-    
-    logger.info(`[AUTO-RESPONSE] Triggered: "${autoResponse.trigger}" -> Response processed with variables`);
-    
+    // Procesar variables (ahora con detección automática de dinámicas)
+    const processedResponse = await processVariables(autoResponse.response, context);
+
+    logger.info(`[AUTO-RESPONSE] Triggered: "${autoResponse.trigger}" with dynamic variables`);
+
     return processedResponse;
   } catch (error) {
     logger.error('Error finding and processing auto response:', error);

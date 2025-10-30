@@ -1,95 +1,111 @@
 // src/services/gemini.ts
 
-import { getGeminiModel } from '../config/gemini.js';
-import { logger } from '../utils/logger.js';
+import { getGeminiModel } from '../config/gemini.js'
+import { logger } from '../utils/logger.js'
 
-import * as conversationModel from '../models/conversation.js';
-import * as contactModel from '../models/contact.js';
-import * as companyModel from '../models/company.js';
-import * as configurationModel from '../models/configuration.js';
-import * as departmentModel from '../models/department.js';
-import * as productModel from '../models/product.js';
-import * as workingHoursModel from '../models/workingHours.js';
-import * as tagModel from '../models/tag.js';
+import * as conversationModel from '../models/conversation.js'
+import * as contactModel from '../models/contact.js'
+import * as companyModel from '../models/company.js'
+import * as configurationModel from '../models/configuration.js'
+import * as departmentModel from '../models/department.js'
+import * as productModel from '../models/product.js'
+import * as workingHoursModel from '../models/workingHours.js'
+import * as tagModel from '../models/tag.js'
+import * as templateModel from '../models/template.js'
+import * as autoResponseModel from '../models/autoResponse.js'
+import * as calendarModel from '../models/calendar.js'
 
-import * as odooService from './odoo.js';
-import * as externalService from './external.js';
-import * as calendarModel from '../models/calendar.js';
+import * as odooService from './odoo.js'
+import * as externalService from './external.js'
 
-import { isValidDNI, isValidRUC } from '../utils/validators.js';
-import { replaceVariables } from '../utils/formatters.js';
+import { replaceVariables } from '../utils/formatters.js'
 
-import * as templateModel from '../models/template.js';
-import * as autoResponseModel from '../models/autoResponse.js';
-
-/* ============================================================
-   TRACKER DE ENLACES (anti-spam de links del sistema)
-   ============================================================ */
+// ============================================================================
+// TRACKER DE ENLACES
+// ============================================================================
 interface LinkTracking {
-  phoneNumber: string;
-  lastLinkSentAt: Date;
-  lastLinkUrl: string;
+  phoneNumber: string
+  lastLinkSentAt: Date
+  lastLinkUrl: string
 }
+const linkTracker = new Map<string, LinkTracking>()
+const LINK_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutos
 
-const linkTracker = new Map<string, LinkTracking>();
-const LINK_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutos
-
-function shouldSendNewLink(phoneNumber: string, newUrl: string): boolean {
-  const tracked = linkTracker.get(phoneNumber);
-  if (!tracked) return true;
-
-  const now = Date.now();
-  const elapsed = now - tracked.lastLinkSentAt.getTime();
-
+function shouldSendNewLink (phoneNumber: string, newUrl: string): boolean {
+  const tracked = linkTracker.get(phoneNumber)
+  if (!tracked) return true
+  const now = Date.now()
+  const elapsed = now - tracked.lastLinkSentAt.getTime()
   if (tracked.lastLinkUrl === newUrl && elapsed < LINK_COOLDOWN_MS) {
     logger.info(
       `[LINK-TRACKER] Skipping duplicate link for ${phoneNumber} (sent ${Math.round(
         elapsed / 1000
       )}s ago)`
-    );
-    return false;
+    )
+    return false
   }
-  return true;
+  return true
 }
-
-function trackLinkSent(phoneNumber: string, url: string) {
+function trackLinkSent (phoneNumber: string, url: string) {
   linkTracker.set(phoneNumber, {
     phoneNumber,
     lastLinkSentAt: new Date(),
-    lastLinkUrl: url,
-  });
+    lastLinkUrl: url
+  })
 }
 
-/* ============================================================
-   HELPERS DINÁMICOS
-   ============================================================ */
+// ============================================================================
+// MENÚ / HINT
+// ============================================================================
 
-/**
- * user_context: info del cliente + equipos de Odoo
- */
-async function buildUserContext(contact: any, phoneNumber: string) {
-  const primaryData = contactModel.resolvePrimaryCompany(contact);
+// Antes aquí mostrabas todo el menú. Ahora SOLO mostramos el “si quieres ver el menú…”
+function buildMenuHint (): string {
+  return '\n\n Si quieres ver el *menú de opciones* escribe *menu* .'
+}
+
+function looksLikeMenuAnswer (text: string): boolean {
+  if (!text) return false
+  const lower = text.toLowerCase()
+  const hasListNumbers =
+    lower.includes('1') &&
+    lower.includes('2') &&
+    lower.includes('3') &&
+    lower.includes('4')
+  const hasKeywords =
+    lower.includes('servicio técnico') ||
+    lower.includes('tóner') ||
+    lower.includes('asistencia remota') ||
+    lower.includes('cambiar empresa')
+  const isGreetingMenu =
+    lower.includes('por favor elige una opción') ||
+    lower.includes('por favor elige una opcion')
+  return hasListNumbers && hasKeywords && isGreetingMenu
+}
+
+// ============================================================================
+// HELPERS DE CONTEXTO (DINÁMICO)
+// ============================================================================
+async function buildUserContext (contact: any, phoneNumber: string) {
+  const primaryData = contactModel.resolvePrimaryCompany(contact)
 
   const activeCompanyName =
-    primaryData.companyName || contact.companyName || null;
-  const activeCompanyRUC = primaryData.ruc || contact.ruc || null;
+    primaryData.companyName || contact.companyName || null
+  const activeCompanyRUC = primaryData.ruc || contact.ruc || null
 
-  let equipmentContext =
-    'El cliente NO tiene equipos registrados en el sistema.';
-  let customerInfo: any = null;
+  let equipmentContext = 'El cliente NO tiene equipos registrados en el sistema.'
+  let customerInfo: any = null
 
   if (activeCompanyName) {
     customerInfo = await odooService.getCustomerInfo(
       activeCompanyName,
       contact.name || 'Usuario',
       phoneNumber
-    );
-
+    )
     if (customerInfo) {
-      equipmentContext = odooService.formatEquipmentContext(customerInfo);
+      equipmentContext = odooService.formatEquipmentContext(customerInfo)
       logger.info(
         `[ODOO] Found ${customerInfo.equipment.length} equipment(s) for ${activeCompanyName}`
-      );
+      )
     }
   }
 
@@ -101,87 +117,115 @@ Estado interno: ${contact.state || 'N/A'}
 
 EQUIPOS REGISTRADOS EN EL SISTEMA:
 ${equipmentContext}
-`;
+`
 
   return {
     userContext,
     customerInfo,
     activeCompanyName,
-    activeCompanyRUC,
-  };
+    activeCompanyRUC
+  }
+}
+
+async function buildScheduleContext () {
+  return workingHoursModel.getScheduleContextForAI()
+}
+async function buildDepartmentsContext () {
+  return departmentModel.getDepartmentsContextForAI()
+}
+async function buildProductsContext () {
+  return productModel.getProductsContextForAI()
 }
 
 /**
- * Texto legible de horarios de atención para IA y para avisos
+ * Calendario de los próximos días para que Gemini pueda contestar:
+ * "mañana trabajan?", "el sábado?", "1 de noviembre?"
  */
-async function buildScheduleContext() {
-  return workingHoursModel.getScheduleContextForAI();
+async function buildFutureScheduleSnippet () {
+  const today = new Date()
+  const lines: string[] = []
+  lines.push('CALENDARIO DE ATENCIÓN (próximos días desde BD):')
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today)
+    d.setDate(d.getDate() + i)
+
+    const status = await workingHoursModel.getStatusInfo(d)
+    const dayName = workingHoursModel.getDayName(d.getDay())
+    const isHoliday = await calendarModel.isHoliday(d)
+
+    if (isHoliday) {
+      const ev = (calendarModel as any).getEventByDate
+        ? await (calendarModel as any).getEventByDate(d)
+        : null
+      lines.push(
+        `• ${dayName} ${d.toISOString().slice(0, 10)}: NO ATIENDE (feriado/cierre) ${ev?.title ? `→ ${ev.title}` : ''}`
+      )
+      continue
+    }
+
+    if (!status.todayHours || !status.todayHours.isWorkday) {
+      lines.push(
+        `• ${dayName} ${d.toISOString().slice(0, 10)}: NO ATIENDE (no laboral)`
+      )
+      continue
+    }
+
+    const oh = status.todayHours
+    const base = `• ${dayName} ${d.toISOString().slice(0, 10)}: ${oh.openTime} - ${oh.closeTime}`
+    if (oh.breakStart && oh.breakEnd) {
+      lines.push(`${base} (break ${oh.breakStart}-${oh.breakEnd})`)
+    } else {
+      lines.push(base)
+    }
+  }
+
+  return lines.join('\n')
 }
 
-/**
- * Bloque de "departamentos y contactos" para IA
- */
-async function buildDepartmentsContext() {
-  return departmentModel.getDepartmentsContextForAI();
-}
-
-/**
- * Bloque de "catálogo de productos/servicios" para IA
- */
-async function buildProductsContext() {
-  return productModel.getProductsContextForAI();
-}
-
-/**
- * Construye el systemPrompt final dinámico.
- */
-async function buildSystemPrompt(
+async function buildSystemPrompt (
   baseUserContext: string,
   departmentsContext: string,
   productsContext: string,
-  scheduleContext: string
+  scheduleContext: string,
+  futureScheduleContext: string
 ) {
-  const systemVars = await configurationModel.getForSystemVariables();
+  const systemVars = await configurationModel.getForSystemVariables()
 
-  // Prompt desde configuración (ai_prompt.system_prompt)
   let systemPromptTemplate =
-    (await configurationModel.get('ai_prompt', 'system_prompt')) || '';
+    (await configurationModel.get('ai_prompt', 'system_prompt')) || ''
 
-  // Fallback si no hay prompt configurado
   if (!systemPromptTemplate || systemPromptTemplate.trim() === '') {
     systemPromptTemplate = `
-Eres un asistente virtual profesional de {{company_name}}.
+Eres un asistente virtual profesional de {{company_name}}. RESPONDES SIEMPRE en español.
 
 INFORMACIÓN DE LA EMPRESA:
-Nombre: {{company_name}}
-Descripción: {{company_description}}
-📍 Dirección: {{company_address}}
-📧 Email: {{company_email}}
-📞 Teléfono: {{company_phone}}
-🌐 Web: {{company_website}}
+{{company_name}}
+{{company_address}}
+Tel: {{company_phone}}
 
-DEPARTAMENTOS Y CONTACTOS DISPONIBLES:
+DEPARTAMENTOS (desde BD):
 {{departments_context}}
 
-CATÁLOGO DE PRODUCTOS Y SERVICIOS:
+CATÁLOGO (desde BD):
 {{products_context}}
 
-HORARIOS E INFORMACIÓN DE ATENCIÓN:
+HORARIOS HOY:
 {{schedule_context}}
 
-INFORMACIÓN DEL USUARIO ACTUAL:
+HORARIOS PRÓXIMOS DÍAS:
+{{future_schedule_context}}
+
+USUARIO ACTUAL:
 {{user_context}}
 
-REGLAS DE ESTILO / POLÍTICA:
-- Tono base: {{policy_tone_style}}
-- Llama siempre al link de registro "{{policy_link_label}}", NO digas "Odoo".
-- Si el cliente pide soporte remoto, menciona {{policy_remote_tool_name}} y pídele su ID (9 dígitos) o una foto clara.
-- Si el usuario pide hablar con humano, ofrécele derivarlo con un técnico real.
-- Si el cliente pide servicio técnico onsite, no prometas hora exacta de visita si {{policy_allow_field_visit_commitment}} = "false"; di "un técnico coordina contigo".
-- Puedes compartir teléfonos directos solo si {{policy_allow_direct_phone_share}} = "true".
-- No repitas información innecesaria y responde breve (máx ~15 líneas).
-- Usa emojis profesionales (📋 🔧 🖨 📞 🧑‍💻) si eso mantiene el tono cercano.
-`;
+REGLAS:
+- Si te preguntan horarios "mañana", "sábado", "feriado", "1 de noviembre", responde SOLO con lo que sale en HORARIOS y CALENDARIO.
+- Si te preguntan por un área o interno, usa DEPARTAMENTOS.
+- Si te preguntan por servicios, costos o insumos, usa CATÁLOGO.
+- No inventes datos que no estén en estos bloques.
+- Sé breve.
+`
   }
 
   const systemPrompt = replaceVariables(systemPromptTemplate, {
@@ -189,30 +233,30 @@ REGLAS DE ESTILO / POLÍTICA:
     departments_context: departmentsContext,
     products_context: productsContext,
     schedule_context: scheduleContext,
-    user_context: baseUserContext,
-  });
+    future_schedule_context: futureScheduleContext,
+    user_context: baseUserContext
+  })
 
   return {
     systemPrompt,
-    systemVars,
-  };
+    systemVars
+  }
 }
 
-/* ============================================================
-   DETECCIÓN DE INTENCIONES
-   ============================================================ */
-
-function detectRemoteSupportIntent(
+// ============================================================================
+// INTENTS
+// ============================================================================
+function detectRemoteSupportIntent (
   messageText: string,
   hasMedia: boolean,
   anydeskCode: string | null,
   remoteToolName: string,
   mediaTypeClass: string | null
 ): boolean {
-  const lower = (messageText || '').toLowerCase();
+  const lower = (messageText || '').toLowerCase()
 
-  if (anydeskCode && anydeskCode.trim() !== '') return true;
-  if (mediaTypeClass === 'anydesk') return true;
+  if (anydeskCode && anydeskCode.trim() !== '') return true
+  if (mediaTypeClass === 'anydesk') return true
 
   const remoteKeywords = [
     'asistencia remota',
@@ -224,43 +268,40 @@ function detectRemoteSupportIntent(
     remoteToolName.toLowerCase(),
     'puedes tomar control',
     'pueden ingresar',
-    'pueden entrar',
-  ];
+    'pueden entrar'
+  ]
 
-  return remoteKeywords.some((k) => lower.includes(k));
+  return remoteKeywords.some(k => lower.includes(k))
 }
 
-async function detectIntents(
+async function detectIntents (
   messageText: string,
   hasMedia: boolean,
   anydeskCode: string | null,
   remoteToolName: string,
   mediaTypeClass: string | null
 ) {
-  const deptMatch = await departmentModel.detectDepartment(messageText);
-  const productMatches = await productModel.searchByKeyword(messageText);
+  const deptMatch = await departmentModel.detectDepartment(messageText)
+  const productMatches = await productModel.searchByKeyword(messageText)
 
-  // Remote support?
   const wantsRemote = detectRemoteSupportIntent(
     messageText,
     hasMedia,
     anydeskCode,
     remoteToolName,
     mediaTypeClass
-  );
+  )
 
-  const lower = messageText.toLowerCase();
+  const lower = messageText.toLowerCase()
 
-  // Tóner / insumos
   const wantsToner =
     lower.includes('tóner') ||
     lower.includes('toner') ||
     lower.includes('cartucho') ||
     lower.includes('insumo') ||
     (productMatches.length > 0 &&
-      productMatches[0].product?.category?.toLowerCase?.().includes('tóner'));
+      productMatches[0].product?.category?.toLowerCase?.().includes('tóner'))
 
-  // Falla física / servicio técnico
   let wantsService =
     lower.includes('fall') ||
     lower.includes('soporte') ||
@@ -270,16 +311,14 @@ async function detectIntents(
     lower.includes('atascada') ||
     lower.includes('no jala') ||
     lower.includes('error') ||
-    (deptMatch?.department?.name || '')
-      .toLowerCase()
-      .includes('soporte');
+    (deptMatch?.department?.name || '').toLowerCase().includes('soporte')
 
   if (
     mediaTypeClass === 'error_screen' ||
     mediaTypeClass === 'hardware_damage' ||
     mediaTypeClass === 'video'
   ) {
-    wantsService = true;
+    wantsService = true
   }
 
   return {
@@ -287,52 +326,51 @@ async function detectIntents(
     productMatches,
     wantsRemote,
     wantsToner,
-    wantsService,
-  };
+    wantsService
+  }
 }
 
-/* ============================================================
-   HELPERS DE TEMPLATES DE RESPUESTA
-   ============================================================ */
-
-async function renderTemplateByCategory(
+// ============================================================================
+// TEMPLATES
+// ============================================================================
+async function renderTemplateByCategory (
   category: string,
   vars: Record<string, string>
 ): Promise<string | null> {
   try {
-    const list = await templateModel.getByCategory(category);
-    if (!list || list.length === 0) return null;
-    const t = list[0]; // tomamos la primera activa
-    const raw = t.content || '';
-    return templateModel.render(raw, vars);
+    const list = await templateModel.getByCategory(category)
+    if (!list || list.length === 0) return null
+    const t = list[0]
+    const raw = t.content || ''
+    return templateModel.render(raw, vars)
   } catch (err) {
-    logger.error('[TEMPLATE] Error rendering template:', err);
-    return null;
+    logger.error('[TEMPLATE] Error rendering template:', err)
+    return null
   }
 }
 
-async function buildLinkAttachmentMessage(
+async function buildLinkAttachmentMessage (
   category: string,
   linkUrl: string,
   customerInfo: any,
   systemVars: Record<string, string>,
   remoteToolName: string
 ): Promise<string | null> {
-  if (!linkUrl) return null;
+  if (!linkUrl) return null
 
-  let equipmentBrand = '';
-  let equipmentModel = '';
-  let equipmentSerial = '';
-  let equipmentCount = '0';
+  let equipmentBrand = ''
+  let equipmentModel = ''
+  let equipmentSerial = ''
+  let equipmentCount = '0'
 
   if (customerInfo && Array.isArray(customerInfo.equipment)) {
-    equipmentCount = String(customerInfo.equipment.length || 0);
+    equipmentCount = String(customerInfo.equipment.length || 0)
 
     if (customerInfo.equipment.length === 1) {
-      const eq = customerInfo.equipment[0];
-      equipmentBrand = eq.brand || '';
-      equipmentModel = eq.model || '';
-      equipmentSerial = eq.serial || '';
+      const eq = customerInfo.equipment[0]
+      equipmentBrand = eq.brand || ''
+      equipmentModel = eq.model || ''
+      equipmentSerial = eq.serial || ''
     }
   }
 
@@ -343,98 +381,68 @@ async function buildLinkAttachmentMessage(
     equipmentSerial,
     equipmentCount,
     policy_link_label: systemVars.policy_link_label || 'enlace del sistema',
-    policy_remote_tool_name: remoteToolName || 'AnyDesk',
-  };
+    policy_remote_tool_name: remoteToolName || 'AnyDesk'
+  }
 
-  const rendered = await renderTemplateByCategory(category, vars);
-  return rendered;
+  const rendered = await renderTemplateByCategory(category, vars)
+  return rendered
 }
 
-async function buildEscalateHumanMessage(systemVars: Record<string, string>) {
+async function buildEscalateHumanMessage (systemVars: Record<string, string>) {
   const rendered = await renderTemplateByCategory('ESCALATE_HUMAN', {
     company_name: systemVars.company_name || '',
-    company_phone: systemVars.company_phone || '',
-  });
+    company_phone: systemVars.company_phone || ''
+  })
 
   return (
     rendered ||
     '⚠ Entendido. Voy a derivar tu caso a soporte humano ahora mismo. Por favor dime brevemente qué está pasando para priorizarlo 🙏.'
-  );
+  )
 }
 
-async function buildOutOfHoursNotice(scheduleContext: string) {
+async function buildOutOfHoursNotice (scheduleContext: string) {
   const rendered = await renderTemplateByCategory('OUT_OF_HOURS', {
-    schedule_context: scheduleContext,
-  });
+    schedule_context: scheduleContext
+  })
 
   return (
     rendered ||
     `⏰ En este momento estamos fuera de horario. ${scheduleContext}\nSi tu caso es URGENTE responde *URGENTE* y te derivamos a soporte humano.`
-  );
+  )
 }
 
-/* ============================================================
-   HELPER: asegurar tag HUMANO en la conversación
-   ============================================================ */
-
-async function ensureHumanTag(phoneNumber: string) {
-  let allTags = await tagModel.getAll();
+// ============================================================================
+// TAG HUMANO
+// ============================================================================
+async function ensureHumanTag (phoneNumber: string) {
+  let allTags = await tagModel.getAll()
   let humanTag = allTags.find(
     (t: any) => (t.name || '').toUpperCase() === 'HUMANO'
-  );
+  )
 
   if (!humanTag) {
     humanTag = await tagModel.create({
       name: 'HUMANO',
       color: '#ff0000',
-      description: 'Escalado a soporte humano urgente',
-    });
+      description: 'Escalado a soporte humano urgente'
+    })
 
-    allTags = await tagModel.getAll();
+    allTags = await tagModel.getAll()
   }
 
-  const convTags = await tagModel.getByConversation(phoneNumber);
+  const convTags = await tagModel.getByConversation(phoneNumber)
   const already = convTags.some(
     (t: any) => (t.name || '').toUpperCase() === 'HUMANO'
-  );
+  )
   if (!already) {
-    await tagModel.assignToConversation(phoneNumber, humanTag.id);
+    await tagModel.assignToConversation(phoneNumber, humanTag.id)
   }
 }
 
-/* ============================================================
-   DETECCIÓN DE RESPUESTA-MENÚ (para no spamear menú otra vez)
-   ============================================================ */
-
-function looksLikeMenuAnswer(text: string): boolean {
-  if (!text) return false;
-  const lower = text.toLowerCase();
-
-  const hasListNumbers =
-    lower.includes('1') &&
-    lower.includes('2') &&
-    lower.includes('3') &&
-    lower.includes('4');
-
-  const hasKeywords =
-    lower.includes('servicio técnico') ||
-    lower.includes('tóner') ||
-    lower.includes('asistencia remota') ||
-    lower.includes('cambiar empresa');
-
-  // Si es prácticamente el saludo tipo "Hola NOMBRE ... Por favor elige una opción"
-  const isGreetingMenu =
-    lower.includes('por favor elige una opción') ||
-    lower.includes('por favor elige una opcion');
-
-  return hasListNumbers && hasKeywords && isGreetingMenu;
-}
-
-/* ============================================================
-   MAIN FLOW
-   ============================================================ */
-
-export async function processMessage(
+// ============================================================================
+// MAIN FLOW
+// ============================================================================
+export async function processMessage (
   phoneNumber: string,
   messageText: string,
   hasMedia: boolean = false,
@@ -450,30 +458,26 @@ export async function processMessage(
         0,
         80
       )}... ${hasMedia ? '[+MEDIA]' : ''}`
-    );
+    )
 
-    /* 0. Obtener o crear contacto */
-    let contact = await contactModel.findByPhone(phoneNumber);
+    // 0. contacto
+    let contact = await contactModel.findByPhone(phoneNumber)
     if (!contact) {
-      contact = await contactModel.create(phoneNumber);
-      logger.info(`New contact created: ${phoneNumber}`);
+      contact = await contactModel.create(phoneNumber)
+      logger.info(`New contact created: ${phoneNumber}`)
     }
 
-    /* 1. Guardar mensaje del usuario en la conversación */
-    let contentToSave = messageText;
+    // 1. guardar mensaje user
+    let contentToSave = messageText
     if (hasMedia && mediaAnalysisJson) {
-      contentToSave += ` [MEDIA ANALYSIS: ${mediaAnalysisJson.substring(
-        0,
-        180
-      )}...]`;
+      contentToSave += ` [MEDIA ANALYSIS: ${mediaAnalysisJson.substring(0, 180)}...]`
     }
     if (anydeskCode) {
-      contentToSave += ` [ANYDESK: ${anydeskCode}]`;
+      contentToSave += ` [ANYDESK: ${anydeskCode}]`
     }
+    await conversationModel.save(phoneNumber, 'USER', contentToSave)
 
-    await conversationModel.save(phoneNumber, 'USER', contentToSave);
-
-    /* 2. Revisión de estado de registro */
+    // 2. estados de registro breves
     if (
       contact.state === 'NEW' ||
       contact.state === 'WAITING_DNI' ||
@@ -482,145 +486,144 @@ export async function processMessage(
     ) {
       const pendingMsg =
         (await renderTemplateByCategory('REGISTRATION_PENDING', {
-          nombre: contact.name || 'Cliente',
+          nombre: contact.name || 'Cliente'
         })) ||
-        'Estoy validando tus datos para poder ayudarte 👍. Ya casi terminamos el registro.';
-
-      await conversationModel.save(phoneNumber, 'ASSISTANT', pendingMsg);
-      return pendingMsg;
+        'Estoy validando tus datos para poder ayudarte 👍. Ya casi terminamos el registro.'
+      await conversationModel.save(phoneNumber, 'ASSISTANT', pendingMsg)
+      return pendingMsg
     }
 
-    /* 3. PRE-CORTE: "URGENTE" fuera de horario */
-    const statusInfoEarly = await workingHoursModel.getStatusInfo(new Date());
-    const isClosedEarly = !statusInfoEarly.isOpen;
-    const txtLower = messageText.trim().toLowerCase();
+    // 3. "URGENTE" fuera de horario
+    const statusInfoEarly = await workingHoursModel.getStatusInfo(new Date())
+    const isClosedEarly = !statusInfoEarly.isOpen
+    const txtLower = messageText.trim().toLowerCase()
     const isEscalationKeyword =
       txtLower.includes('urgente') ||
       txtLower.includes('es urgente') ||
-      txtLower.includes('emergencia');
+      txtLower.includes('emergencia')
 
     if (isClosedEarly && isEscalationKeyword) {
-      // Tag humano
-      await ensureHumanTag(phoneNumber);
+      await ensureHumanTag(phoneNumber)
 
-      // Mensaje humano usando systemVars
-      const { userContext } = await buildUserContext(contact, phoneNumber);
-      const departmentsContext = await buildDepartmentsContext();
-      const productsContext = await buildProductsContext();
-      const scheduleContext = await buildScheduleContext();
+      const { userContext } = await buildUserContext(contact, phoneNumber)
+      const departmentsContext = await buildDepartmentsContext()
+      const productsContext = await buildProductsContext()
+      const scheduleContext = await buildScheduleContext()
+      const futureScheduleContext = await buildFutureScheduleSnippet()
+
       const { systemVars } = await buildSystemPrompt(
         userContext,
         departmentsContext,
         productsContext,
-        scheduleContext
-      );
+        scheduleContext,
+        futureScheduleContext
+      )
 
-      const humanEscalationMsg = await buildEscalateHumanMessage(systemVars);
+      let humanEscalationMsg = await buildEscalateHumanMessage(systemVars)
+
+      // aquí SÍ le pegamos el hint de menú, por si espera
+      humanEscalationMsg += buildMenuHint()
 
       await conversationModel.save(
         phoneNumber,
         'ASSISTANT',
         humanEscalationMsg
-      );
-      return humanEscalationMsg;
+      )
+      return humanEscalationMsg
     }
 
-    /* 4. CONTEXTO DINÁMICO COMPLETO PARA IA */
+    // 4. contexto dinámico
     const {
       userContext,
       customerInfo,
       activeCompanyName,
-      activeCompanyRUC,
-    } = await buildUserContext(contact, phoneNumber);
+      activeCompanyRUC
+    } = await buildUserContext(contact, phoneNumber)
 
-    const departmentsContext = await buildDepartmentsContext();
-    const productsContext = await buildProductsContext();
-    const scheduleContext = await buildScheduleContext();
+    const departmentsContext = await buildDepartmentsContext()
+    const productsContext = await buildProductsContext()
+    const scheduleContext = await buildScheduleContext()
+    const futureScheduleContext = await buildFutureScheduleSnippet()
 
     const { systemPrompt, systemVars } = await buildSystemPrompt(
       userContext,
       departmentsContext,
       productsContext,
-      scheduleContext
-    );
+      scheduleContext,
+      futureScheduleContext
+    )
 
-    /* 5. Historial (últimos 10 mensajes USER/ASSISTANT) */
-    const recentHistory = await conversationModel.getHistory(phoneNumber, 10);
-
-    const geminiHistory: any[] = [];
+    // 5. historial
+    const recentHistory = await conversationModel.getHistory(phoneNumber, 10)
+    const geminiHistory: any[] = []
     for (const msg of recentHistory) {
       if (msg.role === 'USER') {
-        geminiHistory.push({ role: 'user', parts: [{ text: msg.content }] });
+        geminiHistory.push({ role: 'user', parts: [{ text: msg.content }] })
       } else if (msg.role === 'ASSISTANT') {
-        geminiHistory.push({ role: 'model', parts: [{ text: msg.content }] });
+        geminiHistory.push({ role: 'model', parts: [{ text: msg.content }] })
       }
     }
     while (geminiHistory.length > 0 && geminiHistory[0].role !== 'user') {
-      geminiHistory.shift();
+      geminiHistory.shift()
     }
-    const validatedHistory: any[] = [];
-    let lastRole: string | null = null;
+    const validatedHistory: any[] = []
+    let lastRole: string | null = null
     for (const msg of geminiHistory) {
       if (lastRole === null || lastRole !== msg.role) {
-        validatedHistory.push(msg);
-        lastRole = msg.role;
+        validatedHistory.push(msg)
+        lastRole = msg.role
       }
     }
 
-    /* 6. Tags activos (HUMANO, etc.) */
-    const conversationTags = await tagModel.getByConversation(phoneNumber);
+    // 6. tags activos
+    const conversationTags = await tagModel.getByConversation(phoneNumber)
     const tagNames = conversationTags.map((t: any) =>
       (t.name || '').toUpperCase()
-    );
+    )
 
-    // regla: si el contacto tiene takeover humano activo EN LA BD (campo humanTakeoverAt reciente)
-    // entonces forzamos humano; si solo tiene el tag HUMANO viejo pero ya no hay takeoverAt reciente,
-    // permitimos IA.
-    let forceHuman = false;
+    let forceHuman = false
     if (tagNames.includes('HUMANO')) {
-      // chequeo adicional:
-      const takeoverAt = contact.humanTakeoverAt;
+      const takeoverAt = contact.humanTakeoverAt
       if (takeoverAt) {
-        const elapsedMs = Date.now() - takeoverAt.getTime();
-        // 1h de ventana "humano manda"
+        const elapsedMs = Date.now() - takeoverAt.getTime()
         if (elapsedMs < 60 * 60 * 1000) {
-          forceHuman = true;
+          forceHuman = true
         } else {
           logger.debug(
             `[HUMAN-GUARD] HUMANO tag present but humanTakeoverAt is stale (+${Math.round(
               elapsedMs / 1000
             )}s) → Gemini allowed`
-          );
+          )
         }
       } else {
         logger.debug(
           '[HUMAN-GUARD] HUMANO tag present but no humanTakeoverAt → Gemini allowed'
-        );
+        )
       }
     }
 
     logger.debug('[FLOW] forceHuman decision:', {
       forceHuman,
       hasHumanTag: tagNames.includes('HUMANO'),
-      humanTakeoverAt: contact.humanTakeoverAt || null,
-    });
+      humanTakeoverAt: contact.humanTakeoverAt || null
+    })
 
-    /* 7. Detección de intención */
+    // 7. intents
     const {
       deptMatch,
       productMatches,
       wantsRemote,
       wantsToner,
-      wantsService,
+      wantsService
     } = await detectIntents(
       messageText,
       hasMedia,
       anydeskCode,
       systemVars.policy_remote_tool_name || 'AnyDesk',
       mediaTypeClass
-    );
+    )
 
-    /* 8. AutoResponse directa si aplica (solo si NO está forzado humano) */
+    // 8. autoResponse directa
     if (!forceHuman) {
       const autoResp = await autoResponseModel.findAndProcessResponse(
         messageText,
@@ -630,208 +633,186 @@ export async function processMessage(
             dni: contact.dni || null,
             phoneNumber: phoneNumber,
             companyName: activeCompanyName || null,
-            ruc: activeCompanyRUC || null,
+            ruc: activeCompanyRUC || null
           },
           company: {
             razonSocial: activeCompanyName || null,
             numeroDoc: activeCompanyRUC || null,
             name: activeCompanyName || null,
-            ruc: activeCompanyRUC || null,
+            ruc: activeCompanyRUC || null
           },
           product:
             productMatches && productMatches[0]
               ? {
                   name: productMatches[0].product.name || '',
                   category: productMatches[0].product.category || '',
-                  price: productMatches[0].product.price ?? null,
+                  price: productMatches[0].product.price ?? null
                 }
-              : undefined,
+              : undefined
         }
-      );
+      )
 
       if (autoResp) {
-        await conversationModel.save(phoneNumber, 'ASSISTANT', autoResp);
-        return autoResp;
+        // a la respuesta automática también le pegamos el hint
+        const withHint = autoResp + buildMenuHint()
+        await conversationModel.save(phoneNumber, 'ASSISTANT', withHint)
+        return withHint
       }
     }
 
-    /* 9. Construir mensaje enriquecido que enviamos a Gemini */
-    let finalMessageToModel = messageText;
+    // 9. mensaje enriquecido para el modelo
+    let finalMessageToModel = messageText
 
-    // Adjuntamos el análisis estructurado media
     if (hasMedia && mediaAnalysisJson) {
       finalMessageToModel += `
 
 [ANÁLISIS TÉCNICO DEL ARCHIVO QUE EL USUARIO ENVIÓ]
 ${mediaAnalysisJson}
-`;
+`
     }
 
-    // Inyectar info crítica detectada automáticamente
     if (detectedErrorCode) {
       finalMessageToModel += `
 
 [CÓDIGO DE ERROR DETECTADO: ${detectedErrorCode}]
-Explica en lenguaje simple lo que implica este tipo de error
-(en impresoras / multifuncionales / escáner / copiadora),
-pregunta si el equipo está totalmente detenido o todavía imprime/escanea parcialmente
+Explica en lenguaje simple lo que implica este tipo de error,
+pregunta si el equipo está totalmente detenido o todavía imprime/escanea,
 y ofrece ayuda para registrar servicio técnico en sitio.
-NO prometas hora exacta ni solución definitiva sin ver el equipo físicamente.
-NO ofrezcas asistencia remota ni pidas AnyDesk a menos que el usuario lo haya pedido explícitamente.
-`;
+NO prometas hora exacta.
+`
     }
 
     if (detectedSerial) {
       finalMessageToModel += `
 
 [NÚMERO DE SERIE DETECTADO DEL EQUIPO: ${detectedSerial}]
-Incluye este número al hablar del caso,
-para que el técnico identifique el equipo correcto.
-`;
+Inclúyelo en la respuesta para que el técnico identifique el equipo.
+`
     }
 
     if (anydeskCode) {
       finalMessageToModel += `
 
-[ID REMOTO (${systemVars.policy_remote_tool_name ||
-        'AnyDesk'}) DETECTADO DEL USUARIO: ${anydeskCode}]
+[ID REMOTO (${systemVars.policy_remote_tool_name || 'AnyDesk'}) DETECTADO DEL USUARIO: ${anydeskCode}]
 Inclúyelo una sola vez en la respuesta y ofrece conexión remota de un técnico humano 👨‍💻.
-No repitas el ID varias veces.
-`;
+`
     }
 
-    // Guías específicas según intención detectada
     if (wantsRemote) {
       const remoteGuide =
         (await renderTemplateByCategory('INTENT_REMOTE_GUIDE', {
           policy_remote_tool_name:
             systemVars.policy_remote_tool_name || 'AnyDesk',
           policy_link_label:
-            systemVars.policy_link_label || 'enlace del sistema',
+            systemVars.policy_link_label || 'enlace del sistema'
         })) ||
         `El usuario solicita soporte remoto (${systemVars.policy_remote_tool_name ||
-          'AnyDesk'}). Pídele su ID (9 dígitos) si no lo dio aún o confirma el que detectaste. Dile que un técnico puede conectarse.`;
+          'AnyDesk'}). Pídele su ID (9 dígitos) si no lo dio aún.`
       finalMessageToModel += `
 
-[GUÍA DE CONTEXTO PARA TU RESPUESTA - ASISTENCIA REMOTA]
+[GUÍA - ASISTENCIA REMOTA]
 ${remoteGuide}
-`;
+`
     }
 
     if (wantsService) {
       const serviceGuide =
         (await renderTemplateByCategory('INTENT_SERVICE_GUIDE', {
           policy_link_label:
-            systemVars.policy_link_label || 'enlace del sistema',
+            systemVars.policy_link_label || 'enlace del sistema'
         })) ||
-        `El usuario reporta una falla física / mensaje de error en el equipo. Pídele más detalles ("atasco de papel", "no imprime negro", etc.). Ofrece registrar servicio técnico para que un técnico coordine visita. No prometas hora exacta.`;
+        `El usuario reporta una falla física. Pídele más detalles y ofrece registrar servicio técnico.`
       finalMessageToModel += `
 
-[GUÍA DE CONTEXTO PARA TU RESPUESTA - SERVICIO TÉCNICO]
+[GUÍA - SERVICIO TÉCNICO]
 ${serviceGuide}
-`;
+`
     }
 
     if (wantsToner) {
       const tonerGuide =
         (await renderTemplateByCategory('INTENT_TONER_GUIDE', {
           policy_link_label:
-            systemVars.policy_link_label || 'enlace del sistema',
+            systemVars.policy_link_label || 'enlace del sistema'
         })) ||
-        `El usuario solicita tóner / insumos. Pídele confirmar modelo/serie y el color de tóner que necesita. No prometas stock inmediato.`;
+        `El usuario solicita tóner / insumos. Pídele modelo/serie y color.`
       finalMessageToModel += `
 
-[GUÍA DE CONTEXTO PARA TU RESPUESTA - TÓNER / INSUMOS]
+[GUÍA - TÓNER / INSUMOS]
 ${tonerGuide}
-`;
+`
     }
 
-    // ⚠️ INSTRUCCIONES NEGATIVAS
     if (!wantsRemote) {
       if (wantsService) {
         finalMessageToModel += `
 
-[RESTRICCIÓN IMPORTANTE]
-El usuario NO ha solicitado soporte remoto ni ha dado un ID de conexión remota válido.
-ESTO PARECE una falla física / código de error en la máquina.
-NO pidas AnyDesk ni hables de conexión remota.
-Tu enfoque debe ser:
-1) reconocer el problema/código que se ve en la máquina,
-2) pedir confirmación de síntomas (¿puede imprimir? ¿está detenida?),
-3) ofrecer registrar un servicio técnico en sitio para que un técnico coordine visita.
-`;
+[RESTRICCIÓN]
+No pidas AnyDesk porque el usuario no lo pidió. Prioriza visita / registro de servicio.
+`
       } else {
         finalMessageToModel += `
 
-[RESTRICCIÓN IMPORTANTE]
-El usuario NO ha solicitado soporte remoto.
-NO pidas AnyDesk ni hables de conexión remota a menos que él mismo lo pida.
-Primero pide una breve explicación del problema que muestra la imagen / archivo.
-`;
+[RESTRICCIÓN]
+No pidas AnyDesk si el usuario no lo pide.
+`
       }
-    }
-
-    if (wantsRemote) {
+    } else {
       finalMessageToModel += `
 
-[RESTRICCIÓN IMPORTANTE]
-El usuario SÍ está pidiendo asistencia remota.
-Debes pedir o confirmar el ID de ${systemVars.policy_remote_tool_name ||
-        'AnyDesk'} (9 dígitos) UNA sola vez y explicar que un técnico humano puede conectarse.
-No prometas tiempos exactos.
-`;
+[RESTRICCIÓN]
+El usuario SÍ pide remoto. Pide o confirma el ID UNA sola vez.
+`
     }
 
-    /* 10. ¿Forzamos humano? */
+    // 10. forzar humano
     if (forceHuman) {
-      const humanMsg = await buildEscalateHumanMessage(systemVars);
-
-      await conversationModel.save(phoneNumber, 'ASSISTANT', humanMsg);
-      return humanMsg;
+      let humanMsg = await buildEscalateHumanMessage(systemVars)
+      humanMsg += buildMenuHint()
+      await conversationModel.save(phoneNumber, 'ASSISTANT', humanMsg)
+      return humanMsg
     }
 
-    /* 11. Crear sesión Gemini con systemInstruction dinámico */
-    const model = await getGeminiModel();
+    // 11. Llamar a Gemini
+    const model = await getGeminiModel()
     const chat = model.startChat({
       history: validatedHistory,
       systemInstruction: {
         role: 'system',
-        parts: [{ text: systemPrompt }],
-      },
-    });
+        parts: [{ text: systemPrompt }]
+      }
+    })
 
     logger.info(
       `[GEMINI] Sending enriched message (${finalMessageToModel.length} chars)`
-    );
-    const result = await chat.sendMessage(finalMessageToModel);
-    let response = result.response.text() || '';
+    )
+    const result = await chat.sendMessage(finalMessageToModel)
+    let response = result.response.text() || ''
 
     logger.info(
       `[GEMINI] Initial response: ${response.substring(0, 160)}...`
-    );
+    )
 
-    /* 12. Post-procesamiento (links / humano / fuera de horario / antispam menú duplicado) */
-
-    const needsLink = wantsRemote || wantsService || wantsToner;
+    // 12. enlaces / odoo
+    const needsLink = wantsRemote || wantsService || wantsToner
 
     if (needsLink && activeCompanyName && customerInfo) {
-      // si el cliente tiene un solo equipo, preselecciona
       const equipmentId =
         customerInfo.equipment && customerInfo.equipment.length === 1
           ? customerInfo.equipment[0].id
-          : undefined;
+          : undefined
 
       const serviceUrl = await odooService.getOdooServiceLink(
         activeCompanyName,
         contact.name || 'Usuario',
         phoneNumber,
         equipmentId
-      );
+      )
 
       if (serviceUrl && shouldSendNewLink(phoneNumber, serviceUrl)) {
-        let linkCategory = 'LINK_SERVICE';
-        if (wantsRemote) linkCategory = 'LINK_REMOTE';
-        else if (wantsToner) linkCategory = 'LINK_TONER';
+        let linkCategory = 'LINK_SERVICE'
+        if (wantsRemote) linkCategory = 'LINK_REMOTE'
+        else if (wantsToner) linkCategory = 'LINK_TONER'
 
         const linkMsg = await buildLinkAttachmentMessage(
           linkCategory,
@@ -839,22 +820,20 @@ No prometas tiempos exactos.
           customerInfo,
           systemVars,
           systemVars.policy_remote_tool_name || 'AnyDesk'
-        );
+        )
 
         if (linkMsg) {
-          response += `\n\n${linkMsg}`;
+          response += `\n\n${linkMsg}`
         }
 
-        trackLinkSent(phoneNumber, serviceUrl);
+        trackLinkSent(phoneNumber, serviceUrl)
         logger.info(
-          `[GEMINI] Link added with equipment context (${
-            customerInfo.equipment?.length || 0
-          } equipment(s))`
-        );
+          `[GEMINI] Link added with equipment context (${customerInfo.equipment?.length || 0} equipment(s))`
+        )
       } else if (serviceUrl) {
-        logger.info(`[GEMINI] Link skipped (recently sent)`);
+        logger.info('[GEMINI] Link skipped (recently sent)')
       } else {
-        logger.warn(`[GEMINI] Could not obtain link from Odoo`);
+        logger.warn('[GEMINI] Could not obtain link from Odoo')
       }
     } else if (needsLink && !customerInfo) {
       if (wantsRemote) {
@@ -863,53 +842,47 @@ No prometas tiempos exactos.
             'REMOTE_FALLBACK_NO_CUSTOMER',
             {
               policy_remote_tool_name:
-                systemVars.policy_remote_tool_name || 'AnyDesk',
+                systemVars.policy_remote_tool_name || 'AnyDesk'
             }
           )) ||
           `Por favor envíame tu ID de ${systemVars.policy_remote_tool_name ||
-            'AnyDesk'} (9 dígitos) o una foto clara de tu pantalla para que un técnico se conecte 🧑‍💻.`;
-        response += `\n\n${remoteFallback}`;
+            'AnyDesk'} (9 dígitos) o una foto clara de tu pantalla 🧑‍💻.`
+        response += `\n\n${remoteFallback}`
       } else {
         const genericFallback =
           (await renderTemplateByCategory(
             'SERVICE_FALLBACK_NO_CUSTOMER',
             {
               policy_link_label:
-                systemVars.policy_link_label || 'enlace del sistema',
+                systemVars.policy_link_label || 'enlace del sistema'
             }
           )) ||
           `Necesito validar tu empresa registrada para poder generar el ${systemVars.policy_link_label ||
-            'enlace del sistema'}. ¿Me confirmas la razón social o el RUC, por favor?`;
-        response += `\n\n${genericFallback}`;
+            'enlace del sistema'}. ¿Me confirmas razón social o RUC?`
+        response += `\n\n${genericFallback}`
       }
     }
 
-    // Nota fuera de horario (si no se forzó humano)
-    const statusInfo = await workingHoursModel.getStatusInfo(new Date());
+    // nota fuera de horario
+    const statusInfo = await workingHoursModel.getStatusInfo(new Date())
     if (!statusInfo.isOpen) {
-      const outOfHours = await buildOutOfHoursNotice(scheduleContext);
+      const outOfHours = await buildOutOfHoursNotice(scheduleContext)
       if (outOfHours) {
-        response += `\n\n${outOfHours}`;
+        response += `\n\n${outOfHours}`
       }
     }
 
-    // último: si Gemini respondió básicamente el menú otra vez y el user NO pidió menú,
-    // devolvemos una respuesta más humana en lugar de spamear menú.
-    if (
-      looksLikeMenuAnswer(response) &&
-      !/^(menu|hola|buenas|hi)$/i.test(messageText.trim())
-    ) {
-      response =
-        'Perfecto 👍. Ya tomé nota de tu mensaje. Un técnico lo está revisando y te va a responder en breve 🙌.';
+    // si Gemini básicamente mandó el menú, no pegamos nada
+    if (!looksLikeMenuAnswer(response)) {
+      response += buildMenuHint()
     }
 
-    /* 13. Guardar respuesta final en BD */
-    await conversationModel.save(phoneNumber, 'ASSISTANT', response);
+    // 13. guardar
+    await conversationModel.save(phoneNumber, 'ASSISTANT', response)
 
-    /* 14. Devolver respuesta (WhatsApp) */
-    return response;
+    return response
   } catch (error) {
-    logger.error(`[GEMINI] Error:`, error);
-    return 'Lo siento, estoy teniendo problemas para procesar tu mensaje. ¿Podrías intentarlo de nuevo?';
+    logger.error('[GEMINI] Error:', error)
+    return 'Lo siento, estoy teniendo problemas para procesar tu mensaje. ¿Podrías intentarlo de nuevo?'
   }
 }

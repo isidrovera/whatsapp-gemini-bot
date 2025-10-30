@@ -47,7 +47,6 @@
       }
     }
 
-    /* Gradient text */
     .gradient-text {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       -webkit-background-clip: text;
@@ -55,50 +54,25 @@
       background-clip: text;
     }
 
-    /* Icon sizes */
     .icon { width: 1.25rem; height: 1.25rem; }
     .icon-lg { width: 1.75rem; height: 1.75rem; }
 
-    /* Animaciones */
     @keyframes tick {
       0%, 100% { transform: rotate(0deg); }
       50% { transform: rotate(6deg); }
     }
-
     @keyframes pulse-ring {
       0% { box-shadow: 0 0 0 0 currentColor; }
       50% { box-shadow: 0 0 0 8px transparent; }
       100% { box-shadow: 0 0 0 0 transparent; }
     }
+    @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+    @keyframes spin-slow { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+    .clock-icon { animation: tick 2s ease-in-out infinite; transform-origin: center; }
+    .pulse-ring { animation: pulse-ring 2s ease-out infinite; }
+    .float-icon { animation: float 3s ease-in-out infinite; }
+    .spin-slow { animation: spin-slow 20s linear infinite; }
 
-    @keyframes float {
-      0%, 100% { transform: translateY(0px); }
-      50% { transform: translateY(-10px); }
-    }
-
-    @keyframes spin-slow {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-
-    .clock-icon {
-      animation: tick 2s ease-in-out infinite;
-      transform-origin: center;
-    }
-
-    .pulse-ring {
-      animation: pulse-ring 2s ease-out infinite;
-    }
-
-    .float-icon {
-      animation: float 3s ease-in-out infinite;
-    }
-
-    .spin-slow {
-      animation: spin-slow 20s linear infinite;
-    }
-
-    /* Cards con animación de entrada */
     .card-link {
       position: relative;
       overflow: hidden;
@@ -106,24 +80,8 @@
       transform: translateY(20px);
       animation: slideUp 0.5s ease-out forwards;
     }
+    @keyframes slideUp { to { opacity: 1; transform: translateY(0); } }
 
-    @keyframes slideUp {
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    /* Barra de progreso animada */
-    @keyframes progress-bar {
-      from { width: 0%; }
-    }
-
-    .progress-bar {
-      animation: progress-bar 1.5s ease-out;
-    }
-
-    /* Hover effects */
     .card-link::before {
       content: '';
       position: absolute;
@@ -134,20 +92,17 @@
       background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
       transition: left 0.5s;
     }
-
-    .card-link:hover::before {
-      left: 100%;
-    }
+    .card-link:hover::before { left: 100%; }
   </style>
 </head>
 <body class="h-full bg-gradient-to-br from-slate-50 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 text-slate-800 dark:text-slate-100">
 
-  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:focus:text-white focus:px-4 focus:py-2 focus:rounded-lg shadow-lg">
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:bg-white dark:focus:bg-slate-900 focus:text-slate-900 dark:text-white focus:px-4 focus:py-2 focus:rounded-lg shadow-lg">
     Saltar al contenido
   </a>
 
   <%
-    // ===== Helpers / Defaults =====
+    const blocked = [];
     const s  = (typeof stats !== 'undefined' && stats && typeof stats === 'object') ? stats : {};
     const rc = (typeof recentContacts !== 'undefined' && Array.isArray(recentContacts)) ? recentContacts : [];
     const rp = (typeof recentProducts !== 'undefined' && Array.isArray(recentProducts)) ? recentProducts : [];
@@ -155,10 +110,23 @@
       ? whatsappStatus
       : { connected:false, hasQR:false };
 
-    // Horarios
     const todayHours = (typeof workingHours !== 'undefined' && workingHours) ? workingHours : null;
     const isWorkingNow = (typeof workingNow !== 'undefined') ? workingNow : false;
-    
+
+    // ✅ CORRECCIÓN: Obtener datos del usuario actual de forma correcta
+    const currentUser = typeof user !== 'undefined' && user ? user : (typeof currentUser !== 'undefined' ? currentUser : null);
+    const userName = currentUser && (currentUser.name || currentUser.fullName || currentUser.username) 
+      ? (currentUser.name || currentUser.fullName || currentUser.username) 
+      : 'Invitado';
+    const userRole = currentUser && (currentUser.role || currentUser.type) ? (currentUser.role || currentUser.type) : null;
+    const userAvatar = currentUser && currentUser.avatarUrl ? currentUser.avatarUrl : null;
+    const userId = currentUser && currentUser.id ? currentUser.id : null;
+
+    function getInitials(n){
+      if (!n) return 'U';
+      return n.split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase();
+    }
+
     function getDayName(dow) {
       const days = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
       return days[dow] || 'N/A';
@@ -169,7 +137,6 @@
     function fmtNum(v){ return nf.format(Number(v || 0)); }
     function fmtDate(d){ try { return df.format(new Date(d)); } catch { return '-'; } }
 
-    // KPIs clicables
     const cards = [
       { t:'TOTAL CONTACTOS',    n:fmtNum(s.totalContacts),       l:'Usuarios en el sistema',            tc:'text-blue-600 dark:text-blue-400',     i:'users',            href:'/contacts' },
       { t:'REGISTRADOS',        n:fmtNum(s.registeredContacts),  l:'Con DNI y RUC',                     tc:'text-emerald-600 dark:text-emerald-400',i:'user-check',       href:'/contacts?state=REGISTERED' },
@@ -184,7 +151,6 @@
       { t:'PLANTILLAS',         n:fmtNum(s.templatesCount),      l:'Mensajes predefinidos',             tc:'text-fuchsia-600 dark:text-fuchsia-400',i:'file-text',        href:'/templates' }
     ];
 
-    // Secciones
     const sections = [
       { href:'/',               icon:'layout-dashboard', label:'Dashboard' },
       { href:'/contacts',       icon:'users',            label:'Contactos' },
@@ -217,46 +183,124 @@
           <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Vista general del sistema</p>
         </div>
 
-        <!-- Estado WhatsApp -->
-        <div class="flex flex-wrap items-center gap-3">
-          <%
-            const icon   = ws.connected ? 'check-circle' : (ws.hasQR ? 'qr-code' : 'x-circle');
-            const label  = ws.connected ? 'Conectado' : (ws.hasQR ? 'Esperando escaneo' : 'Desconectado');
-            const badgeClass = ws.connected
-              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-              : ws.hasQR
-                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
-          %>
+        <!-- DERECHA: usuario + estado whatsapp -->
+        <div class="flex flex-col items-end gap-3">
+          <!-- fila 1: usuario -->
+          <div class="flex items-center gap-3">
+            <div class="hidden sm:flex flex-col items-end leading-tight">
+              <span class="text-sm font-semibold text-slate-800 dark:text-white"><%= userName %></span>
+              <% if (userRole) { %>
+                <span class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500"><%= userRole %></span>
+              <% } else { %>
+                <span class="text-[11px] text-slate-400 dark:text-slate-500">Sesión activa</span>
+              <% } %>
+            </div>
 
-          <div class="inline-flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-medium border <%= badgeClass %> backdrop-blur-sm <%= ws.connected ? 'pulse-ring' : '' %>">
-            <i data-lucide="<%= icon %>" class="icon"></i>
-            <span class="font-semibold"><%= label %></span>
+            <!-- ✅ Avatar con imagen o iniciales -->
+            <% if (userAvatar) { %>
+              <div class="w-10 h-10 rounded-full overflow-hidden border-2 border-white dark:border-slate-700 shadow-soft">
+                <img src="<%= userAvatar %>" alt="<%= userName %>" class="w-full h-full object-cover">
+              </div>
+            <% } else { %>
+              <div class="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-white flex items-center justify-center text-sm font-bold shadow-soft">
+                <%= getInitials(userName) %>
+              </div>
+            <% } %>
+
+            <!-- ✅ Botón de editar perfil -->
+            <% if (userId) { %>
+              <a href="/admin-users?editProfile=<%= userId %>"
+                 class="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-indigo-500/90 hover:bg-indigo-600 text-white px-3 py-1.5 text-xs font-semibold shadow-soft transition"
+                 title="Editar mi perfil">
+                <i data-lucide="user-cog" class="w-3.5 h-3.5"></i>
+                Mi Perfil
+              </a>
+            <% } %>
+
+            <form method="POST" action="/auth/logout" class="hidden sm:block">
+              <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <% } %>
+              <button type="submit"
+                      class="inline-flex items-center gap-1.5 rounded-lg bg-rose-500/90 hover:bg-rose-600 text-white px-3 py-1.5 text-xs font-semibold shadow-soft transition">
+                <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+                Cerrar sesión
+              </button>
+            </form>
+
+            <!-- móvil: dropdown -->
+            <div class="relative sm:hidden">
+              <button type="button"
+                      onclick="document.getElementById('user-menu').classList.toggle('hidden')"
+                      class="inline-flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 p-1.5">
+                <i data-lucide="more-vertical" class="w-4 h-4"></i>
+              </button>
+              <div id="user-menu" class="hidden absolute right-0 mt-2 w-44 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-700/60 shadow-lg overflow-hidden z-30">
+                <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+                  <p class="text-sm font-semibold text-slate-800 dark:text-white"><%= userName %></p>
+                  <p class="text-xs text-slate-500 dark:text-slate-400"><%= userRole || 'Sesión activa' %></p>
+                </div>
+                
+                <!-- ✅ Opción de editar perfil en móvil -->
+                <% if (userId) { %>
+                  <a href="/admin-users?editProfile=<%= userId %>" class="w-full text-left px-4 py-2 text-sm text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 flex items-center gap-2">
+                    <i data-lucide="user-cog" class="w-4 h-4"></i> Editar Perfil
+                  </a>
+                <% } %>
+                
+                <form method="POST" action="/auth/logout" class="w-full">
+                  <% if (typeof csrfToken !== 'undefined' && csrfToken) { %>
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <% } %>
+                  <button type="submit" class="w-full text-left px-4 py-2 text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2">
+                    <i data-lucide="log-out" class="w-4 h-4"></i> Cerrar sesión
+                  </button>
+                </form>
+              </div>
+            </div>
           </div>
 
-          <% if (ws.connected && ws.botNumber) { %>
-            <div class="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-xl">
-              <i data-lucide="phone" class="icon"></i>
-              <span class="font-medium"><%= ws.botNumber %></span>
+          <!-- fila 2: estado whatsapp -->
+          <div class="flex flex-wrap items-center justify-end gap-3">
+            <%
+              const icon   = ws.connected ? 'check-circle' : (ws.hasQR ? 'qr-code' : 'x-circle');
+              const label  = ws.connected ? 'Conectado' : (ws.hasQR ? 'Esperando escaneo' : 'Desconectado');
+              const badgeClass = ws.connected
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                : ws.hasQR
+                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                  : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+            %>
+
+            <div class="inline-flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-medium border <%= badgeClass %> backdrop-blur-sm <%= ws.connected ? 'pulse-ring' : '' %>">
+              <i data-lucide="<%= icon %>" class="icon"></i>
+              <span class="font-semibold"><%= label %></span>
             </div>
-          <% } %>
 
-          <% if (!ws.connected && ws.hasQR) { %>
-            <a href="/auth/qr"
-               class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-4 py-2.5 text-sm font-semibold transition-all shadow-lg hover:shadow-xl">
-              <i data-lucide="qr-code" class="icon"></i>
-              <span>Ver QR</span>
-            </a>
-          <% } %>
+            <% if (ws.connected && ws.botNumber) { %>
+              <div class="inline-flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-xl">
+                <i data-lucide="phone" class="icon"></i>
+                <span class="font-medium"><%= ws.botNumber %></span>
+              </div>
+            <% } %>
 
-          <% if (ws.connected) { %>
-            <button
-              class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white px-4 py-2.5 text-sm font-semibold transition-all shadow-lg hover:shadow-xl"
-              onclick="disconnectWhatsApp()">
-              <i data-lucide="power" class="icon"></i>
-              <span>Desconectar</span>
-            </button>
-          <% } %>
+            <% if (!ws.connected && ws.hasQR) { %>
+              <a href="/auth/qr"
+                 class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-4 py-2.5 text-sm font-semibold transition-all shadow-lg hover:shadow-xl">
+                <i data-lucide="qr-code" class="icon"></i>
+                <span>Ver QR</span>
+              </a>
+            <% } %>
+
+            <% if (ws.connected) { %>
+              <button
+                class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white px-4 py-2.5 text-sm font-semibold transition-all shadow-lg hover:shadow-xl"
+                onclick="disconnectWhatsApp()">
+                <i data-lucide="power" class="icon"></i>
+                <span>Desconectar</span>
+              </button>
+            <% } %>
+          </div>
         </div>
       </div>
     </header>
@@ -266,19 +310,19 @@
       <section class="rounded-2xl overflow-hidden shadow-card border border-slate-200/50 dark:border-white/5 <%= todayHours.isWorkday ? 'bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20' : 'bg-gradient-to-r from-rose-50 to-orange-50 dark:from-rose-900/20 dark:to-orange-900/20' %>">
         <div class="px-6 py-5">
           <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-            
+
             <!-- Info principal -->
             <div class="flex items-center gap-4">
               <div class="w-14 h-14 rounded-2xl <%= todayHours.isWorkday ? 'bg-emerald-500' : 'bg-rose-500' %> flex items-center justify-center shadow-lg">
                 <i data-lucide="<%= todayHours.isWorkday ? 'clock' : 'moon' %>" class="w-7 h-7 text-white <%= todayHours.isWorkday ? 'clock-icon' : '' %>"></i>
               </div>
-              
+
               <div>
                 <div class="flex items-center gap-2 mb-1 flex-wrap">
                   <h3 class="text-lg font-bold <%= todayHours.isWorkday ? 'text-emerald-900 dark:text-emerald-200' : 'text-rose-900 dark:text-rose-200' %>">
                     <%= getDayName(todayHours.dayOfWeek) %>
                   </h3>
-                  
+
                   <% if (isWorkingNow) { %>
                     <span class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold bg-emerald-500 text-white shadow-soft pulse-ring">
                       <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
@@ -296,7 +340,7 @@
                     </span>
                   <% } %>
                 </div>
-                
+
                 <p class="text-sm <%= todayHours.isWorkday ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300' %> font-medium">
                   <% if (todayHours.isWorkday) { %>
                     Estado del servicio de atención hoy
@@ -310,7 +354,6 @@
             <!-- Horarios -->
             <% if (todayHours.isWorkday && todayHours.openTime && todayHours.closeTime) { %>
               <div class="flex flex-wrap items-center gap-4">
-                <!-- Horario -->
                 <div class="flex items-center gap-3 rounded-xl bg-white/60 dark:bg-slate-900/40 backdrop-blur-sm px-4 py-3 border border-emerald-200/50 dark:border-emerald-800/30 shadow-soft">
                   <div class="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                     <i data-lucide="clock" class="w-5 h-5 text-emerald-600 dark:text-emerald-400 clock-icon"></i>
@@ -325,7 +368,6 @@
                   </div>
                 </div>
 
-                <!-- Refrigerio -->
                 <% if (todayHours.breakStart && todayHours.breakEnd) { %>
                   <div class="flex items-center gap-3 rounded-xl bg-white/60 dark:bg-slate-900/40 backdrop-blur-sm px-4 py-3 border border-amber-200/50 dark:border-amber-800/30 shadow-soft">
                     <div class="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
@@ -342,9 +384,7 @@
                   </div>
                 <% } %>
 
-                <!-- Barra de progreso del día -->
-                <% if (isWorkingNow) { 
-                  // Calcular progreso del día
+                <% if (isWorkingNow) {
                   const now = new Date();
                   const [openHour, openMin] = todayHours.openTime.split(':').map(Number);
                   const [closeHour, closeMin] = todayHours.closeTime.split(':').map(Number);
@@ -364,8 +404,7 @@
                   </div>
                 <% } %>
 
-                <!-- Link a horarios -->
-                <a href="/working-hours" 
+                <a href="/working-hours"
                    class="inline-flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all shadow-sm hover:shadow">
                   <i data-lucide="settings" class="w-4 h-4 spin-slow"></i>
                   <span>Configurar</span>
@@ -448,7 +487,7 @@
 
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <% sections.forEach((sx, idx) => { %>
-          <a href="<%= sx.href %>" 
+          <a href="<%= sx.href %>"
              class="card-link bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-white/5 rounded-2xl p-4 flex items-center gap-3 hover:shadow-card transition-all"
              style="animation-delay:<%= (idx + cards.length) * 0.03 %>s">
             <span class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 inline-flex items-center justify-center">
@@ -583,14 +622,11 @@
     </section>
   </main>
 
-  <!-- Scripts -->
   <script>
-    // Iconos
     document.addEventListener('DOMContentLoaded', () => {
       if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
     });
 
-    // Desconectar WhatsApp
     async function disconnectWhatsApp() {
       if (!confirm('¿Seguro que deseas desconectar WhatsApp?')) return;
       try {
@@ -614,7 +650,6 @@
       }
     }
 
-    // Animación KPIs
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (!prefersReduced) {
       const nums = document.querySelectorAll('[data-kpi]');

@@ -3,7 +3,9 @@ import { Request, Response, NextFunction } from 'express';
 import { logger } from '../../utils/logger.js';
 import * as apiKeyModel from '../../models/apiKeys.js';
 
+// ------------------------------------------------------
 // Extender Request para incluir info de API key
+// ------------------------------------------------------
 declare global {
   namespace Express {
     interface Request {
@@ -15,11 +17,23 @@ declare global {
   }
 }
 
+// ------------------------------------------------------
 // Extender tipos de Express para incluir session
+// (ahora con campos temporales para 2FA)
+// ------------------------------------------------------
 declare module 'express-session' {
   interface SessionData {
+    // sesión web “real” (ya autenticado)
     userId: string;
     username: string;
+
+    // 🔐 paso intermedio cuando el admin tiene 2FA activado
+    // y ya validó usuario/contraseña, pero todavía no puso el código
+    tempUserId?: string;
+    tempUsername?: string;
+
+    // 🔐 durante el setup de 2FA (mostrar QR + confirmar código)
+    twoFASetupSecret?: string;
   }
 }
 

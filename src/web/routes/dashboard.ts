@@ -3,6 +3,7 @@ import { getPrismaClient } from '../../config/database.js';
 import { logger } from '../../utils/logger.js';
 import { getConnectionStatus, hasQR, getBotPhoneNumber } from '../../services/whatsapp.js';
 import * as workingHoursModel from '../../models/workingHours.js';
+import * as adminModel from '../../models/admin.js'; // ✅ AGREGAR ESTA LÍNEA
 
 const router = express.Router();
 const prisma = getPrismaClient();
@@ -37,8 +38,20 @@ async function safeList<T>(fn: () => Promise<T[]>): Promise<T[]> {
 }
 
 // ============= VISTA SSR DASHBOARD =============
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => { // ✅ CAMBIAR _req por req
   try {
+    // ✅ AGREGAR: Obtener datos completos del admin logueado
+    const adminId = req.session?.userId;
+    let currentAdmin = null;
+    
+    if (adminId) {
+      try {
+        currentAdmin = await adminModel.findById(adminId);
+      } catch (error) {
+        logger.error('Error loading admin data:', error);
+      }
+    }
+
     const todayStart = startOfTodayLima();
 
     const [
@@ -115,7 +128,7 @@ router.get('/', async (_req, res) => {
             price: true,
             imageUrl: true,
             isActive: true,
-            createdAt: true,
+            createdAt: true,           
           },
         })
       ),
@@ -172,7 +185,9 @@ router.get('/', async (_req, res) => {
       workingHours,
       workingNow,
       
-      user: _req.user?.name || 'Admin',
+      // ✅ CAMBIAR: Pasar objeto completo del admin en lugar de solo el nombre
+      user: currentAdmin, // Ahora pasa el objeto completo con id, name, email, avatar, role, etc.
+      currentUser: currentAdmin, // También como currentUser por compatibilidad
     });
   } catch (error) {
     logger.error('Error loading dashboard:', error);
