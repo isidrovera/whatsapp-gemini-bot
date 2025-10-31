@@ -31,9 +31,6 @@
     }
   </script>
 
-  <!-- Utilidades externas del dashboard -->
-  <link rel="stylesheet" href="/css/ui.css">
-
   <!-- Iconos -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
@@ -132,11 +129,11 @@
 
           <label class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft transition cursor-pointer">
             <i data-lucide="upload" class="icon"></i>
-            <span>Importar</span>
+            <span>Importar Excel</span>
             <input
               id="importFileInput"
               type="file"
-              accept=".xlsx,.xls,.json"
+              accept=".xlsx,.xls"
               class="hidden"
               onchange="importExcelFile(this)"
             />
@@ -1111,42 +1108,46 @@
       const file = inputEl.files && inputEl.files[0];
       if (!file) return;
 
-      if (file.type === 'application/json' || file.name.endsWith('.json')) {
-        try {
-          const text = await file.text();
-          const parsed = JSON.parse(text);
+      // Validar tipo de archivo
+      const validExtensions = ['.xlsx', '.xls'];
+      const fileName = file.name.toLowerCase();
+      const isValidFile = validExtensions.some(ext => fileName.endsWith(ext));
 
-          const rows = Array.isArray(parsed) ? parsed : parsed.rows;
-          if (!Array.isArray(rows)) {
-            alert('El JSON no tiene "rows" válidos');
-            inputEl.value = '';
-            return;
-          }
-
-          const res = await fetch('/contacts/api-import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rows })
-          });
-
-          const data = await res.json();
-          if (data.error) {
-            alert('❌ Error importando: ' + data.error);
-          } else {
-            alert('✅ Importación completa');
-            location.reload();
-          }
-        } catch (err) {
-          console.error(err);
-          alert('❌ Error leyendo el archivo');
-        }
-
+      if (!isValidFile) {
+        alert('❌ Por favor selecciona un archivo Excel válido (.xlsx o .xls)');
         inputEl.value = '';
         return;
       }
 
-      alert('📥 Importar Excel (.xlsx) aún no está implementado en el front. Puedes importar un .json con "rows".');
-      inputEl.value = '';
+      // Mostrar indicador de carga
+      const originalText = inputEl.parentElement.querySelector('span').textContent;
+      inputEl.parentElement.querySelector('span').textContent = 'Importando...';
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch('/contacts/api-import-file', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          alert(`✅ Importación exitosa!\n\nTotal de filas procesadas: ${data.totalRows}`);
+          location.reload();
+        } else {
+          alert('❌ Error importando: ' + (data.error || 'Error desconocido'));
+        }
+      } catch (err) {
+        console.error(err);
+        alert('❌ Error al procesar el archivo Excel');
+      } finally {
+        // Restaurar texto y limpiar input
+        inputEl.parentElement.querySelector('span').textContent = originalText;
+        inputEl.value = '';
+      }
     }
   </script>
 </body>

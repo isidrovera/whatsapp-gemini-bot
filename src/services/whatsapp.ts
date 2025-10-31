@@ -593,12 +593,27 @@ async function handleIncomingMessage(
       return;
     }
 
-    // bloqueado?
+    // ========================================
+    // VERIFICACIÓN DE PERMISOS GRANULARES
+    // ========================================
+    
+    // 1. Verificar si está bloqueado completamente
     const isBlockedNum = await blockedModel.isBlocked(normalizedPhone);
     if (isBlockedNum) {
-      logger.info(`Message from blocked number ${normalizedPhone} - ignoring`);
+      logger.info(`[BLOCKED] Message from ${normalizedPhone} - completely blocked`);
       return;
     }
+
+    // 2. Obtener permisos del usuario
+    const permissions = await blockedModel.getPermissions(normalizedPhone);
+    
+    logger.debug(`[PERMISSIONS] ${normalizedPhone} - Level: ${permissions.accessLevel}`, {
+      odoo: permissions.permissions.odoo,
+      tickets: permissions.permissions.tickets,
+      ai: permissions.permissions.ai,
+      human: permissions.permissions.human,
+      autoresponse: permissions.permissions.autoresponse
+    });
 
     // takeover humano?
     const shouldRespond = await contactModel.shouldBotRespond(normalizedPhone);
@@ -615,7 +630,6 @@ async function handleIncomingMessage(
     const rawText = extractMessageText(message);
     const mediaType = getMediaType(message);
 
-    // NUEVO: resultado estructurado de media (imagen/audio/video/documento)
     let mediaAnalysisResult: MediaAnalysisResult | null = null;
     let anydeskCode: string | null = null;
     let finalMessageTextFromMedia: string | null = null;
@@ -637,19 +651,16 @@ async function handleIncomingMessage(
         }
 
         if (mediaAnalysisResult) {
-          // anydesk detectado
           anydeskCode = extractAnydeskCodeFromAnalysis(mediaAnalysisResult);
           if (anydeskCode) {
             logger.info(`[ANYDESK] Code extracted: ${anydeskCode}`);
           }
 
-          // texto base si el usuario no escribió nada
           finalMessageTextFromMedia =
             mediaAnalysisResult.ocrText ||
             mediaAnalysisResult.rawSummary ||
             null;
 
-          // log técnico
           logger.info('[WHATSAPP] Media analysis summary:', {
             summary: mediaAnalysisResult.rawSummary,
             serial: mediaAnalysisResult.detectedSerial,
@@ -712,38 +723,88 @@ async function handleIncomingMessage(
     }
 
     // ==========================================================
-    // 1. AUTO-RESPUESTAS DINÁMICAS (base de datos)
+    // 1. VERIFICAR NIVEL DE ACCESO RESTRINGIDO
     // ==========================================================
-    const autoResp = await autoResponseModel.findAndProcessResponse(
-      finalMessageText,
-      {
-        contact: {
-          name: contact?.name || null,
-          dni: contact?.dni || null,
-          phoneNumber: normalizedPhone,
-          companyName: contact?.companyName || null,
-          ruc: contact?.ruc || null,
-        },
-        company: {
-          razonSocial: contact?.companyName || null,
-          numeroDoc: contact?.ruc || null,
-          name: contact?.companyName || null,
-          ruc: contact?.ruc || null,
-        },
-        customVars: {},
-      }
-    );
+    if (permissions.accessLevel === 'RESTRICTED') {
+      logger.info(`[RESTRICTED] ${normalizedPhone} - Only auto-responses allowed`);
+      
+      const canUseAutoResponse = permissions.permissions.autoresponse ?? false;
+      
+      if (canUseAutoResponse) {
+        const autoResp = await autoResponseModel.findAndProcessResponse(
+          finalMessageText,
+          {
+            contact: {
+              name: contact?.name || null,
+              dni: contact?.dni || null,
+              phoneNumber: normalizedPhone,
+              companyName: contact?.companyName || null,
+              ruc: contact?.ruc || null,
+            },
+            company: {
+              razonSocial: contact?.companyName || null,
+              numeroDoc: contact?.ruc || null,
+              name: contact?.companyName || null,
+              ruc: contact?.ruc || null,
+            },
+            customVars: {},
+          }
+        );
 
-    if (autoResp) {
-      logger.info(
-        `[AUTO-RESPONSE] Sent auto-response for ${normalizedPhone}`
-      );
-      await sendMessage(senderJid, autoResp);
+        if (autoResp) {
+          await sendMessage(senderJid, autoResp);
+        } else {
+          await sendMessage(
+            senderJid,
+            '⚠️ Tu acceso está restringido. Solo puedo responder consultas básicas. Para más información contacta a soporte.'
+          );
+        }
+      } else {
+        await sendMessage(
+          senderJid,
+          '⚠️ Tu acceso está restringido. Para más información contacta a soporte.'
+        );
+      }
       return;
     }
 
     // ==========================================================
-    // 2. FLUJO DE REGISTRO (DNI / RUC / EMPRESA / MENU)
+    // 2. AUTO-RESPUESTAS DINÁMICAS (si tiene permiso)
+    // ==========================================================
+    const canUseAutoResponse = permissions.permissions.autoresponse ?? true;
+
+    if (canUseAutoResponse) {
+      const autoResp = await autoResponseModel.findAndProcessResponse(
+        finalMessageText,
+        {
+          contact: {
+            name: contact?.name || null,
+            dni: contact?.dni || null,
+            phoneNumber: normalizedPhone,
+            companyName: contact?.companyName || null,
+            ruc: contact?.ruc || null,
+          },
+          company: {
+            razonSocial: contact?.companyName || null,
+            numeroDoc: contact?.ruc || null,
+            name: contact?.companyName || null,
+            ruc: contact?.ruc || null,
+          },
+          customVars: {},
+        }
+      );
+
+      if (autoResp) {
+        logger.info(
+          `[AUTO-RESPONSE] Sent auto-response for ${normalizedPhone}`
+        );
+        await sendMessage(senderJid, autoResp);
+        return;
+      }
+    }
+
+    // ==========================================================
+    // 3. FLUJO DE REGISTRO (DNI / RUC / EMPRESA / MENU)
     // ==========================================================
     if (state === 'NEW') {
       await contactModel.updateState(normalizedPhone, 'WAITING_DNI');
@@ -803,7 +864,6 @@ async function handleIncomingMessage(
         return;
       }
 
-      // Intentar linkear con empresa ya existente
       const linkRes =
         await contactModel.linkExistingCompanyByRucAndSetPrimary(
           normalizedPhone,
@@ -838,7 +898,6 @@ async function handleIncomingMessage(
         return;
       }
 
-      // Empresa NO existe → consultar SUNAT
       const infoRuc = await external.validateRUC(rucCandidate);
 
       if (!infoRuc) {
@@ -976,7 +1035,7 @@ async function handleIncomingMessage(
     }
 
     // ==========================================================
-    // 3. ESTADOS OPERATIVOS (MENU / REGISTERED)
+    // 4. ESTADOS OPERATIVOS (MENU / REGISTERED) - CON PERMISOS
     // ==========================================================
     if (state === 'MENU' || state === 'REGISTERED') {
       const trimmed = finalMessageText.trim();
@@ -986,8 +1045,20 @@ async function handleIncomingMessage(
         return;
       }
 
-      // 1️⃣ Servicio técnico en sitio
+      // 1️⃣ Servicio técnico en sitio - VERIFICAR PERMISO ODOO
       if (trimmed === '1') {
+        const canUseOdoo = permissions.permissions.odoo ?? true;
+
+        if (!canUseOdoo) {
+          logger.warn(`[PERMISSION-DENIED] ${normalizedPhone} - odoo access denied`);
+          await sendMessage(
+            senderJid,
+            '⚠️ No tienes permiso para consultar información de servicio técnico. ' +
+            'Contacta a tu administrador para más información.'
+          );
+          return;
+        }
+
         const link = await generateOdooLinkForContact(
           contact,
           normalizedPhone
@@ -1009,8 +1080,20 @@ async function handleIncomingMessage(
         return;
       }
 
-      // 2️⃣ Tóner / insumos
+      // 2️⃣ Tóner / insumos - VERIFICAR PERMISO TICKETS
       if (trimmed === '2') {
+        const canCreateTickets = permissions.permissions.tickets ?? true;
+
+        if (!canCreateTickets) {
+          logger.warn(`[PERMISSION-DENIED] ${normalizedPhone} - tickets access denied`);
+          await sendMessage(
+            senderJid,
+            '⚠️ No tienes permiso para crear solicitudes de tóner. ' +
+            'Contacta a soporte para más información.'
+          );
+          return;
+        }
+
         const link = await generateOdooLinkForContact(
           contact,
           normalizedPhone
@@ -1065,8 +1148,20 @@ async function handleIncomingMessage(
         return;
       }
 
-      // 5️⃣ Hablar con técnico
+      // 5️⃣ Hablar con técnico - VERIFICAR PERMISO HUMAN
       if (trimmed === '5') {
+        const canTalkToHuman = permissions.permissions.human ?? true;
+
+        if (!canTalkToHuman) {
+          logger.warn(`[PERMISSION-DENIED] ${normalizedPhone} - human access denied`);
+          await sendMessage(
+            senderJid,
+            '⚠️ No puedes solicitar atención humana en este momento. ' +
+            'Por favor utiliza las opciones del menú automatizado o contacta a soporte por otro medio.'
+          );
+          return;
+        }
+
         await contactModel.setHumanTakeover(normalizedPhone);
         await sendMessage(
           senderJid,
@@ -1075,8 +1170,20 @@ async function handleIncomingMessage(
         return;
       }
 
-      // mensaje libre cercano a servicio técnico
+      // mensaje libre cercano a servicio técnico - VERIFICAR PERMISO ODOO
       if (detectServiceIntent(finalMessageText)) {
+        const canUseOdoo = permissions.permissions.odoo ?? true;
+
+        if (!canUseOdoo) {
+          logger.warn(`[PERMISSION-DENIED] ${normalizedPhone} - odoo intent denied`);
+          await sendMessage(
+            senderJid,
+            '⚠️ No tienes acceso a solicitudes de servicio técnico. ' +
+            'Contacta a tu administrador.'
+          );
+          return;
+        }
+
         const link = await generateOdooLinkForContact(
           contact,
           normalizedPhone
@@ -1098,8 +1205,20 @@ async function handleIncomingMessage(
         return;
       }
 
-      // mensaje libre cercano a tóner
+      // mensaje libre cercano a tóner - VERIFICAR PERMISO TICKETS
       if (detectTonerIntent(finalMessageText)) {
+        const canCreateTickets = permissions.permissions.tickets ?? true;
+
+        if (!canCreateTickets) {
+          logger.warn(`[PERMISSION-DENIED] ${normalizedPhone} - toner intent denied`);
+          await sendMessage(
+            senderJid,
+            '⚠️ No tienes permiso para crear solicitudes de tóner. ' +
+            'Contacta a soporte.'
+          );
+          return;
+        }
+
         const link = await generateOdooLinkForContact(
           contact,
           normalizedPhone
@@ -1120,24 +1239,34 @@ async function handleIncomingMessage(
         return;
       }
 
-      // Gemini como fallback inteligente
-      const responseFromGemini = await geminiService.processMessage(
-        normalizedPhone,
-        finalMessageText,
-        !!mediaType,
-        // ⬇️ le pasamos TODO el análisis estructurado como JSON string legible
-        mediaAnalysisResult
-          ? JSON.stringify(mediaAnalysisResult, null, 2)
-          : null,
-        anydeskCode || null
-      );
+      // Gemini como fallback - VERIFICAR PERMISO AI
+      const canUseAI = permissions.permissions.ai ?? true;
 
-      await sendMessage(senderJid, responseFromGemini);
+      if (canUseAI) {
+        const responseFromGemini = await geminiService.processMessage(
+          normalizedPhone,
+          finalMessageText,
+          !!mediaType,
+          mediaAnalysisResult
+            ? JSON.stringify(mediaAnalysisResult, null, 2)
+            : null,
+          anydeskCode || null
+        );
+
+        await sendMessage(senderJid, responseFromGemini);
+      } else {
+        logger.warn(`[PERMISSION-DENIED] ${normalizedPhone} - AI access denied`);
+        await sendMessage(
+          senderJid,
+          'Lo siento, no puedo procesar tu mensaje en este momento. ' +
+          'Por favor usa las opciones del menú: envía "menu" para ver las opciones disponibles.'
+        );
+      }
       return;
     }
 
     // ==========================================================
-    // 4. ESPERANDO INFO REMOTA
+    // 5. ESPERANDO INFO REMOTA
     // ==========================================================
     if (state === 'WAITING_REMOTE_INFO') {
       await contactModel.setHumanTakeover(normalizedPhone);
@@ -1155,7 +1284,7 @@ async function handleIncomingMessage(
     }
 
     // ==========================================================
-    // 5. Estado raro → forzamos MENU
+    // 6. Estado raro → forzamos MENU
     // ==========================================================
     logger.warn(
       `[BOT] Estado desconocido "${state}" para ${normalizedPhone}, forzando MENU`

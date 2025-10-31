@@ -8,25 +8,43 @@ datasource db {
 }
 
 model Admin {
-  id           String         @id @default(uuid())
-  username     String         @unique
-  password     String
-  name         String?
-  createdAt    DateTime       @default(now()) @map("created_at")
-  updatedAt    DateTime       @updatedAt @map("updated_at")
-  email        String?        @unique
-  phone        String?
-  avatarUrl    String?        @map("avatar_url")
-  role         String         @default("ADMIN")
-  isActive     Boolean        @default(true) @map("is_active")
-  dni          String?        @unique
-  twoFAEnabled Boolean        @default(false) @map("twofa_enabled")
-  twoFASecret  String?        @map("twofa_secret")
-  lastLoginAt  DateTime?      @map("last_login_at") @db.Timestamp(6)
-  lastLoginIp  String?        @map("last_login_ip")
-  notes        InternalNote[]
+  id             String          @id @default(uuid())
+  username       String          @unique
+  password       String
+  name           String?
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  email          String?         @unique
+  phone          String?
+  avatarUrl      String?         @map("avatar_url")
+  role           String          @default("ADMIN")
+  isActive       Boolean         @default(true) @map("is_active")
+  dni            String?         @unique
+  twoFAEnabled   Boolean         @default(false) @map("twofa_enabled")
+  twoFASecret    String?         @map("twofa_secret")
+  lastLoginAt    DateTime?       @map("last_login_at") @db.Timestamp(6)
+  lastLoginIp    String?         @map("last_login_ip")
+  notes          InternalNote[]
+  trustedDevices TrustedDevice[]
 
   @@map("admins")
+}
+
+model TrustedDevice {
+  id          String   @id @default(uuid())
+  adminId     String   @map("admin_id")
+  deviceToken String   @unique @map("device_token")
+  deviceName  String?  @map("device_name")
+  userAgent   String?  @map("user_agent")
+  ipAddress   String?  @map("ip_address")
+  createdAt   DateTime @default(now()) @map("created_at")
+  lastUsedAt  DateTime @default(now()) @map("last_used_at")
+  expiresAt   DateTime @map("expires_at")
+  admin       Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([deviceToken])
+  @@map("trusted_devices")
 }
 
 model Contact {
@@ -125,13 +143,32 @@ model ContactCompany {
   @@map("contact_companies")
 }
 
+/// *
+/// * ================================
+/// * NÚMEROS BLOQUEADOS CON PERMISOS GRANULARES
+/// * ================================
 model BlockedNumber {
-  id         String   @id @default(uuid())
-  identifier String   @unique
-  type       String
-  reason     String?
-  blockedAt  DateTime @default(now()) @map("blocked_at")
+  id                 String      @id @default(uuid())
+  identifier         String      @unique
+  reason             String?
+  blockedAt          DateTime    @default(now()) @map("blocked_at")
+  canUseOdoo         Boolean     @default(false) @map("can_use_odoo")
+  canCreateTickets   Boolean     @default(false) @map("can_create_tickets")
+  canSeeHistory      Boolean     @default(false) @map("can_see_history")
+  canTalkToHuman     Boolean     @default(false) @map("can_talk_to_human")
+  canUseAI           Boolean     @default(false) @map("can_use_ai")
+  canUseAutoResponse Boolean     @default(true) @map("can_use_auto_response")
+  customPermissions  Json?       @map("custom_permissions")
+  notes              String?
+  blockedBy          String?     @map("blocked_by")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+  expiresAt          DateTime?   @map("expires_at")
+  type               BlockType   @default(PHONE)
+  accessLevel        AccessLevel @default(BLOCKED) @map("access_level")
 
+  @@index([identifier])
+  @@index([accessLevel])
+  @@index([type])
   @@map("blocked_numbers")
 }
 
@@ -158,9 +195,9 @@ model SystemVariable {
 }
 
 /// *
-///  * ================================
-///  * TABLA DE CONFIGURACIÓN UNIFICADA
-///  * ================================
+/// * ================================
+/// * TABLA DE CONFIGURACIÓN UNIFICADA
+/// * ================================
 model Configuration {
   id          String   @id @default(uuid())
   category    String
@@ -175,9 +212,9 @@ model Configuration {
 }
 
 /// *
-///  * ================================
-///  * CALENDARIO (FERIADOS Y EVENTOS)
-///  * ================================
+/// * ================================
+/// * CALENDARIO (FERIADOS Y EVENTOS)
+/// * ================================
 model CalendarEvent {
   id          String   @id @default(uuid())
   title       String
@@ -194,9 +231,9 @@ model CalendarEvent {
 }
 
 /// *
-///  * ================================
-///  * HORARIOS DE TRABAJO
-///  * ================================
+/// * ================================
+/// * HORARIOS DE TRABAJO
+/// * ================================
 model WorkingHours {
   id         String   @id @default(uuid())
   dayOfWeek  Int      @unique @map("day_of_week")
@@ -211,9 +248,9 @@ model WorkingHours {
 }
 
 /// *
-///  * =========================================
-///  * DEPARTAMENTOS / ÁREAS (enrutamiento)
-///  * =========================================
+/// * =========================================
+/// * DEPARTAMENTOS / ÁREAS (enrutamiento)
+/// * =========================================
 model Department {
   id          String              @id @default(uuid())
   name        String              @unique
@@ -260,9 +297,9 @@ model DepartmentContact {
 }
 
 /// *
-///  * ================================
-///  * PRODUCTOS / SERVICIOS
-///  * ================================
+/// * ================================
+/// * PRODUCTOS / SERVICIOS
+/// * ================================
 model Product {
   id          String           @id @default(uuid())
   name        String
@@ -293,9 +330,9 @@ model ProductKeyword {
 }
 
 /// *
-///  * ================================
-///  * RESPUESTAS AUTOMÁTICAS (FAQs)
-///  * ================================
+/// * ================================
+/// * RESPUESTAS AUTOMÁTICAS (FAQs)
+/// * ================================
 model AutoResponse {
   id        String   @id @default(uuid())
   trigger   String
@@ -311,9 +348,9 @@ model AutoResponse {
 }
 
 /// *
-///  * ================================
-///  * AUTOMATION / WORKFLOWS
-///  * ================================
+/// * ================================
+/// * AUTOMATION / WORKFLOWS
+/// * ================================
 model AutomationRule {
   id          String   @id @default(uuid())
   name        String
@@ -331,9 +368,9 @@ model AutomationRule {
 }
 
 /// *
-///  * ================================
-///  * MÉTRICAS Y ANÁLISIS
-///  * ================================
+/// * ================================
+/// * MÉTRICAS Y ANÁLISIS
+/// * ================================
 model ConversationMetric {
   id              String   @id @default(uuid())
   date            DateTime @unique @db.Date
@@ -350,9 +387,9 @@ model ConversationMetric {
 }
 
 /// *
-///  * ================================
-///  * ETIQUETAS / TAGS
-///  * ================================
+/// * ================================
+/// * ETIQUETAS / TAGS
+/// * ================================
 model Tag {
   id            String            @id @default(uuid())
   name          String            @unique
@@ -378,9 +415,9 @@ model ConversationTag {
 }
 
 /// *
-///  * ================================
-///  * PLANTILLAS DE MENSAJES
-///  * ================================
+/// * ================================
+/// * PLANTILLAS DE MENSAJES
+/// * ================================
 model MessageTemplate {
   id        String   @id @default(uuid())
   name      String   @unique
@@ -395,9 +432,9 @@ model MessageTemplate {
 }
 
 /// *
-///  * ================================
-///  * NOTAS INTERNAS
-///  * ================================
+/// * ================================
+/// * NOTAS INTERNAS
+/// * ================================
 model InternalNote {
   id          String   @id @default(uuid())
   phoneNumber String   @map("phone_number")
@@ -427,4 +464,18 @@ model ApiKey {
   @@index([key])
   @@index([isActive])
   @@map("api_keys")
+}
+
+enum BlockType {
+  PHONE
+  GROUP
+}
+
+enum AccessLevel {
+  BLOCKED
+  RESTRICTED
+  LIMITED
+  STANDARD
+  FULL
+  VIP
 }

@@ -1,11 +1,16 @@
 // src/web/routes/contacts.ts
 import express from 'express';
 import ExcelJS from 'exceljs';
+import multer from 'multer';
 import * as contactModel from '../../models/contact.js';
 import { logger } from '../../utils/logger.js';
 import { getPrismaClient } from '../../config/database.js';
+
 const prisma = getPrismaClient();
 const router = express.Router();
+
+// Configurar multer para manejar uploads en memoria
+const upload = multer({ storage: multer.memoryStorage() });
 
 /* -------------------------
  * VISTA PRINCIPAL
@@ -24,6 +29,7 @@ router.get('/', async (req, res) => {
     res.status(500).send('Error loading contacts');
   }
 });
+
 // Vincular una empresa ya existente por companyId
 router.post('/api/:contactId/company/link-existing', async (req, res) => {
   try {
@@ -272,8 +278,7 @@ router.get('/api-export', async (req, res) => {
   }
 });
 
-// Importar contactos desde Excel parseado
-// OJO: aquí asumo que ya parseaste el Excel en req.body.rows
+// Importar contactos desde Excel parseado (JSON)
 router.post('/api-import', async (req, res) => {
   try {
     const rows = req.body.rows;
@@ -292,7 +297,92 @@ router.post('/api-import', async (req, res) => {
   }
 });
 
-// 👇 debajo de las otras rutas API en contacts.ts
+// NUEVA RUTA: Importar contactos desde archivo Excel (.xlsx)
+router.post('/api-import-file', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se recibió ningún archivo' });
+    }
+
+    // Leer el archivo Excel desde el buffer
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
+    
+    const worksheet = workbook.getWorksheet(1); // Primera hoja
+    if (!worksheet) {
+      return res.status(400).json({ error: 'El archivo no contiene hojas de cálculo' });
+    }
+
+    // Parsear las filas del Excel
+    const rows: Array<{
+      phoneNumber: string;
+      name?: string;
+      dni?: string;
+      companies?: Array<{
+        ruc: string;
+        name: string;
+        role?: string;
+        primary?: boolean;
+      }>;
+    }> = [];
+
+    // Asumiendo que la primera fila son encabezados
+    // Columnas esperadas: phoneNumber, name, dni, companyRuc, companyName, companyRole
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return; // Saltar encabezados
+
+      const phoneNumber = row.getCell(1).value?.toString().trim();
+      if (!phoneNumber) return; // Saltar filas sin teléfono
+
+      const name = row.getCell(2).value?.toString().trim() || undefined;
+      const dni = row.getCell(3).value?.toString().trim() || undefined;
+      const companyRuc = row.getCell(4).value?.toString().trim();
+      const companyName = row.getCell(5).value?.toString().trim();
+      const companyRole = row.getCell(6).value?.toString().trim();
+
+      const rowData: any = {
+        phoneNumber,
+        name,
+        dni,
+      };
+
+      // Si tiene datos de empresa, agregarlos
+      if (companyRuc && companyName) {
+        rowData.companies = [{
+          ruc: companyRuc,
+          name: companyName,
+          role: companyRole,
+          primary: true,
+        }];
+      }
+
+      rows.push(rowData);
+    });
+
+    if (rows.length === 0) {
+      return res.status(400).json({ 
+        error: 'El archivo no contiene datos válidos o está vacío' 
+      });
+    }
+
+    // Importar usando la función existente
+    const result = await contactModel.importContactsFromExcel(rows);
+
+    res.json({
+      success: true,
+      importedAt: new Date(),
+      totalRows: rows.length,
+      result,
+    });
+
+  } catch (error) {
+    logger.error('Error importing Excel file:', error);
+    res.status(500).json({ 
+      error: 'Error procesando el archivo Excel',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
 
 // Listar todas las empresas existentes (para selector en modal)
 router.get('/api-companies', async (_req, res) => {
@@ -312,6 +402,5 @@ router.get('/api-companies', async (_req, res) => {
     res.status(500).json({ error: 'Error listing companies' });
   }
 });
-
 
 export default router;

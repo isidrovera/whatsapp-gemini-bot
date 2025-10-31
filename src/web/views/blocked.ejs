@@ -5,12 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title><%= title %> - WhatsApp Bot Admin</title>
 
-  <!-- Fuente -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <!-- Tailwind (config del dashboard admin) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -31,10 +29,6 @@
     }
   </script>
 
-  <!-- Utilidades externas del dashboard -->
-  <link rel="stylesheet" href="/css/ui.css">
-
-  <!-- Iconos -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <style>
@@ -47,7 +41,6 @@
       }
     }
 
-    /* Gradient text */
     .gradient-text {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       -webkit-background-clip: text;
@@ -55,11 +48,9 @@
       background-clip: text;
     }
 
-    /* Icon sizes */
     .icon { width: 1.25rem; height: 1.25rem; }
     .icon-lg { width: 1.75rem; height: 1.75rem; }
 
-    /* Import result styles */
     .import-result {
       margin-top: 20px;
       padding: 15px;
@@ -105,11 +96,22 @@
     const blockedList = Array.isArray(blocked) ? blocked : [];
     const df = new Intl.DateTimeFormat('es-PE', { dateStyle: 'short', timeStyle: 'short' });
     function fmtDate(d){ try { return df.format(new Date(d)); } catch { return '-'; } }
+    
+    function getAccessLevelBadge(level) {
+      const badges = {
+        'BLOCKED': { color: 'rose', emoji: '🔴', label: 'Bloqueado' },
+        'RESTRICTED': { color: 'orange', emoji: '⚠️', label: 'Restringido' },
+        'LIMITED': { color: 'yellow', emoji: '⏸️', label: 'Limitado' },
+        'STANDARD': { color: 'blue', emoji: '✅', label: 'Estándar' },
+        'FULL': { color: 'green', emoji: '🟢', label: 'Completo' },
+        'VIP': { color: 'purple', emoji: '👑', label: 'VIP' }
+      };
+      return badges[level] || badges['STANDARD'];
+    }
   %>
 
   <main id="main-content" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
-    <!-- Volver al Dashboard + breadcrumb -->
     <div class="flex flex-col gap-3">
       <div class="flex items-center justify-between">
         <a href="/"
@@ -128,22 +130,21 @@
           </li>
           <li class="select-none">/</li>
           <li class="inline-flex items-center gap-1">
-            <i data-lucide="ban" class="w-3.5 h-3.5"></i>
-            <span class="font-medium">Bloqueados</span>
+            <i data-lucide="shield" class="w-3.5 h-3.5"></i>
+            <span class="font-medium">Control de Acceso</span>
           </li>
         </ol>
       </nav>
     </div>
 
-    <!-- Header -->
     <header class="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 px-6 py-5">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 class="text-3xl font-bold tracking-tight gradient-text flex items-center gap-3">
-            <i data-lucide="ban" class="icon-lg text-primary"></i>
-            Bloqueados
+            <i data-lucide="shield" class="icon-lg text-primary"></i>
+            Control de Acceso
           </h1>
-          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestión de números y grupos bloqueados</p>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestión de permisos granulares por número/grupo</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-3">
@@ -156,13 +157,13 @@
           <button class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft"
                   onclick="showModal('addModal')">
             <i data-lucide="plus-circle" class="icon"></i>
-            <span>Agregar Bloqueo</span>
+            <span>Agregar Restricción</span>
           </button>
         </div>
       </div>
     </header>
 
-    <!-- Sección de importación -->
+    <!-- Importación -->
     <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/50 dark:border-white/5 overflow-hidden">
       <div class="px-6 py-4 border-b border-slate-100 dark:border-white/5 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50">
         <h2 class="text-lg font-bold flex items-center gap-2.5 text-slate-800 dark:text-white">
@@ -175,8 +176,7 @@
 
       <div class="p-6">
         <p class="text-sm text-slate-600 dark:text-slate-400 mb-4">
-          Carga un archivo Excel con las columnas:
-          <strong>identifier</strong>, <strong>type</strong> y <strong>reason</strong>.
+          Columnas: <strong>identifier</strong>, <strong>type</strong>, <strong>accessLevel</strong>, <strong>reason</strong>
         </p>
 
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:flex-wrap">
@@ -232,19 +232,18 @@
       <div class="px-6 py-4 border-b border-slate-100 dark:border-white/5 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50">
         <h2 class="text-lg font-bold flex items-center gap-2.5 text-slate-800 dark:text-white">
           <div class="w-8 h-8 rounded-lg bg-rose-500/10 flex items-center justify-center">
-            <i data-lucide="ban" class="icon text-rose-600 dark:text-rose-400"></i>
+            <i data-lucide="list" class="icon text-rose-600 dark:text-rose-400"></i>
           </div>
-          Lista de Bloqueados
+          Lista de Restricciones
         </h2>
       </div>
 
       <div class="p-6">
-        <!-- Buscador -->
         <div class="mb-5">
           <input
             type="text"
             id="searchInput"
-            placeholder="🔍 Buscar por número, grupo o razón..."
+            placeholder="🔍 Buscar..."
             onkeyup="filterTable()"
             class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 focus:ring-0 transition"
           />
@@ -257,39 +256,64 @@
                 <tr>
                   <th class="text-left px-6 py-4">Identificador</th>
                   <th class="text-left px-6 py-4">Tipo</th>
+                  <th class="text-left px-6 py-4">Nivel</th>
+                  <th class="text-left px-6 py-4">Permisos</th>
                   <th class="text-left px-6 py-4">Razón</th>
                   <th class="text-left px-6 py-4">Fecha</th>
                   <th class="text-left px-6 py-4">Acciones</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                <% blockedList.forEach(item => { %>
+                <% blockedList.forEach(item => { 
+                  const badge = getAccessLevelBadge(item.accessLevel);
+                %>
                   <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                     <td class="px-6 py-4 font-semibold text-slate-900 dark:text-white break-all">
                       <%= item.identifier %>
                     </td>
                     <td class="px-6 py-4">
                       <% if (item.type === 'PHONE') { %>
-                        <span class="inline-flex items-center gap-1 rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-2 py-0.5 text-[11px] font-semibold leading-none">
+                        <span class="inline-flex items-center gap-1 rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-2 py-0.5 text-[11px] font-semibold">
                           📱 Teléfono
                         </span>
                       <% } else { %>
-                        <span class="inline-flex items-center gap-1 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-0.5 text-[11px] font-semibold leading-none">
+                        <span class="inline-flex items-center gap-1 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-0.5 text-[11px] font-semibold">
                           👥 Grupo
                         </span>
                       <% } %>
                     </td>
-                    <td class="px-6 py-4 text-slate-700 dark:text-slate-300 break-words"><%= item.reason || '-' %></td>
+                    <td class="px-6 py-4">
+                      <span class="inline-flex items-center gap-1 rounded-md bg-<%= badge.color %>-100 text-<%= badge.color %>-700 dark:bg-<%= badge.color %>-900/30 dark:text-<%= badge.color %>-300 px-2 py-0.5 text-[11px] font-semibold">
+                        <%= badge.emoji %> <%= badge.label %>
+                      </span>
+                    </td>
+                    <td class="px-6 py-4">
+                      <div class="flex flex-wrap gap-1 text-[10px]">
+                        <% if (item.canUseOdoo) { %><span class="bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Odoo</span><% } %>
+                        <% if (item.canCreateTickets) { %><span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">Tickets</span><% } %>
+                        <% if (item.canUseAI) { %><span class="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">AI</span><% } %>
+                        <% if (item.canTalkToHuman) { %><span class="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Humano</span><% } %>
+                      </div>
+                    </td>
+                    <td class="px-6 py-4 text-slate-700 dark:text-slate-300 break-words max-w-xs"><%= item.reason || '-' %></td>
                     <td class="px-6 py-4 text-slate-600 dark:text-slate-400">
                       <time datetime="<%= new Date(item.blockedAt).toISOString() %>"><%= fmtDate(item.blockedAt) %></time>
                     </td>
                     <td class="px-6 py-4">
-                      <button
-                        class="inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
-                        onclick="unblock('<%= encodeURIComponent(item.identifier) %>')">
-                        <i data-lucide="unlock" class="w-3.5 h-3.5"></i>
-                        <span>Desbloquear</span>
-                      </button>
+                      <div class="flex gap-2">
+                        <button
+                          class="inline-flex items-center gap-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                          onclick="editPermissions('<%= encodeURIComponent(item.identifier) %>')">
+                          <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+                          <span>Editar</span>
+                        </button>
+                        <button
+                          class="inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1.5 text-xs font-medium shadow-soft transition"
+                          onclick="unblock('<%= encodeURIComponent(item.identifier) %>')">
+                          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                          <span>Eliminar</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 <% }) %>
@@ -301,21 +325,21 @@
             <div class="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
               <i data-lucide="inbox" class="icon-lg text-slate-400"></i>
             </div>
-            <p class="text-sm text-slate-500 dark:text-slate-400 font-medium">Sin bloqueos</p>
-            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Los números y grupos bloqueados aparecerán aquí</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400 font-medium">Sin restricciones</p>
+            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Las restricciones aparecerán aquí</p>
           </div>
         <% } %>
       </div>
     </section>
   </main>
 
-  <!-- Modal Agregar Bloqueo -->
+  <!-- Modal Agregar -->
   <div id="addModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
     <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
       <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
         <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
-          <i data-lucide="ban" class="icon text-rose-600"></i>
-          Bloquear Número/Grupo
+          <i data-lucide="shield" class="icon text-indigo-600"></i>
+          Agregar Restricción
         </h2>
         <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="hideModal('addModal')">
           <i data-lucide="x" class="icon"></i>
@@ -325,22 +349,18 @@
       <div class="p-6">
         <form onsubmit="addBlock(event)" class="space-y-4">
           <div>
-            <label for="identifier" class="block text-sm font-semibold mb-2">Número o ID de Grupo *</label>
+            <label class="block text-sm font-semibold mb-2">Identificador *</label>
             <input
               type="text"
               id="identifier"
               required
-              placeholder="Ej: 51975399303 o 120363XXX@g.us"
+              placeholder="Ej: 51975399303"
               class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
             />
-            <small class="block text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
-              Para teléfonos: incluir código de país (51975399303)<br/>
-              Para grupos: usar el JID completo (120363XXX@g.us)
-            </small>
           </div>
 
           <div>
-            <label for="type" class="block text-sm font-semibold mb-2">Tipo *</label>
+            <label class="block text-sm font-semibold mb-2">Tipo *</label>
             <select
               id="type"
               required
@@ -353,10 +373,26 @@
           </div>
 
           <div>
-            <label for="reason" class="block text-sm font-semibold mb-2">Razón (opcional)</label>
+            <label class="block text-sm font-semibold mb-2">Nivel de Acceso *</label>
+            <select
+              id="accessLevel"
+              required
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
+            >
+              <option value="BLOCKED">🔴 Bloqueado (sin acceso)</option>
+              <option value="RESTRICTED">⚠️ Restringido (solo info básica)</option>
+              <option value="LIMITED">⏸️ Limitado (sin Odoo ni tickets)</option>
+              <option value="STANDARD" selected>✅ Estándar (acceso normal)</option>
+              <option value="FULL">🟢 Completo (todo habilitado)</option>
+              <option value="VIP">👑 VIP (prioridad)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold mb-2">Razón</label>
             <textarea
               id="reason"
-              placeholder="Motivo del bloqueo..."
+              placeholder="Motivo..."
               class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 min-h-[80px] resize-y"
             ></textarea>
           </div>
@@ -372,35 +408,237 @@
             <button
               type="submit"
               class="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-3 py-2 shadow-soft">
-              Bloquear
+              Guardar
             </button>
           </div>
         </form>
       </div>
     </div>
   </div>
+  <!-- Modal Editar Permisos -->
+<div id="editModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm overflow-y-auto">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-2xl w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden my-8">
+    <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
+      <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+        <i data-lucide="settings" class="icon text-indigo-600"></i>
+        Editar Permisos
+      </h2>
+      <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="hideModal('editModal')">
+        <i data-lucide="x" class="icon"></i>
+      </button>
+    </div>
+
+    <div class="p-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+      <form onsubmit="savePermissions(event)" class="space-y-6">
+        <input type="hidden" id="editIdentifier" />
+
+        <!-- Info del contacto -->
+        <div class="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
+          <div class="text-sm font-semibold text-slate-900 dark:text-white mb-1">Identificador</div>
+          <div id="editIdentifierDisplay" class="text-sm text-slate-600 dark:text-slate-400 font-mono break-all"></div>
+        </div>
+
+        <!-- Nivel de Acceso -->
+        <div>
+          <label class="block text-sm font-semibold mb-2">Nivel de Acceso</label>
+          <select
+            id="editAccessLevel"
+            class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
+            onchange="updatePermissionsPreview()"
+          >
+            <option value="BLOCKED">🔴 Bloqueado - Sin acceso al bot</option>
+            <option value="RESTRICTED">⚠️ Restringido - Solo respuestas automáticas básicas</option>
+            <option value="LIMITED">⏸️ Limitado - Sin Odoo ni tickets</option>
+            <option value="STANDARD">✅ Estándar - Acceso normal</option>
+            <option value="FULL">🟢 Completo - Todo habilitado</option>
+            <option value="VIP">👑 VIP - Acceso prioritario</option>
+          </select>
+          <small class="block text-xs text-slate-500 dark:text-slate-400 mt-2">
+            Cambia el nivel para aplicar permisos predefinidos
+          </small>
+        </div>
+
+        <!-- Permisos Personalizados -->
+        <div class="border-t border-slate-200 dark:border-slate-700 pt-6">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-bold text-slate-900 dark:text-white">Permisos Personalizados</h3>
+            <label class="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                id="enableCustomPerms"
+                onchange="toggleCustomPermissions()"
+                class="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span class="text-xs text-slate-600 dark:text-slate-400">Habilitar personalización</span>
+            </label>
+          </div>
+
+          <div id="customPermsContainer" class="space-y-3 opacity-50 pointer-events-none">
+            <!-- Odoo -->
+            <div class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+              <input
+                type="checkbox"
+                id="permOdoo"
+                class="mt-1 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div class="flex-1">
+                <label for="permOdoo" class="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer flex items-center gap-2">
+                  <span>🔧</span>
+                  <span>Acceso a Odoo</span>
+                </label>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Puede consultar tickets, equipos e historial de servicio desde Odoo
+                </p>
+              </div>
+            </div>
+
+            <!-- Crear Tickets -->
+            <div class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+              <input
+                type="checkbox"
+                id="permTickets"
+                class="mt-1 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div class="flex-1">
+                <label for="permTickets" class="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer flex items-center gap-2">
+                  <span>🎫</span>
+                  <span>Crear Tickets</span>
+                </label>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Puede crear solicitudes de servicio técnico y tóner
+                </p>
+              </div>
+            </div>
+
+            <!-- Ver Historial -->
+            <div class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+              <input
+                type="checkbox"
+                id="permHistory"
+                class="mt-1 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div class="flex-1">
+                <label for="permHistory" class="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer flex items-center gap-2">
+                  <span>📋</span>
+                  <span>Ver Historial</span>
+                </label>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Puede ver historial completo de servicios y mantenimientos
+                </p>
+              </div>
+            </div>
+
+            <!-- Hablar con Humano -->
+            <div class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+              <input
+                type="checkbox"
+                id="permHuman"
+                class="mt-1 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div class="flex-1">
+                <label for="permHuman" class="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer flex items-center gap-2">
+                  <span>👨‍💼</span>
+                  <span>Escalar a Humano</span>
+                </label>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Puede solicitar atención de un técnico humano
+                </p>
+              </div>
+            </div>
+
+            <!-- Usar IA -->
+            <div class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+              <input
+                type="checkbox"
+                id="permAI"
+                class="mt-1 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div class="flex-1">
+                <label for="permAI" class="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer flex items-center gap-2">
+                  <span>🤖</span>
+                  <span>Usar Gemini AI</span>
+                </label>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Puede interactuar con la inteligencia artificial para consultas
+                </p>
+              </div>
+            </div>
+
+            <!-- Respuestas Automáticas -->
+            <div class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+              <input
+                type="checkbox"
+                id="permAutoResponse"
+                class="mt-1 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div class="flex-1">
+                <label for="permAutoResponse" class="text-sm font-semibold text-slate-900 dark:text-white cursor-pointer flex items-center gap-2">
+                  <span>💬</span>
+                  <span>Respuestas Automáticas</span>
+                </label>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Recibe respuestas automáticas de FAQs
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Razón y Notas -->
+        <div class="border-t border-slate-200 dark:border-slate-700 pt-6 space-y-4">
+          <div>
+            <label class="block text-sm font-semibold mb-2">Razón</label>
+            <textarea
+              id="editReason"
+              placeholder="Motivo de la restricción..."
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 min-h-[80px] resize-y"
+            ></textarea>
+          </div>
+
+          <div>
+            <label class="block text-sm font-semibold mb-2">Notas Internas</label>
+            <textarea
+              id="editNotes"
+              placeholder="Notas para el equipo..."
+              class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 min-h-[60px] resize-y"
+            ></textarea>
+          </div>
+        </div>
+
+        <!-- Botones -->
+        <div class="flex justify-end gap-2 pt-4 border-t border-slate-200 dark:border-slate-700">
+          <button
+            type="button"
+            class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-4 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition"
+            onclick="hideModal('editModal')">
+            Cancelar
+          </button>
+
+          <button
+            type="submit"
+            class="rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white text-sm font-semibold px-4 py-2 shadow-soft transition">
+            Guardar Cambios
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
   <script>
-    // Iconos
     document.addEventListener('DOMContentLoaded', () => {
       if (window.lucide) lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
     });
 
-    // Actualizar nombre de archivo
     function updateFileName(input) {
       const fileName = document.getElementById('fileName');
       if (input.files.length > 0) {
         fileName.textContent = input.files[0].name;
-        fileName.classList.remove('text-slate-500','dark:text-slate-400');
-        fileName.classList.add('text-slate-800','dark:text-slate-200');
       } else {
         fileName.textContent = 'Ningún archivo seleccionado';
-        fileName.classList.remove('text-slate-800','dark:text-slate-200');
-        fileName.classList.add('text-slate-500','dark:text-slate-400');
       }
     }
 
-    // Importar desde Excel
     const importForm = document.getElementById('importForm');
     if (importForm) {
       importForm.addEventListener('submit', async (e) => {
@@ -408,7 +646,7 @@
 
         const fileInput = document.getElementById('excelFile');
         if (!fileInput.files[0]) {
-          alert('Por favor selecciona un archivo');
+          alert('Selecciona un archivo');
           return;
         }
 
@@ -416,7 +654,7 @@
         const resultDiv = document.getElementById('importResult');
         resultDiv.style.display = 'block';
         resultDiv.className = 'import-result';
-        resultDiv.innerHTML = '<div class="spinner"></div> Importando datos...';
+        resultDiv.innerHTML = '<div class="spinner"></div> Importando...';
 
         try {
           const response = await fetch('/blocked/api/import', {
@@ -428,67 +666,38 @@
 
           if (result.success) {
             resultDiv.className = 'import-result ' + (result.stats.failed > 0 ? 'warning' : 'success');
-
-            let html = `
+            resultDiv.innerHTML = `
               <h4 class="font-semibold mb-1">✅ Importación completada</h4>
-              <div class="import-stats text-sm">
+              <div class="text-sm">
                 <strong>Total:</strong> ${result.stats.total} |
                 <strong>Exitosos:</strong> ${result.stats.success} |
                 <strong>Fallidos:</strong> ${result.stats.failed}
               </div>
             `;
 
-            if (result.errors && result.errors.length > 0) {
-              html += `
-                <div class="error-list mt-3 max-h-[150px] overflow-y-auto bg-white rounded-md text-[12px] leading-relaxed border border-slate-200 p-3"
-                     style="color:#334155;">
-                  <strong class="block mb-2">Errores encontrados:</strong>
-                  <ul class="list-none m-0 p-0">
-                    ${result.errors.map(e => `<li class="py-1 border-b border-slate-100 last:border-none">${e}</li>`).join('')}
-                  </ul>
-                </div>
-              `;
-            }
-
-            resultDiv.innerHTML = html;
-
             fileInput.value = '';
-            const fn = document.getElementById('fileName');
-            if (fn) fn.textContent = 'Ningún archivo seleccionado';
+            document.getElementById('fileName').textContent = 'Ningún archivo seleccionado';
 
             if (result.stats.success > 0) {
-              setTimeout(() => window.location.reload(), 3000);
+              setTimeout(() => window.location.reload(), 2000);
             }
           } else {
             throw new Error(result.error || 'Error desconocido');
           }
         } catch (error) {
           resultDiv.className = 'import-result error';
-          let errorMsg = error.message;
-
-          if (error.message && error.message.includes('details')) {
-            try {
-              const errorData = JSON.parse(error.message);
-              errorMsg = errorData.details.join(', ');
-            } catch (e) {}
-          }
-
           resultDiv.innerHTML = `
-            <h4 class="font-semibold mb-1">❌ Error en la importación</h4>
-            <p class="text-sm">${errorMsg}</p>
+            <h4 class="font-semibold mb-1">❌ Error</h4>
+            <p class="text-sm">${error.message}</p>
           `;
         }
       });
     }
 
-    // Exportar a Excel
     async function exportToExcel() {
       try {
         const response = await fetch('/blocked/api/export');
-
-        if (!response.ok) {
-          throw new Error('Error al exportar');
-        }
+        if (!response.ok) throw new Error('Error al exportar');
 
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -500,11 +709,10 @@
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
       } catch (error) {
-        alert('❌ Error al exportar: ' + error.message);
+        alert('❌ Error al exportar');
       }
     }
 
-    // Filtrar tabla
     function filterTable() {
       const input = document.getElementById('searchInput');
       const filter = input.value.toLowerCase();
@@ -512,7 +720,6 @@
       if (!table) return;
 
       const tr = table.getElementsByTagName('tr');
-
       for (let i = 1; i < tr.length; i++) {
         const td = tr[i].getElementsByTagName('td');
         let found = false;
@@ -528,43 +735,81 @@
       }
     }
 
-    // Agregar bloqueo
+    // Reemplaza la función addBlock en tu vista blocked.ejs
+
     async function addBlock(event) {
-      event.preventDefault();
+  event.preventDefault();
 
-      const identifier = document.getElementById('identifier').value.trim();
-      const type = document.getElementById('type').value;
-      const reason = document.getElementById('reason').value.trim();
+  const identifier = document.getElementById('identifier').value.trim();
+  const type = document.getElementById('type').value;
+  const accessLevel = document.getElementById('accessLevel').value;
+  const reason = document.getElementById('reason').value.trim();
 
-      if (!identifier || !type) {
-        alert('Por favor completa los campos requeridos');
-        return;
-      }
+  // Validaciones frontend
+  if (!identifier) {
+    alert('⚠️ Por favor ingresa un identificador (número o ID de grupo)');
+    document.getElementById('identifier').focus();
+    return;
+  }
 
-      try {
-        const res = await fetch('/blocked/api', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier, type, reason })
-        });
+  if (!type) {
+    alert('⚠️ Por favor selecciona un tipo (Teléfono o Grupo)');
+    document.getElementById('type').focus();
+    return;
+  }
 
-        const data = await res.json();
+  if (!accessLevel) {
+    alert('⚠️ Por favor selecciona un nivel de acceso');
+    document.getElementById('accessLevel').focus();
+    return;
+  }
 
-        if (data.success) {
-          alert('✅ Bloqueado exitosamente');
-          location.reload();
-        } else {
-          alert('❌ Error: ' + (data.error || 'No se pudo bloquear'));
-        }
-      } catch (error) {
-        alert('❌ Error al bloquear');
-        console.error(error);
-      }
+  // Preparar payload
+  const payload = { 
+    identifier, 
+    type, 
+    accessLevel,
+    reason: reason || 'Agregado desde panel web'
+  };
+
+  console.log('📤 Enviando restricción:', payload);
+
+  try {
+    const res = await fetch('/blocked/api', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    // Leer respuesta
+    const data = await res.json();
+    console.log('📥 Respuesta del servidor:', data);
+
+    if (res.ok && data.success) {
+      alert('✅ Restricción agregada exitosamente');
+      hideModal('addModal');
+      setTimeout(() => location.reload(), 500);
+    } else {
+      const errorMsg = data.error || data.message || 'Error desconocido del servidor';
+      alert('❌ Error: ' + errorMsg);
+      console.error('Error del servidor:', data);
+    }
+    
+  } catch (error) {
+    console.error('💥 Error de conexión:', error);
+    alert('❌ Error de conexión. Verifica que el servidor esté funcionando correctamente.\n\nDetalle: ' + error.message);
+  }
+}
+    async function editPermissions(identifier) {
+      alert('Función de edición de permisos - Por implementar en modal separado');
+      // TODO: Implementar modal de edición con permisos custom
     }
 
-    // Desbloquear
     async function unblock(identifier) {
-      if (!confirm('¿Desbloquear este número/grupo?')) return;
+      if (!confirm('¿Eliminar esta restricción?')) return;
 
       try {
         const res = await fetch(`/blocked/api/${identifier}`, {
@@ -574,23 +819,22 @@
         const data = await res.json();
 
         if (data.success) {
-          alert('✅ Desbloqueado exitosamente');
+          alert('✅ Eliminado');
           location.reload();
         } else {
-          alert('❌ Error: ' + (data.error || 'No se pudo desbloquear'));
+          alert('❌ Error');
         }
       } catch (error) {
-        alert('❌ Error al desbloquear');
-        console.error(error);
+        alert('❌ Error');
       }
     }
 
-    // Modales (usamos clases Tailwind)
     function showModal(id){
       const el = document.getElementById(id);
       el.classList.remove('hidden');
       el.classList.add('flex');
     }
+    
     function hideModal(id){
       const el = document.getElementById(id);
       el.classList.remove('flex');
@@ -598,13 +842,136 @@
       if (id === 'addModal') {
         document.getElementById('identifier').value = '';
         document.getElementById('type').value = '';
+        document.getElementById('accessLevel').value = 'STANDARD';
         document.getElementById('reason').value = '';
       }
     }
+    
     window.addEventListener('click', (e) => {
       const modal = document.getElementById('addModal');
       if (e.target === modal) hideModal('addModal');
     });
+    // Permisos por nivel de acceso
+const ACCESS_PERMISSIONS = {
+  BLOCKED: { odoo: false, tickets: false, history: false, human: false, ai: false, autoresponse: false },
+  RESTRICTED: { odoo: false, tickets: false, history: false, human: false, ai: false, autoresponse: true },
+  LIMITED: { odoo: false, tickets: false, history: false, human: true, ai: true, autoresponse: true },
+  STANDARD: { odoo: true, tickets: true, history: false, human: true, ai: true, autoresponse: true },
+  FULL: { odoo: true, tickets: true, history: true, human: true, ai: true, autoresponse: true },
+  VIP: { odoo: true, tickets: true, history: true, human: true, ai: true, autoresponse: true }
+};
+
+// Abrir modal de edición
+async function editPermissions(identifier) {
+  try {
+    // Cargar permisos actuales
+    const response = await fetch(`/blocked/api/permissions/${identifier}`);
+    const data = await response.json();
+
+    // Llenar el formulario
+    document.getElementById('editIdentifier').value = decodeURIComponent(identifier);
+    document.getElementById('editIdentifierDisplay').textContent = decodeURIComponent(identifier);
+    document.getElementById('editAccessLevel').value = data.accessLevel || 'STANDARD';
+    document.getElementById('editReason').value = data.reason || '';
+    document.getElementById('editNotes').value = data.notes || '';
+
+    // Cargar permisos
+    document.getElementById('permOdoo').checked = data.permissions.odoo ?? true;
+    document.getElementById('permTickets').checked = data.permissions.tickets ?? true;
+    document.getElementById('permHistory').checked = data.permissions.history ?? false;
+    document.getElementById('permHuman').checked = data.permissions.human ?? true;
+    document.getElementById('permAI').checked = data.permissions.ai ?? true;
+    document.getElementById('permAutoResponse').checked = data.permissions.autoresponse ?? true;
+
+    // Deshabilitar custom perms por defecto
+    document.getElementById('enableCustomPerms').checked = false;
+    document.getElementById('customPermsContainer').classList.add('opacity-50', 'pointer-events-none');
+
+    showModal('editModal');
+    
+    // Reiniciar iconos
+    setTimeout(() => {
+      if (window.lucide) lucide.createIcons();
+    }, 100);
+  } catch (error) {
+    alert('❌ Error al cargar permisos');
+    console.error(error);
+  }
+}
+
+// Toggle permisos personalizados
+function toggleCustomPermissions() {
+  const enabled = document.getElementById('enableCustomPerms').checked;
+  const container = document.getElementById('customPermsContainer');
+
+  if (enabled) {
+    container.classList.remove('opacity-50', 'pointer-events-none');
+  } else {
+    container.classList.add('opacity-50', 'pointer-events-none');
+    updatePermissionsPreview();
+  }
+}
+
+// Actualizar permisos basados en el nivel seleccionado
+function updatePermissionsPreview() {
+  const customEnabled = document.getElementById('enableCustomPerms').checked;
+  if (customEnabled) return;
+
+  const level = document.getElementById('editAccessLevel').value;
+  const perms = ACCESS_PERMISSIONS[level] || ACCESS_PERMISSIONS.STANDARD;
+
+  document.getElementById('permOdoo').checked = perms.odoo;
+  document.getElementById('permTickets').checked = perms.tickets;
+  document.getElementById('permHistory').checked = perms.history;
+  document.getElementById('permHuman').checked = perms.human;
+  document.getElementById('permAI').checked = perms.ai;
+  document.getElementById('permAutoResponse').checked = perms.autoresponse;
+}
+
+// Guardar permisos
+async function savePermissions(event) {
+  event.preventDefault();
+
+  const identifier = document.getElementById('editIdentifier').value;
+  const accessLevel = document.getElementById('editAccessLevel').value;
+  const reason = document.getElementById('editReason').value.trim();
+  const notes = document.getElementById('editNotes').value.trim();
+  const customEnabled = document.getElementById('enableCustomPerms').checked;
+
+  try {
+    // Actualizar nivel de acceso
+    await fetch(`/blocked/api/${encodeURIComponent(identifier)}/access-level`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessLevel, reason })
+    });
+
+    // Si tiene permisos custom, actualizarlos
+    if (customEnabled) {
+      const permissions = {
+        canUseOdoo: document.getElementById('permOdoo').checked,
+        canCreateTickets: document.getElementById('permTickets').checked,
+        canSeeHistory: document.getElementById('permHistory').checked,
+        canTalkToHuman: document.getElementById('permHuman').checked,
+        canUseAI: document.getElementById('permAI').checked,
+        canUseAutoResponse: document.getElementById('permAutoResponse').checked
+      };
+
+      await fetch(`/blocked/api/${encodeURIComponent(identifier)}/permissions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(permissions)
+      });
+    }
+
+    alert('✅ Permisos actualizados');
+    location.reload();
+  } catch (error) {
+    alert('❌ Error al guardar permisos');
+    console.error(error);
+  }
+}
   </script>
+  
 </body>
 </html>

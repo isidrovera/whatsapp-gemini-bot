@@ -62,16 +62,6 @@ npm start
 
 ## 🗄️ Variables del sistema
 
-El bot incluye variables configurables en la tabla `system_variables`:
-
-- `seller_jamilet_phone` - Teléfono vendedora tóner (Jamilet)
-- `seller_thalia_phone` - Teléfono vendedora tóner (Thalia)
-- `support_phone` - Teléfono soporte técnico
-- `company_name` - Nombre de la empresa
-- `work_hours_start` - Hora inicio (formato: 8.5 = 8:30am)
-- `work_hours_end` - Hora fin
-- `break_start` - Hora inicio refrigerio
-- `break_end` - Hora fin refrigerio
 
 **Editar desde Prisma Studio:**
 ```bash

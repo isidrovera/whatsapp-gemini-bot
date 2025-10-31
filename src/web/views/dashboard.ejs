@@ -31,8 +31,6 @@
     }
   </script>
 
-  <!-- Utilidades externas -->
-  <link rel="stylesheet" href="/css/ui.css">
 
   <!-- Iconos -->
   <script src="https://unpkg.com/lucide@latest"></script>
@@ -139,7 +137,6 @@
 
     const cards = [
       { t:'TOTAL CONTACTOS',    n:fmtNum(s.totalContacts),       l:'Usuarios en el sistema',            tc:'text-blue-600 dark:text-blue-400',     i:'users',            href:'/contacts' },
-      { t:'REGISTRADOS',        n:fmtNum(s.registeredContacts),  l:'Con DNI y RUC',                     tc:'text-emerald-600 dark:text-emerald-400',i:'user-check',       href:'/contacts?state=REGISTERED' },
       { t:'BLOQUEADOS',         n:fmtNum(s.blockedCount),        l:'Números/grupos bloqueados',         tc:'text-rose-600 dark:text-rose-400',      i:'user-x',           href:'/blocked' },
       { t:'MENSAJES TOTALES',   n:fmtNum(s.totalMessages),       l:'En historial completo',             tc:'text-violet-600 dark:text-violet-400',  i:'messages-square',  href:'/conversations' },
       { t:'MENSAJES HOY',       n:fmtNum(s.messagesToday),       l:'Conversaciones activas',            tc:'text-orange-600 dark:text-orange-400',  i:'message-circle',   href:'/conversations?date=today' },
