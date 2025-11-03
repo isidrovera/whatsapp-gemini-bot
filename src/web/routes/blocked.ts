@@ -1,50 +1,87 @@
-// src/routes/blocked.ts - VERSIÓN CORREGIDA
+// src/web/routes/blocked.ts
 import express from 'express';
-import multer from 'multer';
-import XLSX from 'xlsx';
+import multer, { FileFilterCallback } from 'multer';
+import * as XLSX from 'xlsx';
 import * as blockedModel from '../../models/blocked.js';
 import { logger } from '../../utils/logger.js';
 
 const router = express.Router();
 
-const upload = multer({ 
+type AccessLevel =
+  | 'BLOCKED'
+  | 'RESTRICTED'
+  | 'LIMITED'
+  | 'STANDARD'
+  | 'FULL'
+  | 'VIP';
+
+type BlockEntry = {
+  identifier: string;
+  type: 'PHONE' | 'GROUP';
+  reason: string;
+  accessLevel: AccessLevel;
+};
+
+type ImportRow = {
+  identifier?: unknown;
+  numero?: unknown;
+  telefono?: unknown;
+  type?: unknown;
+  tipo?: unknown;
+  reason?: unknown;
+  razon?: unknown;
+  motivo?: unknown;
+  accessLevel?: unknown;
+  nivel?: unknown;
+};
+
+const VALID_LEVELS: AccessLevel[] = [
+  'BLOCKED',
+  'RESTRICTED',
+  'LIMITED',
+  'STANDARD',
+  'FULL',
+  'VIP',
+];
+
+const upload = multer({
   storage: multer.memoryStorage(),
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = [
+  fileFilter: (_req: express.Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+    const allowedTypes = new Set([
       'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    ];
-    if (allowedTypes.includes(file.mimetype)) {
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ]);
+    if (allowedTypes.has(file.mimetype)) {
       cb(null, true);
     } else {
       cb(new Error('Solo se permiten archivos Excel (.xls, .xlsx)'));
     }
   },
-  limits: { fileSize: 5 * 1024 * 1024 }
+  limits: { fileSize: 5 * 1024 * 1024 },
 });
 
 // Ver página de bloqueados
-router.get('/', async (req, res) => {
+router.get('/', async (_req, res) => {
   try {
     const blocked = await blockedModel.getAll();
-    res.render('blocked', { 
+    res.render('blocked', {
       title: 'Bloqueados',
       blocked,
-      page: 'blocked'
+      page: 'blocked',
     });
   } catch (error) {
-    logger.error({ err: error },'Error loading blocked:');
+    logger.error({ err: error }, 'Error loading blocked');
     res.status(500).send('Error loading blocked numbers');
   }
 });
 
 // API: Obtener bloqueados
-router.get('/api', async (req, res) => {
+router.get('/api', async (_req, res) => {
   try {
     const blocked = await blockedModel.getAll();
     res.json(blocked);
   } catch (error) {
-    logger.error({ err: error },'Error getting blocked:');
+    logger.error({ err: error }, 'Error getting blocked');
     res.status(500).json({ error: 'Error getting blocked' });
   }
 });
@@ -56,86 +93,91 @@ router.get('/api/permissions/:identifier', async (req, res) => {
     const permissions = await blockedModel.getPermissions(identifier);
     res.json(permissions);
   } catch (error) {
-    logger.error({ err: error },'Error getting permissions:');
+    logger.error({ err: error }, 'Error getting permissions');
     res.status(500).json({ error: 'Error getting permissions' });
   }
 });
 
 // API: Bloquear número/grupo con nivel de acceso
-// 🔧 ENDPOINT CORREGIDO
 router.post('/api', async (req, res) => {
   try {
-    logger.info('POST /blocked/api - Request body:', req.body);
-    
-    const { identifier, type, reason, accessLevel } = req.body;
-    
-    // Validaciones detalladas
-    if (!identifier) {
-      logger.warn('POST /blocked/api - Missing identifier');
-      return res.status(400).json({ 
+    logger.info({ body: req.body }, 'POST /blocked/api');
+
+    const { identifier, type, reason, accessLevel } = req.body as {
+      identifier?: string;
+      type?: string;
+      reason?: string;
+      accessLevel?: string;
+    };
+
+    // Validaciones
+    if (!identifier?.trim()) {
+      logger.warn({}, 'POST /blocked/api - Missing identifier');
+      return res.status(400).json({
         success: false,
-        error: 'El campo "identifier" es requerido' 
+        error: 'El campo "identifier" es requerido',
       });
     }
 
-    if (!type) {
-      logger.warn('POST /blocked/api - Missing type');
-      return res.status(400).json({ 
+    if (!type?.trim()) {
+      logger.warn({}, 'POST /blocked/api - Missing type');
+      return res.status(400).json({
         success: false,
-        error: 'El campo "type" es requerido' 
+        error: 'El campo "type" es requerido',
       });
     }
 
-    if (type !== 'PHONE' && type !== 'GROUP') {
-      logger.warn('POST /blocked/api - Invalid type:', type);
-      return res.status(400).json({ 
+    const normalizedType = type.toUpperCase().trim();
+    if (normalizedType !== 'PHONE' && normalizedType !== 'GROUP') {
+      logger.warn({ type }, 'POST /blocked/api - Invalid type');
+      return res.status(400).json({
         success: false,
-        error: 'El tipo debe ser "PHONE" o "GROUP"' 
+        error: 'El tipo debe ser "PHONE" o "GROUP"',
       });
     }
 
-    // Validar accessLevel si viene
-    if (accessLevel) {
-      const validLevels = ['BLOCKED', 'RESTRICTED', 'LIMITED', 'STANDARD', 'FULL', 'VIP'];
-      if (!validLevels.includes(accessLevel)) {
-        logger.warn('POST /blocked/api - Invalid accessLevel:', accessLevel);
-        return res.status(400).json({ 
+    let level: AccessLevel = 'BLOCKED';
+    if (accessLevel?.trim()) {
+      const normalized = accessLevel.toUpperCase().trim() as AccessLevel;
+      if (!VALID_LEVELS.includes(normalized)) {
+        logger.warn({ accessLevel }, 'POST /blocked/api - Invalid accessLevel');
+        return res.status(400).json({
           success: false,
-          error: `Nivel de acceso inválido. Debe ser uno de: ${validLevels.join(', ')}` 
+          error: `Nivel de acceso inválido. Debe ser uno de: ${VALID_LEVELS.join(', ')}`,
         });
       }
+      level = normalized;
     }
 
-    // Verificar si ya existe
+    // Verificar si ya existe con restricción
     const existing = await blockedModel.getPermissions(identifier);
     if (existing && existing.accessLevel !== 'FULL') {
-      logger.warn('POST /blocked/api - Identifier already blocked:', identifier);
-      return res.status(400).json({ 
+      logger.warn({ identifier }, 'POST /blocked/api - Identifier already restricted');
+      return res.status(400).json({
         success: false,
-        error: 'Este identificador ya está en la lista de restricciones' 
+        error: 'Este identificador ya está en la lista de restricciones',
       });
     }
 
     // Crear registro
     const result = await blockedModel.block(
-      identifier, 
-      type as 'PHONE' | 'GROUP',
-      reason || 'Bloqueado desde panel web',
-      (accessLevel as any) || 'BLOCKED'
+      identifier.trim(),
+      normalizedType as 'PHONE' | 'GROUP',
+      reason?.trim() || 'Bloqueado desde panel web',
+      level
     );
-    
-    logger.info('POST /blocked/api - Successfully blocked:', identifier);
-    res.json({ 
-      success: true, 
+
+    logger.info({ identifier }, 'POST /blocked/api - Blocked successfully');
+    res.json({
+      success: true,
       message: 'Restricción agregada exitosamente',
-      data: result
+      data: result,
     });
-    
   } catch (error: any) {
-    logger.error({ err: error },'Error blocking:');
-    res.status(500).json({ 
+    logger.error({ err: error }, 'Error blocking');
+    res.status(500).json({
       success: false,
-      error: error.message || 'Error al agregar restricción' 
+      error: error?.message || 'Error al agregar restricción',
     });
   }
 });
@@ -144,16 +186,27 @@ router.post('/api', async (req, res) => {
 router.put('/api/:identifier/access-level', async (req, res) => {
   try {
     const identifier = decodeURIComponent(req.params.identifier);
-    const { accessLevel, reason, blockedBy } = req.body;
-    
-    if (!accessLevel) {
+    const { accessLevel, reason, blockedBy } = req.body as {
+      accessLevel?: string;
+      reason?: string;
+      blockedBy?: string;
+    };
+
+    if (!accessLevel?.trim()) {
       return res.status(400).json({ error: 'accessLevel es requerido' });
     }
 
-    await blockedModel.setAccessLevel(identifier, accessLevel, reason, blockedBy);
+    const normalized = accessLevel.toUpperCase().trim() as AccessLevel;
+    if (!VALID_LEVELS.includes(normalized)) {
+      return res.status(400).json({
+        error: `Nivel de acceso inválido. Debe ser uno de: ${VALID_LEVELS.join(', ')}`,
+      });
+    }
+
+    await blockedModel.setAccessLevel(identifier, normalized, reason, blockedBy);
     res.json({ success: true, message: 'Nivel de acceso actualizado' });
   } catch (error) {
-    logger.error({ err: error },'Error setting access level:');
+    logger.error({ err: error }, 'Error setting access level');
     res.status(500).json({ error: 'Error al establecer nivel de acceso' });
   }
 });
@@ -162,12 +215,12 @@ router.put('/api/:identifier/access-level', async (req, res) => {
 router.put('/api/:identifier/permissions', async (req, res) => {
   try {
     const identifier = decodeURIComponent(req.params.identifier);
-    const permissions = req.body;
-    
+    const permissions = req.body as Record<string, unknown>;
+
     await blockedModel.setCustomPermissions(identifier, permissions);
     res.json({ success: true, message: 'Permisos actualizados' });
   } catch (error) {
-    logger.error({ err: error },'Error setting permissions:');
+    logger.error({ err: error }, 'Error setting permissions');
     res.status(500).json({ error: 'Error al establecer permisos' });
   }
 });
@@ -179,7 +232,7 @@ router.delete('/api/:identifier', async (req, res) => {
     await blockedModel.unblock(identifier);
     res.json({ success: true, message: 'Desbloqueado exitosamente' });
   } catch (error) {
-    logger.error({ err: error },'Error unblocking:');
+    logger.error({ err: error }, 'Error unblocking');
     res.status(500).json({ error: 'Error al desbloquear' });
   }
 });
@@ -191,63 +244,72 @@ router.post('/api/import', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'No se proporcionó ningún archivo' });
     }
 
-    logger.info(`Importing Excel file: ${req.file.originalname}`);
+    logger.info({ filename: req.file.originalname, size: req.file.size }, 'Importing Excel file');
 
     const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json(worksheet);
+    const data = XLSX.utils.sheet_to_json<ImportRow>(worksheet);
 
     if (data.length === 0) {
       return res.status(400).json({ error: 'El archivo está vacío' });
     }
 
-    const entries = [];
-    const validationErrors = [];
+    const entries: BlockEntry[] = [];
+    const validationErrors: string[] = [];
 
     data.forEach((row, index) => {
       const rowNum = index + 2;
-      
-      const identifier = row.identifier || row.numero || row.telefono;
-      const type = row.type || row.tipo;
-      const reason = row.reason || row.razon || row.motivo;
-      const accessLevel = row.accessLevel || row.nivel || 'BLOCKED';
 
-      if (!identifier) {
+      const identifier =
+        (row.identifier as string) ??
+        (row.numero as string) ??
+        (row.telefono as string);
+
+      const type = (row.type as string) ?? (row.tipo as string);
+      const reason =
+        (row.reason as string) ??
+        (row.razon as string) ??
+        (row.motivo as string);
+      const accessLevel =
+        (row.accessLevel as string) ?? (row.nivel as string) ?? 'BLOCKED';
+
+      if (!identifier || !String(identifier).trim()) {
         validationErrors.push(`Fila ${rowNum}: falta identifier`);
         return;
       }
 
-      if (!type) {
+      if (!type || !String(type).trim()) {
         validationErrors.push(`Fila ${rowNum}: falta type`);
         return;
       }
 
-      const normalizedType = type.toString().toUpperCase().trim();
+      const normalizedType = String(type).toUpperCase().trim();
       if (normalizedType !== 'PHONE' && normalizedType !== 'GROUP') {
         validationErrors.push(`Fila ${rowNum}: tipo debe ser PHONE o GROUP`);
         return;
       }
 
-      const normalizedAccessLevel = accessLevel.toString().toUpperCase().trim();
-      const validLevels = ['BLOCKED', 'RESTRICTED', 'LIMITED', 'STANDARD', 'FULL', 'VIP'];
-      if (!validLevels.includes(normalizedAccessLevel)) {
-        validationErrors.push(`Fila ${rowNum}: accessLevel debe ser uno de: ${validLevels.join(', ')}`);
+      const normalizedAccessLevel = String(accessLevel).toUpperCase().trim() as AccessLevel;
+      if (!VALID_LEVELS.includes(normalizedAccessLevel)) {
+        validationErrors.push(
+          `Fila ${rowNum}: accessLevel debe ser uno de: ${VALID_LEVELS.join(', ')}`
+        );
         return;
       }
 
       entries.push({
-        identifier: identifier.toString().trim(),
-        type: normalizedType,
-        reason: reason ? reason.toString().trim() : 'Importado desde Excel',
-        accessLevel: normalizedAccessLevel
+        identifier: String(identifier).trim(),
+        type: normalizedType as 'PHONE' | 'GROUP',
+        reason: reason ? String(reason).trim() : 'Importado desde Excel',
+        accessLevel: normalizedAccessLevel,
       });
     });
 
     if (validationErrors.length > 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Errores de validación',
-        details: validationErrors 
+        details: validationErrors,
       });
     }
 
@@ -258,77 +320,87 @@ router.post('/api/import', upload.single('file'), async (req, res) => {
       message: 'Importación completada',
       stats: {
         total: entries.length,
-        success: results.success,
-        failed: results.failed
+        success: (results as any)?.success ?? 0,
+        failed: (results as any)?.failed ?? 0,
       },
-      errors: results.errors
+      errors: (results as any)?.errors ?? [],
     });
-
   } catch (error) {
-    logger.error({ err: error },'Error importing Excel:');
+    logger.error({ err: error }, 'Error importing Excel');
     res.status(500).json({ error: 'Error al importar archivo' });
   }
 });
 
 // API: Descargar plantilla Excel
-router.get('/api/template', (req, res) => {
+router.get('/api/template', (_req, res) => {
   try {
-    const templateData = [
-      { 
-        identifier: '51987654321', 
-        type: 'PHONE', 
+    const templateData: Array<{
+      identifier: string;
+      type: 'PHONE' | 'GROUP';
+      accessLevel: AccessLevel;
+      reason: string;
+    }> = [
+      {
+        identifier: '51987654321',
+        type: 'PHONE',
         accessLevel: 'BLOCKED',
-        reason: 'Spam' 
+        reason: 'Spam',
       },
-      { 
-        identifier: '51912345678', 
-        type: 'PHONE', 
+      {
+        identifier: '51912345678',
+        type: 'PHONE',
         accessLevel: 'LIMITED',
-        reason: 'Sin acceso a Odoo' 
+        reason: 'Sin acceso a Odoo',
       },
-      { 
-        identifier: '51999888777', 
-        type: 'PHONE', 
+      {
+        identifier: '51999888777',
+        type: 'PHONE',
         accessLevel: 'RESTRICTED',
-        reason: 'Solo info básica' 
-      }
+        reason: 'Solo info básica',
+      },
     ];
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(templateData);
-    
-    ws['!cols'] = [
+
+    (ws as any)['!cols'] = [
       { wch: 30 }, // identifier
       { wch: 10 }, // type
       { wch: 15 }, // accessLevel
-      { wch: 40 }  // reason
+      { wch: 40 }, // reason
     ];
 
     XLSX.utils.book_append_sheet(wb, ws, 'Bloqueados');
-    
+
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-    
-    res.setHeader('Content-Disposition', 'attachment; filename=plantilla_bloqueados.xlsx');
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename=plantilla_bloqueados.xlsx'
+    );
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
     res.send(buffer);
 
-    logger.info('Template Excel downloaded');
+    logger.info({}, 'Template Excel downloaded');
   } catch (error) {
-    logger.error({ err: error },'Error generating template:');
+    logger.error({ err: error }, 'Error generating template');
     res.status(500).json({ error: 'Error al generar plantilla' });
   }
 });
 
 // API: Exportar bloqueados a Excel
-router.get('/api/export', async (req, res) => {
+router.get('/api/export', async (_req, res) => {
   try {
     const blocked = await blockedModel.getAll();
-    
+
     if (blocked.length === 0) {
       return res.status(404).json({ error: 'No hay registros para exportar' });
     }
 
-    const exportData = blocked.map(item => ({
+    const exportData = blocked.map((item: any) => ({
       identifier: item.identifier,
       type: item.type,
       accessLevel: item.accessLevel,
@@ -336,13 +408,13 @@ router.get('/api/export', async (req, res) => {
       canCreateTickets: item.canCreateTickets,
       canUseAI: item.canUseAI,
       reason: item.reason || '',
-      blockedAt: new Date(item.blockedAt).toLocaleString('es-PE')
+      blockedAt: new Date(item.blockedAt).toLocaleString('es-PE'),
     }));
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(exportData);
-    
-    ws['!cols'] = [
+
+    (ws as any)['!cols'] = [
       { wch: 30 }, // identifier
       { wch: 10 }, // type
       { wch: 15 }, // accessLevel
@@ -350,21 +422,24 @@ router.get('/api/export', async (req, res) => {
       { wch: 15 }, // canCreateTickets
       { wch: 10 }, // canUseAI
       { wch: 40 }, // reason
-      { wch: 20 }  // blockedAt
+      { wch: 20 }, // blockedAt
     ];
 
     XLSX.utils.book_append_sheet(wb, ws, 'Bloqueados');
-    
+
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-    
+
     const filename = `bloqueados_${new Date().toISOString().split('T')[0]}.xlsx`;
     res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
     res.send(buffer);
 
-    logger.info(`Exported ${blocked.length} blocked entries to Excel`);
+    logger.info({ count: blocked.length }, 'Exported blocked entries to Excel');
   } catch (error) {
-    logger.error({ err: error },'Error exporting to Excel:');
+    logger.error({ err: error }, 'Error exporting to Excel');
     res.status(500).json({ error: 'Error al exportar datos' });
   }
 });

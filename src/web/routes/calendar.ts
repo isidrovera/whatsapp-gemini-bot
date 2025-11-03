@@ -5,22 +5,42 @@ import { logger } from '../../utils/logger.js';
 
 const router = express.Router();
 
+/* ================= Tipos y helpers ================= */
+
+type EventType = 'holiday' | 'special_event' | 'closure';
+
+const ALLOWED_TYPES = ['holiday', 'special_event', 'closure'] as const;
+
+function parseEventType(value: unknown): EventType {
+  if (typeof value === 'string' && (ALLOWED_TYPES as readonly string[]).includes(value)) {
+    return value as EventType;
+  }
+  throw new Error('Invalid event type');
+}
+
 // ===== Tipos de request body =====
 type CreateEventBody = {
   title: string;
   date: string; // esperado 'YYYY-MM-DD'
-  type: string;
+  type: EventType;
   description?: string;
   isRecurring?: boolean;
 };
 
-type UpdateEventBody = Partial<CreateEventBody>;
+type UpdateEventBody = Partial<{
+  title: string;
+  date: string; // 'YYYY-MM-DD'
+  type: EventType;
+  description?: string;
+  isRecurring?: boolean;
+}>;
+
+/* ================= Rutas ================= */
 
 // Ver página de calendario
 router.get('/', async (_req, res) => {
   try {
     const events = await calendarModel.getAll();
-    // Pasamos también "page" por si tu layout lo usa para activar la pestaña
     res.render('calendar', {
       title: 'Calendario',
       page: 'calendar',
@@ -60,24 +80,28 @@ router.get('/api/:id', async (req, res) => {
 // API: Crear evento
 router.post('/api', async (req, res) => {
   try {
-    const { title, date, type, description, isRecurring } = req.body as CreateEventBody;
+    const { title, date, type, description, isRecurring } = req.body as Partial<CreateEventBody> & { type?: unknown };
 
-    if (!title || !date || !type) {
+    if (!title || !date || type === undefined) {
       return res.status(400).json({ error: 'title, date and type are required' });
     }
 
-    // 👇 IMPORTANTE: NO convertir a new Date(date).
-    // Enviamos el string 'YYYY-MM-DD' tal cual. El modelo lo normaliza.
+    // NO convertir a new Date(date). Mandamos 'YYYY-MM-DD' tal cual.
+    const eventType = parseEventType(type);
+
     const event = await calendarModel.create(
       title,
       date,
-      type,
+      eventType,
       description,
       isRecurring
     );
 
     res.json({ success: true, event });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.message === 'Invalid event type') {
+      return res.status(400).json({ error: 'Invalid event type. Use: holiday | special_event | closure' });
+    }
     logger.error({ err }, 'Error creating event');
     res.status(500).json({ error: 'Error creating event' });
   }
@@ -86,19 +110,28 @@ router.post('/api', async (req, res) => {
 // API: Actualizar evento
 router.put('/api/:id', async (req, res) => {
   try {
-    const { title, date, type, description, isRecurring } = req.body as UpdateEventBody;
+    const { title, date, type, description, isRecurring } = req.body as Partial<CreateEventBody> & { type?: unknown };
 
     const updateData: UpdateEventBody = {};
     if (title !== undefined) updateData.title = title;
-    // 👇 Igual que create: no convertimos a Date aquí
     if (date !== undefined) updateData.date = date;
-    if (type !== undefined) updateData.type = type;
+    if (type !== undefined) updateData.type = parseEventType(type);
     if (description !== undefined) updateData.description = description;
     if (isRecurring !== undefined) updateData.isRecurring = isRecurring;
 
-    const event = await calendarModel.update(req.params.id, updateData);
+    const event = await calendarModel.update(req.params.id, updateData as {
+      title?: string;
+      date?: string | Date;
+      type?: EventType;
+      description?: string;
+      isRecurring?: boolean;
+    });
+
     res.json({ success: true, event });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.message === 'Invalid event type') {
+      return res.status(400).json({ error: 'Invalid event type. Use: holiday | special_event | closure' });
+    }
     logger.error({ err }, 'Error updating event');
     res.status(500).json({ error: 'Error updating event' });
   }
@@ -134,7 +167,6 @@ router.get('/api/check/today', async (_req, res) => {
 // API: Eventos de hoy (timeline dashboard)
 router.get('/api/today', async (_req, res) => {
   try {
-    // Intenta usar getByDate si existe en el modelo; si no, fallback a getAll() + filtro local
     const maybeGetByDate = (calendarModel as any).getByDate as
       | ((date: string) => Promise<any[]>)
       | undefined;
@@ -144,7 +176,7 @@ router.get('/api/today', async (_req, res) => {
       .format(new Date());
 
     const events = maybeGetByDate
-      ? await maybeGetByDate(todayLima) // preferimos pedir solo hoy si el modelo lo soporta
+      ? await maybeGetByDate(todayLima)
       : await calendarModel.getAll();
 
     // Si no hubo getByDate, filtramos a solo HOY en Lima

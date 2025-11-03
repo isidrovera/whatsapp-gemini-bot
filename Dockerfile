@@ -7,7 +7,7 @@ ENV CI=true
 # Herramientas nativas si alguna lib C lo requiere
 RUN apk add --no-cache python3 make g++ git
 
-# Instala TODAS las deps (incluyendo dev) para poder compilar TS y generar Prisma
+# Instala TODAS las deps (incluyendo dev) para compilar TS y generar Prisma
 COPY package*.json ./
 RUN npm ci
 
@@ -20,7 +20,26 @@ COPY src ./src
 RUN npx prisma generate
 RUN npm run build
 
-# Deja solo dependencias de producción (y conserva el Prisma Client generado)
+# --- Copiar vistas y estáticos al dist ---
+# Creamos las carpetas destino
+RUN mkdir -p dist/web/views dist/web/public
+
+# Copiamos las vistas (deben existir)
+COPY src/web/views ./dist/web/views
+
+# Copiamos los estáticos solo si la carpeta existe
+RUN if [ -d src/web/public ]; then \
+      cp -r src/web/public/* dist/web/public/ ; \
+    else \
+      echo "No src/web/public directory, continuing..." ; \
+    fi
+
+# Si usas una carpeta 'public' en la raíz del repo, destápalo:
+# RUN if [ -d public ]; then \
+#       mkdir -p dist/public && cp -r public/* dist/public/ ; \
+#     fi
+
+# Deja solo dependencias de producción (conservando Prisma Client generado)
 RUN npm prune --omit=dev
 
 # ===== RUNNER =====
@@ -31,7 +50,7 @@ ENV NODE_ENV=production
 # Copia node_modules YA PRUNED + Prisma Client desde el builder
 COPY --from=builder /app/node_modules ./node_modules
 
-# Copia Prisma schema (para migrate deploy en runtime) y el build
+# Copia Prisma schema (para migrate deploy/db push en runtime) y el build
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/dist ./dist
 

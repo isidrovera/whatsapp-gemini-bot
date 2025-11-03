@@ -17,9 +17,9 @@ export function generateDeviceToken(): string {
  */
 export function getDeviceName(userAgent?: string): string {
   if (!userAgent) return 'Navegador desconocido';
-  
+
   const ua = userAgent.toLowerCase();
-  
+
   // Detectar navegador
   let browser = 'Navegador';
   if (ua.includes('chrome') && !ua.includes('edg')) browser = 'Chrome';
@@ -27,15 +27,15 @@ export function getDeviceName(userAgent?: string): string {
   else if (ua.includes('safari') && !ua.includes('chrome')) browser = 'Safari';
   else if (ua.includes('edg')) browser = 'Edge';
   else if (ua.includes('opera') || ua.includes('opr')) browser = 'Opera';
-  
+
   // Detectar sistema operativo
   let os = '';
   if (ua.includes('windows')) os = 'Windows';
+  else if (ua.includes('iphone') || ua.includes('ipad')) os = 'iOS';
+  else if (ua.includes('android')) os = 'Android';
   else if (ua.includes('mac')) os = 'macOS';
   else if (ua.includes('linux')) os = 'Linux';
-  else if (ua.includes('android')) os = 'Android';
-  else if (ua.includes('iphone') || ua.includes('ipad')) os = 'iOS';
-  
+
   return os ? `${browser} en ${os}` : browser;
 }
 
@@ -70,12 +70,16 @@ export async function createTrustedDevice(
     });
 
     logger.info(
-      `[TRUSTED-DEVICE] Created trusted device for admin ${adminId}: ${deviceName}`
+      { adminId, deviceId: device.id, deviceName },
+      '[TRUSTED-DEVICE] Created trusted device'
     );
 
     return device;
   } catch (error) {
-    logger.error('[TRUSTED-DEVICE] Error creating trusted device:', error);
+    logger.error(
+      { err: error, adminId },
+      '[TRUSTED-DEVICE] Error creating trusted device'
+    );
     throw error;
   }
 }
@@ -106,13 +110,17 @@ export async function verifyTrustedDevice(
       });
 
       logger.debug(
-        `[TRUSTED-DEVICE] Verified device ${device.deviceName} for admin ${adminId}`
+        { adminId, deviceId: device.id, deviceName: device.deviceName },
+        '[TRUSTED-DEVICE] Verified device'
       );
     }
 
     return device;
   } catch (error) {
-    logger.error('[TRUSTED-DEVICE] Error verifying trusted device:', error);
+    logger.error(
+      { err: error, adminId },
+      '[TRUSTED-DEVICE] Error verifying trusted device'
+    );
     return null;
   }
 }
@@ -127,7 +135,10 @@ export async function getTrustedDevices(adminId: string) {
       orderBy: { lastUsedAt: 'desc' },
     });
   } catch (error) {
-    logger.error('[TRUSTED-DEVICE] Error getting trusted devices:', error);
+    logger.error(
+      { err: error, adminId },
+      '[TRUSTED-DEVICE] Error getting trusted devices'
+    );
     return [];
   }
 }
@@ -146,7 +157,10 @@ export async function countActiveTrustedDevices(adminId: string): Promise<number
       },
     });
   } catch (error) {
-    logger.error('[TRUSTED-DEVICE] Error counting trusted devices:', error);
+    logger.error(
+      { err: error, adminId },
+      '[TRUSTED-DEVICE] Error counting trusted devices'
+    );
     return 0;
   }
 }
@@ -161,12 +175,16 @@ export async function revokeTrustedDevice(id: string) {
     });
 
     logger.info(
-      `[TRUSTED-DEVICE] Revoked device ${device.deviceName} (${device.id})`
+      { deviceId: id, deviceName: device.deviceName },
+      '[TRUSTED-DEVICE] Revoked device'
     );
 
     return device;
   } catch (error) {
-    logger.error('[TRUSTED-DEVICE] Error revoking trusted device:', error);
+    logger.error(
+      { err: error, deviceId: id },
+      '[TRUSTED-DEVICE] Error revoking trusted device'
+    );
     throw error;
   }
 }
@@ -181,12 +199,16 @@ export async function revokeAllTrustedDevices(adminId: string) {
     });
 
     logger.info(
-      `[TRUSTED-DEVICE] Revoked all devices for admin ${adminId} (${result.count} devices)`
+      { adminId, removed: result.count },
+      '[TRUSTED-DEVICE] Revoked all devices for admin'
     );
 
     return result.count;
   } catch (error) {
-    logger.error('[TRUSTED-DEVICE] Error revoking all trusted devices:', error);
+    logger.error(
+      { err: error, adminId },
+      '[TRUSTED-DEVICE] Error revoking all trusted devices'
+    );
     throw error;
   }
 }
@@ -206,13 +228,17 @@ export async function cleanExpiredDevices() {
 
     if (result.count > 0) {
       logger.info(
-        `[TRUSTED-DEVICE] Cleaned ${result.count} expired trusted devices`
+        { removed: result.count },
+        '[TRUSTED-DEVICE] Cleaned expired trusted devices'
       );
     }
 
     return result.count;
   } catch (error) {
-    logger.error('[TRUSTED-DEVICE] Error cleaning expired devices:', error);
+    logger.error(
+      { err: error },
+      '[TRUSTED-DEVICE] Error cleaning expired devices'
+    );
     return 0;
   }
 }
@@ -241,7 +267,8 @@ export async function limitDevicesPerAdmin(
       });
 
       logger.info(
-        `[TRUSTED-DEVICE] Removed ${devicesToDelete.length} old devices for admin ${adminId}`
+        { adminId, removed: devicesToDelete.length },
+        '[TRUSTED-DEVICE] Removed old devices for admin'
       );
 
       return devicesToDelete.length;
@@ -249,7 +276,10 @@ export async function limitDevicesPerAdmin(
 
     return 0;
   } catch (error) {
-    logger.error('[TRUSTED-DEVICE] Error limiting devices per admin:', error);
+    logger.error(
+      { err: error, adminId },
+      '[TRUSTED-DEVICE] Error limiting devices per admin'
+    );
     return 0;
   }
 }

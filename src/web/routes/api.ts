@@ -11,7 +11,10 @@ const router = express.Router();
 
 // Extiende Request para incluir la propiedad que inyecta el middleware
 interface RequestWithApiKey extends Request {
-  apiKey?: { name?: string };
+  apiKey?: { 
+    id: string;
+    name: string;
+  };
 }
 
 interface SendMessageRequest {

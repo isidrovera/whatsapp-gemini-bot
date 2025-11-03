@@ -8,7 +8,7 @@ const router = express.Router();
 
 // Tipado mínimo para acceder a session.userId sin que TS se queje
 interface RequestWithSession extends Request {
-  session: { userId?: string };
+  session: Request['session'] & { userId?: string };
 }
 
 /**

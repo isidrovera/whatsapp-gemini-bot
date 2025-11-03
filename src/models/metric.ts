@@ -1,5 +1,5 @@
-import { getPrismaClient } from '../config/database'
-import { logger } from '../utils/logger'
+import { getPrismaClient } from '../config/database.js'
+import { logger } from '../utils/logger.js'
 import type { ConversationMetric } from '@prisma/client'
 
 // Prisma
@@ -38,26 +38,24 @@ function addDays(date: Date, days: number): Date {
 
 /**
  * Obtiene un registro de métricas por fecha (date-only).
- * Como en Prisma el campo es @db.Date, usamos un rango [00:00, 23:59:59] de esa fecha.
+ * Para mayor robustez usamos rango [gte: startOfDay, lt: nextDayStart].
  */
 export async function getByDate(date: Date): Promise<ConversationMetric | null> {
   try {
     const dayStart = startOfDay(date)
-    const dayEnd = endOfDay(date)
+    const nextDay = addDays(dayStart, 1)
 
-    // Como ConversationMetric.date es DATE (sin tiempo), es suficiente comparar con igualdad
-    // pero para seguridad usamos range con gte/lt del día siguiente.
     const metric = await prisma.conversationMetric.findFirst({
       where: {
         date: {
           gte: dayStart,
-          lte: dayEnd,
+          lt: nextDay,
         },
       },
     })
     return metric
-  } catch (e) {
-    logger.error('metric.getByDate error:', e)
+  } catch (err) {
+    logger.error({ err }, 'metric.getByDate error:')
     return null
   }
 }
@@ -71,19 +69,19 @@ export async function getByDateRange(
 ): Promise<ConversationMetric[]> {
   try {
     const s = startOfDay(startDate)
-    const e = endOfDay(endDate)
+    const eNext = addDays(startOfDay(endDate), 1)
 
     return await prisma.conversationMetric.findMany({
       where: {
         date: {
           gte: s,
-          lte: e,
+          lt: eNext,
         },
       },
       orderBy: { date: 'asc' },
     })
-  } catch (e) {
-    logger.error('metric.getByDateRange error:', e)
+  } catch (err) {
+    logger.error({ err }, 'metric.getByDateRange error:')
     return []
   }
 }
@@ -93,20 +91,21 @@ export async function getByDateRange(
  */
 export async function getLastDays(days: number): Promise<ConversationMetric[]> {
   try {
-    const today = startOfDay(new Date())
-    const from = addDays(today, -Math.max(0, days - 1))
+    const todayStart = startOfDay(new Date())
+    const from = addDays(todayStart, -Math.max(0, days - 1))
+    const tomorrowStart = addDays(todayStart, 1)
 
     return await prisma.conversationMetric.findMany({
       where: {
         date: {
           gte: from,
-          lte: endOfDay(today),
+          lt: tomorrowStart,
         },
       },
       orderBy: { date: 'asc' },
     })
-  } catch (e) {
-    logger.error('metric.getLastDays error:', e)
+  } catch (err) {
+    logger.error({ err }, 'metric.getLastDays error:')
     return []
   }
 }
@@ -157,16 +156,15 @@ export async function calculateToday(): Promise<Omit<ConversationMetric, 'id'> &
       },
     })
 
-    // Por ahora 0 hasta definir reglas (ej. por keywords, tags, etc.)
+    // Por ahora 0 hasta definir reglas
     const serviceRequests = 0
     const salesInquiries = 0
 
-    // Si quieres calcular avgResponseTime, necesitarás una tabla/relación de mensajes
-    // que marque latencias bot/usuario → lo dejamos en null
+    // Sin lógica de latencias por ahora
     const avgResponseTime: number | null = null
 
     return {
-      date: dayStart, // date-only semánticamente
+      date: dayStart, // semánticamente date-only
       totalMessages,
       uniqueContacts,
       newContacts,
@@ -175,9 +173,10 @@ export async function calculateToday(): Promise<Omit<ConversationMetric, 'id'> &
       humanTakeovers,
       avgResponseTime,
       createdAt: new Date(),
+      // updatedAt: new Date(), // Descomenta si tu esquema lo exige
     }
-  } catch (e) {
-    logger.error('metric.calculateToday error:', e)
+  } catch (err) {
+    logger.error({ err }, 'metric.calculateToday error:')
     // Fallback seguro
     return {
       date: startOfDay(new Date()),
@@ -189,6 +188,7 @@ export async function calculateToday(): Promise<Omit<ConversationMetric, 'id'> &
       humanTakeovers: 0,
       avgResponseTime: null,
       createdAt: new Date(),
+      // updatedAt: new Date(), // Descomenta si tu esquema lo exige
     }
   }
 }

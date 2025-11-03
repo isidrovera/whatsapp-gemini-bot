@@ -37,7 +37,7 @@ import apiRouter from './routes/api.js';
 // Middleware de auth
 import { requireAuth } from './middleware/auth.js';
 
-//Compañias
+// Compañias
 import companiesRouter from './routes/companies.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -77,14 +77,27 @@ app.use(cookieParser());
 // ======================
 // SESSION
 // ======================
+
+// En contenedores/proxy (Docker, Nginx) es necesario
+app.set('trust proxy', 1);
+
+// Configuración de cookie según entorno.
+// - En producción con HTTPS: secure=true y sameSite='none'
+// - En desarrollo (HTTP localhost): secure=false y sameSite='lax'
+//   Puedes forzar con env COOKIE_SECURE=false
+const isProd = process.env.NODE_ENV === 'production';
+const cookieSecure = isProd && process.env.COOKIE_SECURE !== 'false';
+const cookieSameSite: 'lax' | 'strict' | 'none' = cookieSecure ? 'none' : 'lax';
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'whatsapp-bot-secret-key-change-me',
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === 'production',
+      secure: cookieSecure,      // false en HTTP local; true en prod HTTPS
       httpOnly: true,
+      sameSite: cookieSameSite,  // 'none' si secure=true; 'lax' si no
       maxAge: 24 * 60 * 60 * 1000, // 24h
     },
   })
@@ -99,7 +112,7 @@ app.set('views', path.join(__dirname, 'views'));
 // Helper global para las vistas
 app.use((req, res, next) => {
   res.locals.page = req.path.split('/')[1] || 'dashboard';
-  res.locals.user = req.session?.username || null;
+  res.locals.user = (req.session as any)?.username || null;
   next();
 });
 
@@ -162,7 +175,6 @@ app.use('/templates', requireAuth, templatesRouter);
 app.use('/metrics', requireAuth, metricsRouter);
 app.use('/companies', requireAuth, companiesRouter);
 
-
 // Gestión de API keys desde el panel interno
 app.use('/api-keys', requireAuth, apiKeysRouter);
 
@@ -188,15 +200,18 @@ app.use(
 
     // logger estructurado
     try {
-      logger.error({
-        message: err?.message,
-        name: err?.name,
-        stack: err?.stack,
-        code: err?.code,
-        meta: err?.meta || null,
-        url: req.originalUrl,
-        method: req.method,
-      }, 'Web server error');
+      logger.error(
+        {
+          message: err?.message,
+          name: err?.name,
+          stack: err?.stack,
+          code: err?.code,
+          meta: err?.meta || null,
+          url: req.originalUrl,
+          method: req.method,
+        },
+        'Web server error'
+      );
     } catch (e) {
       console.error('Logger failed while logging error:', e);
     }
@@ -222,12 +237,13 @@ app.use(
 process.on('unhandledRejection', (reason) => {
   try {
     prettyConsoleLogError('unhandledRejection', reason);
-    logger.error({
-      reason:
-        reason && (reason as any).stack
-          ? (reason as any).stack
-          : reason,
-    }, 'Unhandled Rejection');
+    logger.error(
+      {
+        reason:
+          reason && (reason as any).stack ? (reason as any).stack : reason,
+      },
+      'Unhandled Rejection'
+    );
   } catch (e) {
     console.error('Error logging unhandledRejection', e);
   }
@@ -236,10 +252,13 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (err) => {
   try {
     prettyConsoleLogError('uncaughtException', err);
-    logger.error({
-      message: err?.message,
-      stack: err?.stack,
-    }, 'Uncaught Exception');
+    logger.error(
+      {
+        message: err?.message,
+        stack: err?.stack,
+      },
+      'Uncaught Exception'
+    );
   } catch (e) {
     console.error('Error logging uncaughtException', e);
   } finally {

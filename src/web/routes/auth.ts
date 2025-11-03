@@ -23,14 +23,14 @@ interface SessionLike {
   tempUsername?: string;
   destroy?: (cb: (err?: unknown) => void) => void;
 }
-interface RequestWithSession extends express.Request {
+type RequestWithSession = express.Request & {
   session: SessionLike;
   cookies?: Record<string, string>;
-}
+};
 
 // Nombre de la cookie para dispositivo confiable
 const TRUSTED_DEVICE_COOKIE = 'td_token';
-const COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 días en milisegundos
+const COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 días
 
 // ==========================================
 // Página de login
@@ -58,7 +58,6 @@ router.post('/login', async (req: RequestWithSession, res) => {
 
     // 1. Validar credenciales
     const isValid = await adminModel.verifyPassword(username, password);
-
     if (!isValid) {
       return res.render('login', {
         title: 'Login',
@@ -66,9 +65,8 @@ router.post('/login', async (req: RequestWithSession, res) => {
       });
     }
 
-    // 2. Obtener admin con todos los campos
+    // 2. Obtener admin
     const admin = await adminModel.findByUsername(username);
-
     if (!admin) {
       return res.render('login', {
         title: 'Login',
@@ -78,7 +76,7 @@ router.post('/login', async (req: RequestWithSession, res) => {
 
     // 3. Si el admin TIENE 2FA activado
     if (admin.twoFAEnabled) {
-      // 🔐 Verificar si hay un dispositivo confiable en cookies
+      // Verificar dispositivo confiable
       const trustedToken = req.cookies?.[TRUSTED_DEVICE_COOKIE];
 
       if (trustedToken) {
@@ -88,7 +86,7 @@ router.post('/login', async (req: RequestWithSession, res) => {
         );
 
         if (trustedDevice) {
-          // ✅ Dispositivo confiable válido - skip 2FA
+          // ✅ Skip 2FA por dispositivo confiable
           req.session.userId = admin.id;
           req.session.username = admin.username;
 
@@ -102,15 +100,11 @@ router.post('/login', async (req: RequestWithSession, res) => {
           if (!getConnectionStatus() && hasQR()) {
             return res.redirect('/auth/qr');
           }
-
           return res.redirect('/');
         } else {
-          // Token inválido o expirado - eliminar cookie
+          // Token inválido/expirado
           res.clearCookie(TRUSTED_DEVICE_COOKIE);
-          logger.debug(
-            { username },
-            '[AUTH] Cleared invalid trusted device token'
-          );
+          logger.debug({ username }, '[AUTH] Cleared invalid trusted device token');
         }
       }
 
@@ -118,26 +112,20 @@ router.post('/login', async (req: RequestWithSession, res) => {
       req.session.tempUserId = admin.id;
       req.session.tempUsername = admin.username;
 
-      logger.info(
-        { username },
-        '[AUTH] User passed 1st factor (password) and requires 2FA'
-      );
-
+      logger.info({ username }, '[AUTH] User passed 1st factor (password) and requires 2FA');
       return res.redirect('/auth/2fa');
     }
 
-    // 4. Si NO tiene 2FA -> login normal
+    // 4. Sin 2FA -> login normal
     req.session.userId = admin.id;
     req.session.username = admin.username;
 
     await adminModel.updateLastLogin(admin.id, req.ip);
-
     logger.info({ username }, '[AUTH] User logged in');
 
     if (!getConnectionStatus() && hasQR()) {
       return res.redirect('/auth/qr');
     }
-
     return res.redirect('/');
   } catch (err) {
     logger.error({ err }, 'Error in login');
@@ -149,7 +137,7 @@ router.post('/login', async (req: RequestWithSession, res) => {
 });
 
 // ==========================================
-// 2FA: mostrar formulario para ingresar el código
+// 2FA: mostrar formulario
 // ==========================================
 router.get('/2fa', (req: RequestWithSession, res) => {
   if (!req.session.tempUserId) {
@@ -167,7 +155,6 @@ router.get('/2fa', (req: RequestWithSession, res) => {
 // ==========================================
 router.post('/2fa', async (req: RequestWithSession, res) => {
   try {
-    // No hay usuario temporal -> que haga login
     if (!req.session.tempUserId) {
       return res.redirect('/auth/login');
     }
@@ -181,14 +168,12 @@ router.post('/2fa', async (req: RequestWithSession, res) => {
       });
     }
 
-    // Buscar admin temporal
     const admin = await adminModel.findById(req.session.tempUserId);
-
     if (!admin || !admin.twoFAEnabled || !admin.twoFASecret) {
       return res.redirect('/auth/login');
     }
 
-    // Validar código TOTP
+    // Validar TOTP
     const isValid = speakeasy.totp.verify({
       secret: admin.twoFASecret,
       encoding: 'base32',
@@ -212,23 +197,18 @@ router.post('/2fa', async (req: RequestWithSession, res) => {
     delete req.session.tempUsername;
 
     await adminModel.updateLastLogin(admin.id, req.ip);
-
     logger.info({ username: admin.username }, '[AUTH] 2FA success');
 
-    // 🆕 Si el usuario marcó "Confiar en este dispositivo"
+    // Confiar dispositivo
     if (trustDevice === 'on') {
       try {
-        // Limitar a máximo 5 dispositivos
         await trustedDeviceModel.limitDevicesPerAdmin(admin.id, 5);
-
-        // Crear nuevo dispositivo confiable
         const device = await trustedDeviceModel.createTrustedDevice(admin.id, {
           userAgent: req.get('user-agent'),
           ipAddress: req.ip,
           daysValid: 30
         });
 
-        // Guardar token en cookie (30 días, httpOnly, secure en producción)
         res.cookie(TRUSTED_DEVICE_COOKIE, device.deviceToken, {
           maxAge: COOKIE_MAX_AGE,
           httpOnly: true,
@@ -249,7 +229,6 @@ router.post('/2fa', async (req: RequestWithSession, res) => {
     if (!getConnectionStatus() && hasQR()) {
       return res.redirect('/auth/qr');
     }
-
     return res.redirect('/');
   } catch (err) {
     logger.error({ err }, 'Error in 2FA verification');

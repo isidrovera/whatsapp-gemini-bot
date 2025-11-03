@@ -3,6 +3,14 @@ import { logger } from '../utils/logger.js';
 import * as systemVar from '../models/systemVar.js';
 import * as calendar from '../models/calendar.js';
 
+/** Tipado de la respuesta Nager.Date */
+type NagerHoliday = { date: string; localName: string; name: string };
+
+/** Valida formato YYYY-MM-DD */
+function isValidYMD(ymd: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(ymd);
+}
+
 /**
  * Normaliza una fecha yyyy-mm-dd a Date UTC (00:00Z).
  */
@@ -13,7 +21,11 @@ function ymdToUTC(ymd: string): Date {
 /**
  * Inserta/actualiza en CalendarEvent evitando duplicados por (date,title,type).
  */
-async function upsertHoliday(ymd: string, title: string, type: 'holiday' | 'closure' = 'holiday') {
+async function upsertHoliday(
+  ymd: string,
+  title: string,
+  type: 'holiday' | 'closure' = 'holiday'
+) {
   const date = ymdToUTC(ymd);
   // Usamos update con búsqueda previa (por fecha y título)
   const exists = await calendar.findByDateAndTitle(ymd, title);
@@ -30,12 +42,16 @@ export async function syncFromNager(year: number) {
   logger.info(`[HOLIDAYS] Fetching Nager.Date for ${year} -> ${url}`);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Nager.Date error ${res.status}`);
-  const data: Array<{ date: string; localName: string; name: string }> = await res.json();
+
+  // Corrección: res.json() es unknown en TS estricto -> casteamos al tipo esperado
+  const data = (await res.json()) as NagerHoliday[];
 
   let created = 0;
   for (const h of data) {
-    const title = h.localName || h.name;
-    const ymd = h.date; // YYYY-MM-DD (UTC)
+    const title = (h.localName || h.name || '').trim();
+    const ymd = String(h.date || '').trim(); // esperado YYYY-MM-DD (UTC)
+    if (!title || !isValidYMD(ymd)) continue;
+
     const existed = await calendar.findByDateAndTitle(ymd, title);
     if (!existed) {
       await upsertHoliday(ymd, title, 'holiday');
@@ -57,8 +73,9 @@ function parseICS(icsText: string): Array<{ ymd: string; title: string }> {
   const out: Array<{ ymd: string; title: string }> = [];
   let current: { ymd?: string; title?: string } = {};
   for (const line of lines) {
-    if (line.startsWith('BEGIN:VEVENT')) current = {};
-    else if (line.startsWith('DTSTART;VALUE=DATE:')) {
+    if (line.startsWith('BEGIN:VEVENT')) {
+      current = {};
+    } else if (line.startsWith('DTSTART;VALUE=DATE:')) {
       const raw = line.split(':')[1]?.trim(); // YYYYMMDD
       if (raw && raw.length === 8) {
         const y = raw.slice(0, 4);
@@ -69,7 +86,9 @@ function parseICS(icsText: string): Array<{ ymd: string; title: string }> {
     } else if (line.startsWith('SUMMARY:')) {
       current.title = line.slice(8).trim();
     } else if (line.startsWith('END:VEVENT')) {
-      if (current.ymd && current.title) out.push({ ymd: current.ymd, title: current.title });
+      if (current.ymd && current.title && isValidYMD(current.ymd)) {
+        out.push({ ymd: current.ymd, title: current.title });
+      }
     }
   }
   return out;

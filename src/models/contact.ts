@@ -1159,7 +1159,7 @@ export async function importContactsFromExcel(rows: Array<{
 
       results.push({ phoneNumber: phone, status: 'OK' });
     } catch (err: any) {
-      logger.error({ err: error },'Error importing row:');
+      logger.error({ err },'Error importing row:');
       results.push({
         phoneNumber: row.phoneNumber,
         status: 'ERROR',

@@ -16,16 +16,12 @@ const upload = multer({ storage: multer.memoryStorage() });
  * VISTA PRINCIPAL
  * ------------------------- */
 
-// Ver página de contactos
 router.get('/', async (req, res) => {
   try {
     const contacts = await contactModel.getAll();
-    res.render('contacts', { 
-      title: 'Contactos',
-      contacts 
-    });
+    res.render('contacts', { title: 'Contactos', contacts });
   } catch (error) {
-    logger.error({ err: error },'Error loading contacts:');
+    logger.error({ err: error }, 'Error loading contacts:');
     res.status(500).send('Error loading contacts');
   }
 });
@@ -34,23 +30,17 @@ router.get('/', async (req, res) => {
 router.post('/api/:contactId/company/link-existing', async (req, res) => {
   try {
     const { companyId, role, primary } = req.body;
+    if (!companyId) return res.status(400).json({ error: 'companyId requerido' });
 
-    if (!companyId) {
-      return res.status(400).json({ error: 'companyId requerido' });
-    }
-
-    const pivot = await contactModel.linkExistingCompanyToContact(
-      req.params.contactId,
-      {
-        companyId,
-        role,
-        isPrimary: !!primary,
-      }
-    );
+    const pivot = await contactModel.linkExistingCompanyToContact(req.params.contactId, {
+      companyId,
+      role,
+      isPrimary: !!primary,
+    });
 
     res.json({ success: true, pivot });
   } catch (error) {
-    logger.error({ err: error },'Error linking existing company to contact:');
+    logger.error({ err: error }, 'Error linking existing company to contact:');
     res.status(500).json({ error: 'Error linking existing company to contact' });
   }
 });
@@ -59,31 +49,27 @@ router.post('/api/:contactId/company/link-existing', async (req, res) => {
  * API BÁSICA
  * ------------------------- */
 
-// API: Obtener todos los contactos
 router.get('/api', async (req, res) => {
   try {
-    const { limit, offset } = req.query;
+    const { limit, offset } = req.query as { limit?: string; offset?: string };
     const contacts = await contactModel.getAll(
       limit ? parseInt(String(limit), 10) : undefined,
       offset ? parseInt(String(offset), 10) : undefined
     );
     res.json(contacts);
   } catch (error) {
-    logger.error({ err: error },'Error getting contacts:');
+    logger.error({ err: error }, 'Error getting contacts:');
     res.status(500).json({ error: 'Error getting contacts' });
   }
 });
 
-// API: Obtener un contacto (por phoneNumber)
 router.get('/api/:phoneNumber', async (req, res) => {
   try {
     const contact = await contactModel.findByPhone(req.params.phoneNumber);
-    if (!contact) {
-      return res.status(404).json({ error: 'Contact not found' });
-    }
+    if (!contact) return res.status(404).json({ error: 'Contact not found' });
     res.json(contact);
   } catch (error) {
-    logger.error({ err: error },'Error getting contact:');
+    logger.error({ err: error }, 'Error getting contact:');
     res.status(500).json({ error: 'Error getting contact' });
   }
 });
@@ -92,59 +78,54 @@ router.get('/api/:phoneNumber', async (req, res) => {
  * ESTADO / BLOQUEO / TAKEOVER
  * ------------------------- */
 
-// API: Actualizar estado
 router.put('/api/:phoneNumber/state', async (req, res) => {
   try {
     const { state } = req.body;
     await contactModel.updateState(req.params.phoneNumber, state);
     res.json({ success: true, message: 'Estado actualizado' });
   } catch (error) {
-    logger.error({ err: error },'Error updating state:');
+    logger.error({ err: error }, 'Error updating state:');
     res.status(500).json({ error: 'Error updating state' });
   }
 });
 
-// API: Bloquear contacto
 router.post('/api/:phoneNumber/block', async (req, res) => {
   try {
     const { reason } = req.body;
     await contactModel.blockContact(req.params.phoneNumber, reason || 'Bloqueado desde panel web');
     res.json({ success: true, message: 'Contacto bloqueado' });
   } catch (error) {
-    logger.error({ err: error },'Error blocking contact:');
+    logger.error({ err: error }, 'Error blocking contact:');
     res.status(500).json({ error: 'Error blocking contact' });
   }
 });
 
-// API: Desbloquear contacto
-router.post('/api/:phoneNumber/unblock', async (req, res) => {
+router.post('/api/:phoneNumber/unblock', async (_req, res) => {
   try {
-    await contactModel.unblockContact(req.params.phoneNumber);
+    await contactModel.unblockContact(res.req.params.phoneNumber);
     res.json({ success: true, message: 'Contacto desbloqueado' });
   } catch (error) {
-    logger.error({ err: error },'Error unblocking contact:');
+    logger.error({ err: error }, 'Error unblocking contact:');
     res.status(500).json({ error: 'Error unblocking contact' });
   }
 });
 
-// API: Activar takeover
 router.post('/api/:phoneNumber/takeover', async (req, res) => {
   try {
     await contactModel.setHumanTakeover(req.params.phoneNumber);
     res.json({ success: true, message: 'Takeover activado' });
   } catch (error) {
-    logger.error({ err: error },'Error setting takeover:');
+    logger.error({ err: error }, 'Error setting takeover:');
     res.status(500).json({ error: 'Error setting takeover' });
   }
 });
 
-// API: Liberar takeover
 router.post('/api/:phoneNumber/release', async (req, res) => {
   try {
     await contactModel.releaseHumanTakeover(req.params.phoneNumber);
     res.json({ success: true, message: 'Takeover liberado' });
   } catch (error) {
-    logger.error({ err: error },'Error releasing takeover:');
+    logger.error({ err: error }, 'Error releasing takeover:');
     res.status(500).json({ error: 'Error releasing takeover' });
   }
 });
@@ -153,7 +134,6 @@ router.post('/api/:phoneNumber/release', async (req, res) => {
  * MULTIEMPRESA
  * ------------------------- */
 
-// Agregar/actualizar una empresa en un contacto
 router.post('/api/:contactId/company', async (req, res) => {
   try {
     const { ruc, name, role, primary } = req.body;
@@ -167,29 +147,27 @@ router.post('/api/:contactId/company', async (req, res) => {
 
     res.json({ success: true, pivot });
   } catch (error) {
-    logger.error({ err: error },'Error adding company to contact:');
+    logger.error({ err: error }, 'Error adding company to contact:');
     res.status(500).json({ error: 'Error adding company to contact' });
   }
 });
 
-// Marcar una empresa como primaria
 router.post('/api/:contactId/company/:companyId/primary', async (req, res) => {
   try {
     await contactModel.setPrimaryCompany(req.params.contactId, req.params.companyId);
     res.json({ success: true, message: 'Empresa principal actualizada' });
   } catch (error) {
-    logger.error({ err: error },'Error setting primary company:');
+    logger.error({ err: error }, 'Error setting primary company:');
     res.status(500).json({ error: 'Error setting primary company' });
   }
 });
 
-// Quitar empresa de un contacto
 router.delete('/api/:contactId/company/:companyId', async (req, res) => {
   try {
     await contactModel.removeCompanyFromContact(req.params.contactId, req.params.companyId);
     res.json({ success: true, message: 'Empresa removida del contacto' });
   } catch (error) {
-    logger.error({ err: error },'Error removing company from contact:');
+    logger.error({ err: error }, 'Error removing company from contact:');
     res.status(500).json({ error: 'Error removing company from contact' });
   }
 });
@@ -198,24 +176,22 @@ router.delete('/api/:contactId/company/:companyId', async (req, res) => {
  * EDITAR / ELIMINAR CONTACTO
  * ------------------------- */
 
-// Editar info manual del contacto
 router.put('/api/contact/:contactId', async (req, res) => {
   try {
     const updated = await contactModel.updateContactInfo(req.params.contactId, req.body);
     res.json({ success: true, contact: updated });
   } catch (error) {
-    logger.error({ err: error },'Error updating contact info:');
+    logger.error({ err: error }, 'Error updating contact info:');
     res.status(500).json({ error: 'Error updating contact info' });
   }
 });
 
-// Eliminar contacto completo
 router.delete('/api/contact/:contactId', async (req, res) => {
   try {
     await contactModel.deleteContact(req.params.contactId);
     res.json({ success: true, message: 'Contacto eliminado' });
   } catch (error) {
-    logger.error({ err: error },'Error deleting contact:');
+    logger.error({ err: error }, 'Error deleting contact:');
     res.status(500).json({ error: 'Error deleting contact' });
   }
 });
@@ -224,75 +200,51 @@ router.delete('/api/contact/:contactId', async (req, res) => {
  * IMPORT / EXPORT
  * ------------------------- */
 
-// Exportar contactos para Excel
-router.get('/api-export', async (req, res) => {
+router.get('/api-export', async (_req, res) => {
   try {
     const data = await contactModel.exportContactsToExcelData();
-    
-    // Crear workbook
+
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Contactos');
-    
-    // Definir columnas basadas en la estructura de tus datos
-    // Ajusta estas columnas según lo que devuelva exportContactsToExcelData()
-    const firstRow = data[0] || {};
-    const columns = Object.keys(firstRow).map(key => ({
+
+    const firstRow = data[0] ?? {};
+    const columns = Object.keys(firstRow).map((key) => ({
       header: key.charAt(0).toUpperCase() + key.slice(1),
-      key: key,
-      width: 20
+      key,
+      width: 20,
     }));
-    
-    worksheet.columns = columns;
-    
-    // Agregar datos
-    data.forEach(row => {
-      worksheet.addRow(row);
-    });
-    
-    // Estilizar encabezados
+    worksheet.columns = columns as any;
+
+    data.forEach((row) => worksheet.addRow(row));
+
     worksheet.getRow(1).font = { bold: true };
     worksheet.getRow(1).fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FFE0E0E0' }
-    };
-    
-    // Configurar respuesta para descarga
+      fgColor: { argb: 'FFE0E0E0' },
+    } as any;
+
     const timestamp = new Date().toISOString().split('T')[0];
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    );
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename=contactos-${timestamp}.xlsx`
-    );
-    
-    // Escribir y enviar
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=contactos-${timestamp}.xlsx`);
+
     await workbook.xlsx.write(res);
     res.end();
-    
   } catch (error) {
-    logger.error({ err: error },'Error exporting contacts:');
+    logger.error({ err: error }, 'Error exporting contacts:');
     res.status(500).json({ error: 'Error exporting contacts' });
   }
 });
 
-// Importar contactos desde Excel parseado (JSON)
 router.post('/api-import', async (req, res) => {
   try {
-    const rows = req.body.rows;
-    if (!Array.isArray(rows)) {
-      return res.status(400).json({ error: 'rows must be an array' });
-    }
+    const rows = (req.body as any).rows;
+    if (!Array.isArray(rows)) return res.status(400).json({ error: 'rows must be an array' });
 
     const result = await contactModel.importContactsFromExcel(rows);
-    res.json({
-      importedAt: new Date(),
-      result,
-    });
+    res.json({ importedAt: new Date(), result });
   } catch (error) {
-    logger.error({ err: error },'Error importing contacts:');
+    logger.error({ err: error }, 'Error importing contacts:');
     res.status(500).json({ error: 'Error importing contacts' });
   }
 });
@@ -300,105 +252,99 @@ router.post('/api-import', async (req, res) => {
 // NUEVA RUTA: Importar contactos desde archivo Excel (.xlsx)
 router.post('/api-import-file', upload.single('file'), async (req, res) => {
   try {
-    if (!req.file) {
+    if (!req.file || !req.file.buffer) {
       return res.status(400).json({ error: 'No se recibió ningún archivo' });
     }
 
-    // Leer el archivo Excel desde el buffer
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(req.file.buffer);
-    
-    const worksheet = workbook.getWorksheet(1); // Primera hoja
+
+    // ✅ Convertir a ArrayBuffer **puro** copiando a Uint8Array (evita el tipo Buffer<ArrayBufferLike>)
+    const u8 = new Uint8Array(req.file.buffer); // copia los bytes
+    const arrayBuffer: ArrayBuffer = u8.buffer;  // ArrayBuffer limpio
+
+    await workbook.xlsx.load(arrayBuffer);
+
+    const worksheet = workbook.getWorksheet(1);
     if (!worksheet) {
       return res.status(400).json({ error: 'El archivo no contiene hojas de cálculo' });
     }
 
-    // Parsear las filas del Excel
-    const rows: Array<{
-      phoneNumber: string;
-      name?: string;
-      dni?: string;
-      companies?: Array<{
-        ruc: string;
-        name: string;
-        role?: string;
-        primary?: boolean;
-      }>;
-    }> = [];
+    type ImportedCompany = { ruc: string; name: string; role?: string; primary?: boolean };
+    type ImportedRow = { phoneNumber: string; name?: string; dni?: string; companies?: ImportedCompany[] };
 
-    // Asumiendo que la primera fila son encabezados
+    const rows: ImportedRow[] = [];
+
+    const cellToString = (v: unknown) =>
+      v == null
+        ? ''
+        : typeof v === 'object'
+        ? String(
+            (v as any).text ??
+              (v as any).result ??
+              (v as any).richText?.map((t: any) => t.text).join('') ??
+              (v as any).toString?.() ??
+              ''
+          )
+        : String(v);
+
     // Columnas esperadas: phoneNumber, name, dni, companyRuc, companyName, companyRole
     worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return; // Saltar encabezados
+      if (rowNumber === 1) return;
 
-      const phoneNumber = row.getCell(1).value?.toString().trim();
-      if (!phoneNumber) return; // Saltar filas sin teléfono
+      const c1 = cellToString(row.getCell(1).value);
+      const c2 = cellToString(row.getCell(2).value);
+      const c3 = cellToString(row.getCell(3).value);
+      const c4 = cellToString(row.getCell(4).value);
+      const c5 = cellToString(row.getCell(5).value);
+      const c6 = cellToString(row.getCell(6).value);
 
-      const name = row.getCell(2).value?.toString().trim() || undefined;
-      const dni = row.getCell(3).value?.toString().trim() || undefined;
-      const companyRuc = row.getCell(4).value?.toString().trim();
-      const companyName = row.getCell(5).value?.toString().trim();
-      const companyRole = row.getCell(6).value?.toString().trim();
+      const phoneNumber = c1.trim();
+      if (!phoneNumber) return;
 
-      const rowData: any = {
-        phoneNumber,
-        name,
-        dni,
-      };
+      const name = c2.trim() || undefined;
+      const dni = c3.trim() || undefined;
+      const companyRuc = c4.trim();
+      const companyName = c5.trim();
+      const companyRole = c6.trim();
 
-      // Si tiene datos de empresa, agregarlos
+      const rowData: ImportedRow = { phoneNumber, name, dni };
+
       if (companyRuc && companyName) {
-        rowData.companies = [{
-          ruc: companyRuc,
-          name: companyName,
-          role: companyRole,
-          primary: true,
-        }];
+        rowData.companies = [{ ruc: companyRuc, name: companyName, role: companyRole || undefined, primary: true }];
       }
 
       rows.push(rowData);
     });
 
     if (rows.length === 0) {
-      return res.status(400).json({ 
-        error: 'El archivo no contiene datos válidos o está vacío' 
-      });
+      return res.status(400).json({ error: 'El archivo no contiene datos válidos o está vacío' });
     }
 
-    // Importar usando la función existente
     const result = await contactModel.importContactsFromExcel(rows);
 
-    res.json({
-      success: true,
-      importedAt: new Date(),
-      totalRows: rows.length,
-      result,
-    });
-
+    res.json({ success: true, importedAt: new Date(), totalRows: rows.length, result });
   } catch (error) {
-    logger.error({ err: error },'Error importing Excel file:');
-    res.status(500).json({ 
+    logger.error({ err: error }, 'Error importing Excel file:');
+    res.status(500).json({
       error: 'Error procesando el archivo Excel',
-      details: error instanceof Error ? error.message : String(error)
+      details: error instanceof Error ? error.message : String(error),
     });
   }
 });
 
-// Listar todas las empresas existentes (para selector en modal)
+/* -------------------------
+ * EMPRESAS (selector modal)
+ * ------------------------- */
+
 router.get('/api-companies', async (_req, res) => {
   try {
     const companies = await prisma.company.findMany({
       orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        ruc: true,
-      },
+      select: { id: true, name: true, ruc: true },
     });
-
     res.json({ ok: true, companies });
   } catch (error) {
-    logger.error({ err: error },'Error listing companies:');
+    logger.error({ err: error }, 'Error listing companies:');
     res.status(500).json({ error: 'Error listing companies' });
   }
 });

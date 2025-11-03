@@ -21,6 +21,24 @@ import * as externalService from './external.js'
 import { replaceVariables } from '../utils/formatters.js'
 
 // ============================================================================
+// Tipos auxiliares mínimos para evitar TS en campos que usamos de contact
+// ============================================================================
+type ContactLike = {
+  id: string
+  name: string | null
+  dni: string | null
+  phoneNumber: string
+  billysId: string | null
+  ruc?: string | null
+  companyName?: string | null
+  state: string
+  isBlocked: boolean
+  humanTakeoverAt: Date | null
+  nextAction?: string | null
+  companies?: any[]
+}
+
+// ============================================================================
 // TRACKER DE ENLACES
 // ============================================================================
 interface LinkTracking {
@@ -38,9 +56,8 @@ function shouldSendNewLink (phoneNumber: string, newUrl: string): boolean {
   const elapsed = now - tracked.lastLinkSentAt.getTime()
   if (tracked.lastLinkUrl === newUrl && elapsed < LINK_COOLDOWN_MS) {
     logger.info(
-      `[LINK-TRACKER] Skipping duplicate link for ${phoneNumber} (sent ${Math.round(
-        elapsed / 1000
-      )}s ago)`
+      { phoneNumber, elapsedSec: Math.round(elapsed / 1000), url: newUrl },
+      '[LINK-TRACKER] Skipping duplicate link'
     )
     return false
   }
@@ -85,8 +102,8 @@ function looksLikeMenuAnswer (text: string): boolean {
 // ============================================================================
 // HELPERS DE CONTEXTO (DINÁMICO)
 // ============================================================================
-async function buildUserContext (contact: any, phoneNumber: string) {
-  const primaryData = contactModel.resolvePrimaryCompany(contact)
+async function buildUserContext (contact: ContactLike, phoneNumber: string) {
+  const primaryData = contactModel.resolvePrimaryCompany(contact as any)
 
   const activeCompanyName =
     primaryData.companyName || contact.companyName || null
@@ -104,7 +121,11 @@ async function buildUserContext (contact: any, phoneNumber: string) {
     if (customerInfo) {
       equipmentContext = odooService.formatEquipmentContext(customerInfo)
       logger.info(
-        `[ODOO] Found ${customerInfo.equipment.length} equipment(s) for ${activeCompanyName}`
+        {
+          company: activeCompanyName,
+          equipments: customerInfo.equipment?.length || 0
+        },
+        '[ODOO] Customer equipment found'
       )
     }
   }
@@ -344,7 +365,7 @@ async function renderTemplateByCategory (
     const raw = t.content || ''
     return templateModel.render(raw, vars)
   } catch (err) {
-    logger.error('[TEMPLATE] Error rendering template:', err)
+    logger.error({ err, category }, '[TEMPLATE] Error rendering template')
     return null
   }
 }
@@ -454,18 +475,22 @@ export async function processMessage (
 ): Promise<string> {
   try {
     logger.info(
-      `Processing message for ${phoneNumber}: ${messageText.substring(
-        0,
-        80
-      )}... ${hasMedia ? '[+MEDIA]' : ''}`
+      {
+        phoneNumber,
+        preview: messageText.substring(0, 80),
+        hasMedia
+      },
+      '[GEMINI] Processing message'
     )
 
-    // 0. contacto
-    let contact = await contactModel.findByPhone(phoneNumber)
-    if (!contact) {
-      contact = await contactModel.create(phoneNumber)
-      logger.info(`New contact created: ${phoneNumber}`)
+    // 0. contacto (narrowing: aseguramos no-null)
+    let found = await contactModel.findByPhone(phoneNumber)
+    if (!found) {
+      const created = await contactModel.create(phoneNumber)
+      logger.info({ phoneNumber }, 'New contact created')
+      found = created as any
     }
+    const contact: ContactLike = found as ContactLike
 
     // 1. guardar mensaje user
     let contentToSave = messageText
@@ -590,23 +615,28 @@ export async function processMessage (
           forceHuman = true
         } else {
           logger.debug(
-            `[HUMAN-GUARD] HUMANO tag present but humanTakeoverAt is stale (+${Math.round(
-              elapsedMs / 1000
-            )}s) → Gemini allowed`
+            {
+              elapsedSec: Math.round(elapsedMs / 1000)
+            },
+            '[HUMAN-GUARD] HUMANO tag present but humanTakeoverAt is stale → Gemini allowed'
           )
         }
       } else {
         logger.debug(
+          {},
           '[HUMAN-GUARD] HUMANO tag present but no humanTakeoverAt → Gemini allowed'
         )
       }
     }
 
-    logger.debug('[FLOW] forceHuman decision:', {
-      forceHuman,
-      hasHumanTag: tagNames.includes('HUMANO'),
-      humanTakeoverAt: contact.humanTakeoverAt || null
-    })
+    logger.debug(
+      {
+        forceHuman,
+        hasHumanTag: tagNames.includes('HUMANO'),
+        humanTakeoverAt: contact.humanTakeoverAt || null
+      },
+      '[FLOW] forceHuman decision'
+    )
 
     // 7. intents
     const {
@@ -784,13 +814,15 @@ El usuario SÍ pide remoto. Pide o confirma el ID UNA sola vez.
     })
 
     logger.info(
-      `[GEMINI] Sending enriched message (${finalMessageToModel.length} chars)`
+      { length: finalMessageToModel.length },
+      '[GEMINI] Sending enriched message'
     )
     const result = await chat.sendMessage(finalMessageToModel)
     let response = result.response.text() || ''
 
     logger.info(
-      `[GEMINI] Initial response: ${response.substring(0, 160)}...`
+      { preview: response.substring(0, 160) },
+      '[GEMINI] Initial response'
     )
 
     // 12. enlaces / odoo
@@ -828,12 +860,16 @@ El usuario SÍ pide remoto. Pide o confirma el ID UNA sola vez.
 
         trackLinkSent(phoneNumber, serviceUrl)
         logger.info(
-          `[GEMINI] Link added with equipment context (${customerInfo.equipment?.length || 0} equipment(s))`
+          {
+            equipments: customerInfo.equipment?.length || 0,
+            url: serviceUrl
+          },
+          '[GEMINI] Link added with equipment context'
         )
       } else if (serviceUrl) {
-        logger.info('[GEMINI] Link skipped (recently sent)')
+        logger.info({}, '[GEMINI] Link skipped (recently sent)')
       } else {
-        logger.warn('[GEMINI] Could not obtain link from Odoo')
+        logger.warn({}, '[GEMINI] Could not obtain link from Odoo')
       }
     } else if (needsLink && !customerInfo) {
       if (wantsRemote) {
@@ -882,7 +918,7 @@ El usuario SÍ pide remoto. Pide o confirma el ID UNA sola vez.
 
     return response
   } catch (error) {
-    logger.error('[GEMINI] Error:', error)
+    logger.error({ err: error }, '[GEMINI] Error')
     return 'Lo siento, estoy teniendo problemas para procesar tu mensaje. ¿Podrías intentarlo de nuevo?'
   }
 }

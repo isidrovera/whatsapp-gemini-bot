@@ -10,15 +10,15 @@ declare global {
   namespace Express {
     interface Request {
       apiKey?: {
-        id: string;
-        name: string;
+        id?: string;   // opcional para no romper en handlers que solo setean name
+        name?: string; // opcional por la misma razón
       };
     }
   }
 }
 
 // ------------------------------------------------------
-// Extender tipos de Express para incluir session
+// Extender tipos de Express-Session para incluir session
 // (ahora con campos temporales para 2FA)
 // ------------------------------------------------------
 declare module 'express-session' {
@@ -28,7 +28,6 @@ declare module 'express-session' {
     username: string;
 
     // 🔐 paso intermedio cuando el admin tiene 2FA activado
-    // y ya validó usuario/contraseña, pero todavía no puso el código
     tempUserId?: string;
     tempUsername?: string;
 
@@ -72,10 +71,10 @@ export async function validateApiKey(
     // o también se acepta en body.apiKey por comodidad
     const apiKeyValue =
       (req.headers['x-api-key'] as string) ||
-      (typeof req.body?.apiKey === 'string' ? req.body.apiKey : undefined);
+      (typeof (req.body as any)?.apiKey === 'string' ? (req.body as any).apiKey : undefined);
 
     if (!apiKeyValue) {
-      logger.warn(`[API-AUTH] API key missing from ${req.ip}`);
+      logger.warn({ ip: req.ip }, '[API-AUTH] API key missing');
       return res.status(401).json({
         success: false,
         error: 'API key no proporcionada. Usa header "x-api-key"',
@@ -87,10 +86,8 @@ export async function validateApiKey(
 
     if (!apiKey) {
       logger.warn(
-        `[API-AUTH] Invalid API key from ${req.ip}: ${apiKeyValue.substring(
-          0,
-          10
-        )}...`
+        { ip: req.ip, keyPrefix: apiKeyValue.slice(0, 10) },
+        '[API-AUTH] Invalid API key'
       );
       return res.status(401).json({
         success: false,
@@ -105,12 +102,13 @@ export async function validateApiKey(
     };
 
     logger.debug(
-      `[API-AUTH] Valid API key "${apiKey.name}" from ${req.ip}`
+      { ip: req.ip, apiKeyName: apiKey.name, apiKeyId: apiKey.id },
+      '[API-AUTH] Valid API key'
     );
 
     next();
   } catch (error) {
-    logger.error('[API-AUTH] Error validating API key:', error);
+    logger.error({ err: error }, '[API-AUTH] Error validating API key');
     return res.status(500).json({
       success: false,
       error: 'Error al validar API key',

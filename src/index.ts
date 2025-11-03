@@ -24,6 +24,7 @@ import { initializeOdoo } from './services/odoo.js'
 // Protección contra hot-reload
 // ==============================
 declare global {
+  // Variables globales para evitar duplicar instancias
   var __appInitialized: boolean | undefined
   var __appIntervals: NodeJS.Timeout[] | undefined
 }
@@ -53,12 +54,12 @@ const ENABLE_HEARTBEAT = (process.env.ENABLE_HEARTBEAT ?? 'false').toLowerCase()
 
 // Periodos (ms)
 const HOLIDAYS_RESYNC_MS = Math.max(
-  1000 * 60 * 60 * 24 * 7, 
+  1000 * 60 * 60 * 24 * 7,
   Number(process.env.HOLIDAYS_RESYNC_MS || (1000 * 60 * 60 * 24 * 30))
 ) // >= 7 días
 
 const HEARTBEAT_MS = Math.max(
-  60_000, 
+  60_000,
   Number(process.env.HEARTBEAT_MS || 300_000)
 ) // >= 60s
 
@@ -104,7 +105,7 @@ async function main() {
       await holidaySync.syncPublicHolidays()
       logger.info('✅ Public holidays synced')
     } catch (e) {
-      logger.warn('⚠️  Holiday sync failed (non-blocking):', e)
+      logger.warn({ err: e }, '⚠️  Holiday sync failed (non-blocking)')
     }
 
     // 8) Gemini
@@ -173,7 +174,7 @@ async function main() {
       const heartbeatInterval = setInterval(() => {
         logger.info(`🫀 Health: WhatsApp=${getConnectionStatus() ? 'Connected' : 'Disconnected'}`)
       }, HEARTBEAT_MS)
-      
+
       global.__appIntervals!.push(heartbeatInterval)
       logger.info(`🫀 Heartbeat enabled (every ${Math.round(HEARTBEAT_MS / 1000)}s)`)
     } else {
@@ -186,9 +187,9 @@ async function main() {
         holidaySync
           .syncPublicHolidays()
           .then(() => logger.info('🗓️  Monthly public holidays re-sync: ✅ OK'))
-          .catch((e) => logger.warn('⚠️  Monthly holiday re-sync failed:', e))
+          .catch((e) => logger.warn({ err: e }, '⚠️  Monthly holiday re-sync failed'))
       }, HOLIDAYS_RESYNC_MS)
-      
+
       global.__appIntervals!.push(holidaysInterval)
       logger.info(`🗓️  Holiday re-sync enabled (every ${Math.round(HOLIDAYS_RESYNC_MS / (1000 * 60 * 60 * 24))} days)`)
     } else {
@@ -200,9 +201,8 @@ async function main() {
 
     // Marcar como inicializado
     global.__appInitialized = true
-
   } catch (error) {
-    logger.error({ err: error },'❌ Fatal error starting bot:')
+    logger.error({ err: error }, '❌ Fatal error starting bot:')
     process.exit(1)
   }
 }
@@ -294,7 +294,7 @@ async function displayConfigInfo() {
 
     logger.info('')
   } catch (error) {
-    logger.error({ err: error },'Error displaying config info:')
+    logger.error({ err: error }, 'Error displaying config info:')
   }
 }
 
@@ -322,7 +322,7 @@ function setupGracefulShutdown() {
       logger.info('✅ Shutdown complete')
       process.exit(0)
     } catch (error) {
-      logger.error({ err: error },'Error during shutdown:')
+      logger.error({ err: error }, 'Error during shutdown:')
       process.exit(1)
     }
   }
@@ -331,12 +331,12 @@ function setupGracefulShutdown() {
   process.on('SIGTERM', () => shutdown('SIGTERM'))
 
   process.on('uncaughtException', (error) => {
-    logger.error({ err: error },'Uncaught Exception:')
+    logger.error({ err: error }, 'Uncaught Exception:')
     shutdown('uncaughtException')
   })
 
   process.on('unhandledRejection', (reason, promise) => {
-    logger.error({ err: error },'Unhandled Rejection at:', promise, 'reason:', reason)
+    logger.error({ err: reason as any }, 'Unhandled Rejection at:', promise, 'reason:', reason)
   })
 }
 

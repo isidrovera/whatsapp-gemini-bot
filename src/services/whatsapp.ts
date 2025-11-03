@@ -545,8 +545,13 @@ async function handleIncomingMessage(
     // ignorar mensajes viejos
     if ((message.messageTimestamp as number) * 1000 < startTime) return;
 
-    const senderJid = message.key.remoteJid;
-    if (!senderJid) return;
+    // ✅ FIX: key puede venir null/undefined
+    const key = message.key;
+    const senderJid = key?.remoteJid ?? key?.participant ?? null;
+    if (!senderJid) {
+      logger.warn({ key }, '[WA] No se pudo resolver senderJid (key vacío)');
+      return;
+    }
 
     // ignorar eco propio
     if (upsertType === 'append') {

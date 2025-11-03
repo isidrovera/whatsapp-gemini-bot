@@ -1,7 +1,6 @@
 import { getPrismaClient } from '../config/database.js';
 import { logger } from '../utils/logger.js';
-import * as calendarModel from './calendar.js'; // <- usa tu archivo real
-
+import * as calendarModel from './calendar.js'; 
 const prisma = getPrismaClient();
 
 /** =========================

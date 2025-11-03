@@ -51,24 +51,26 @@ export async function downloadMediaFromMessage(
     fileName = content.documentMessage?.fileName || 'document';
   }
 
-  logger.info(`[MEDIA] Downloading "${type}" (${mimeType}) ...`);
+  logger.info({ type, mimeType, fileName }, '[MEDIA] Downloading ...');
 
-  const buffer = await downloadMediaMessage(
-    message,
+  // Baileys tipa downloadMediaMessage para WAMessage -> casteamos a any
+  const buffer = (await downloadMediaMessage(
+    message as any,
     'buffer',
     {},
     {
       logger: logger as any,
       reuploadRequest: () => Promise.resolve({} as any),
     }
-  );
+  )) as unknown as Buffer;
 
   if (!buffer || !(buffer instanceof Buffer)) {
     throw new Error('downloadMediaMessage returned empty buffer');
   }
 
   logger.info(
-    `[MEDIA] Downloaded ${buffer.length} bytes (${type}) ${fileName ? `[${fileName}]` : ''}`
+    { bytes: buffer.length, type, fileName },
+    '[MEDIA] Downloaded'
   );
 
   return { buffer, mimeType, fileName };
@@ -240,22 +242,15 @@ Si algo no aplica, usa "".
 /* ------------------------ Llamada a Gemini ------------------------ */
 
 /**
- * En la doc que pegaste, para enviar contenido multimodal pequeño
- * se usa "generateContent({ model, contents: [...] })".
- *
- * Nuestro wrapper getGeminiModel() hoy expone:
- *   - model.generateContent(parts)
- * donde "parts" es básicamente ese arreglo `contents`.
- *
- * OJO: si el archivo pesa más de ~20MB no debemos mandarlo inline.
+ * Para contenido multimodal pequeño enviamos inlineData.
+ * Si el archivo pesa más de ~20MB no debemos mandarlo inline.
  */
 async function geminiGenerateInline(parts: any[]): Promise<string> {
-  const model = getGeminiModel();
-  // IMPORTANTE: si tu wrapper actual es model.generateContent(parts)
-  // y NO model.models.generateContent({...}), seguimos tu convención local.
-  const res = await model.generateContent(parts);
-  const txt = res?.response?.text?.() || '';
-  logger.info(`[GEMINI] response length=${txt.length}`);
+  const model = await getGeminiModel(); // <-- FIX: antes faltaba await
+  // Si tu wrapper expone generateContent(parts), mantenemos esa convención
+  const res = await (model as any).generateContent(parts);
+  const txt = (res as any)?.response?.text?.() || '';
+  logger.info({ length: txt.length }, '[GEMINI] response length');
   return txt;
 }
 
@@ -339,7 +334,6 @@ function normalizeGeminiResult(
 /**
  * TODOS los processX devuelven SIEMPRE MediaAnalysisResult.
  * Ya no devolvemos null salvo caso extremo (sin buffer).
- * Esto ayuda a que whatsapp.ts y gemini.ts siempre tengan datos.
  */
 
 export async function processImage(
@@ -351,7 +345,8 @@ export async function processImage(
     // chequeo de tamaño inline
     if (buffer.length > INLINE_SIZE_LIMIT_BYTES) {
       logger.warn(
-        `[IMAGE] Skipping Gemini call: file too large (${buffer.length} bytes)`
+        { bytes: buffer.length },
+        '[IMAGE] Skipping Gemini call: file too large'
       );
       return buildFallbackResult('image', {
         rawSummary:
@@ -390,10 +385,10 @@ export async function processImage(
     }
 
     const result = normalizeGeminiResult(parsed, rawResponse, 'image');
-    logger.info('[IMAGE] Analysis:', result);
+    logger.info({ result }, '[IMAGE] Analysis');
     return result;
   } catch (err: any) {
-    logger.error({ message: err?.message, stack: err?.stack }, '[IMAGE] processImage failed:');
+    logger.error({ message: err?.message, stack: err?.stack }, '[IMAGE] processImage failed');
     return buildFallbackResult('image', {
       rawSummary: 'Imagen recibida (análisis falló).',
     });
@@ -408,7 +403,8 @@ export async function processAudio(
 
     if (buffer.length > INLINE_SIZE_LIMIT_BYTES) {
       logger.warn(
-        `[AUDIO] Skipping Gemini call: file too large (${buffer.length} bytes)`
+        { bytes: buffer.length },
+        '[AUDIO] Skipping Gemini call: file too large'
       );
       return buildFallbackResult('audio', {
         rawSummary:
@@ -421,7 +417,6 @@ export async function processAudio(
     logger.info('[AUDIO] Analyzing with Gemini ...');
 
     // En audio, según la guía, es válido mandar texto primero o después.
-    // Vamos a mandar primero el prompt, luego el audio.
     const rawResponse = await geminiGenerateInline([
       { text: buildAudioPrompt() },
       {
@@ -446,10 +441,10 @@ export async function processAudio(
     }
 
     const result = normalizeGeminiResult(parsed, rawResponse, 'audio');
-    logger.info('[AUDIO] Analysis:', result);
+    logger.info({ result }, '[AUDIO] Analysis');
     return result;
   } catch (err: any) {
-    logger.error({ message: err?.message, stack: err?.stack }, '[AUDIO] processAudio failed:');
+    logger.error({ message: err?.message, stack: err?.stack }, '[AUDIO] processAudio failed');
     return buildFallbackResult('audio', {
       rawSummary: 'Audio recibido (análisis falló).',
     });
@@ -464,7 +459,8 @@ export async function processVideo(
 
     if (buffer.length > INLINE_SIZE_LIMIT_BYTES) {
       logger.warn(
-        `[VIDEO] Skipping Gemini call: file too large (${buffer.length} bytes)`
+        { bytes: buffer.length },
+        '[VIDEO] Skipping Gemini call: file too large'
       );
       return buildFallbackResult('video', {
         rawSummary:
@@ -476,7 +472,6 @@ export async function processVideo(
     const base64 = buffer.toString('base64');
     logger.info('[VIDEO] Analyzing with Gemini ...');
 
-    // Para video, según guía, se suele mandar primero el video y luego el texto.
     const rawResponse = await geminiGenerateInline([
       {
         inlineData: {
@@ -501,10 +496,10 @@ export async function processVideo(
     }
 
     const result = normalizeGeminiResult(parsed, rawResponse, 'video');
-    logger.info('[VIDEO] Analysis:', result);
+    logger.info({ result }, '[VIDEO] Analysis');
     return result;
   } catch (err: any) {
-    logger.error({ message: err?.message, stack: err?.stack }, '[VIDEO] processVideo failed:');
+    logger.error({ message: err?.message, stack: err?.stack }, '[VIDEO] processVideo failed');
     return buildFallbackResult('video', {
       rawSummary: 'Video recibido (análisis falló).',
     });
@@ -523,7 +518,8 @@ export async function processDocument(
 
     if (buffer.length > INLINE_SIZE_LIMIT_BYTES) {
       logger.warn(
-        `[DOCUMENT] Skipping Gemini call: file too large (${buffer.length} bytes)`
+        { bytes: buffer.length },
+        '[DOCUMENT] Skipping Gemini call: file too large'
       );
       return buildFallbackResult(isPdf ? 'pdf' : 'document', {
         rawSummary: `Documento recibido (${fileName || 'documento'}). Es muy grande para análisis inline inmediato.`,
@@ -534,10 +530,10 @@ export async function processDocument(
 
     const base64 = buffer.toString('base64');
     logger.info(
-      `[DOCUMENT] Detected "${fileName || 'document'}" (${mimeType})`
+      { fileName: fileName || 'document', mimeType },
+      '[DOCUMENT] Detected'
     );
 
-    // Para PDF según la guía: podemos mandar primero la instrucción y luego el inlineData
     const rawResponse = await geminiGenerateInline([
       { text: buildPdfPrompt() },
       {
@@ -552,9 +548,7 @@ export async function processDocument(
     if (!parsed) {
       const hints = extractStructuredFieldsFromText(rawResponse);
       return buildFallbackResult(isPdf ? 'pdf' : 'document', {
-        rawSummary: `Documento recibido: "${
-          fileName || 'documento'
-        }" (${mimeType}).`,
+        rawSummary: `Documento recibido: "${fileName || 'documento'}" (${mimeType}).`,
         detectedSerial: hints.serial || null,
         detectedErrorCode: hints.errorCode || null,
         detectedCompany: hints.company || null,
@@ -573,10 +567,10 @@ export async function processDocument(
     if ((!result.mediaTypeClass || result.mediaTypeClass === 'otro') && isPdf) {
       result.mediaTypeClass = 'pdf';
     }
-    logger.info(result, '[DOCUMENT] Analysis:');
+    logger.info({ result }, '[DOCUMENT] Analysis');
     return result;
   } catch (err: any) {
-    logger.error({ message: err?.message, stack: err?.stack }, '[DOCUMENT] processDocument failed:');
+    logger.error({ message: err?.message, stack: err?.stack }, '[DOCUMENT] processDocument failed');
     return buildFallbackResult('document', {
       rawSummary: 'Documento recibido (análisis falló).',
     });

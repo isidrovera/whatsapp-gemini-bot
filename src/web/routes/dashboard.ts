@@ -1,3 +1,4 @@
+// src/web/routes/dashboard.ts
 import express from 'express';
 import { getPrismaClient } from '../../config/database.js';
 import { logger } from '../../utils/logger.js';
@@ -41,9 +42,9 @@ async function safeList<T>(fn: () => Promise<T[]>): Promise<T[]> {
 router.get('/', async (req, res) => {
   try {
     // Obtener datos completos del admin logueado
-    const adminId = req.session?.userId;
+    const adminId = (req as any).session?.userId;
     let currentAdmin = null;
-    
+
     if (adminId) {
       try {
         currentAdmin = await adminModel.findById(adminId);
@@ -77,7 +78,6 @@ router.get('/', async (req, res) => {
       workingHours,
       workingNow,
     ] = await Promise.all([
-
       // contactos / mensajes / takeover
       prisma.contact.count(),
       prisma.contact.count({ where: { state: 'REGISTERED' } }),
@@ -112,8 +112,8 @@ router.get('/', async (req, res) => {
       // KPI tags
       safeCount(() => prisma.tag.count() as any),
 
-      // KPI plantillas - usando safeCount para manejar si no existe el modelo
-      safeCount(() => prisma.template.count() as any),
+      // KPI plantillas - usar any porque puede no existir el modelo en el cliente tipado
+      safeCount(() => ((prisma as any).template?.count?.() as Promise<number>) ?? Promise.resolve(0)),
 
       // últimos productos
       safeList(() =>
@@ -128,7 +128,7 @@ router.get('/', async (req, res) => {
             price: true,
             imageUrl: true,
             isActive: true,
-            createdAt: true,           
+            createdAt: true,
           },
         })
       ),
@@ -180,11 +180,11 @@ router.get('/', async (req, res) => {
       recentContacts,
       recentProducts,
       whatsappStatus,
-      
+
       // pasar horarios a la vista
       workingHours,
       workingNow,
-      
+
       // Pasar objeto completo del admin en lugar de solo el nombre
       user: currentAdmin,
       currentUser: currentAdmin,
@@ -194,7 +194,6 @@ router.get('/', async (req, res) => {
     res.status(500).send('Error loading dashboard');
   }
 });
-
 
 // ============= API KPIs (AJAX opcional) =============
 router.get('/api/kpis/today', async (_req, res) => {
@@ -230,13 +229,14 @@ router.get('/api/kpis/today', async (_req, res) => {
       safeCount(() => prisma.product.count() as any),
       safeCount(() => prisma.autoResponse.count() as any),
       safeCount(() => prisma.tag.count() as any),
-      safeCount(() => prisma.template.count() as any),
+      // idem: plantilla opcional
+      safeCount(() => ((prisma as any).template?.count?.() as Promise<number>) ?? Promise.resolve(0)),
 
       // horarios para API
       (async () => {
         try {
           return await workingHoursModel.getTodayHours();
-        } catch (e) {
+        } catch {
           return null;
         }
       })(),
@@ -244,7 +244,7 @@ router.get('/api/kpis/today', async (_req, res) => {
       (async () => {
         try {
           return await workingHoursModel.isWorkingNow();
-        } catch (e) {
+        } catch {
           return false;
         }
       })(),
@@ -272,14 +272,16 @@ router.get('/api/kpis/today', async (_req, res) => {
         botNumber: typeof getBotPhoneNumber === 'function' ? getBotPhoneNumber() : null,
       },
       // incluir horarios en API
-      workingHours: workingHours ? {
-        dayOfWeek: workingHours.dayOfWeek,
-        isWorkday: workingHours.isWorkday,
-        openTime: workingHours.openTime,
-        closeTime: workingHours.closeTime,
-        breakStart: workingHours.breakStart,
-        breakEnd: workingHours.breakEnd,
-      } : null,
+      workingHours: workingHours
+        ? {
+            dayOfWeek: workingHours.dayOfWeek,
+            isWorkday: workingHours.isWorkday,
+            openTime: workingHours.openTime,
+            closeTime: workingHours.closeTime,
+            breakStart: workingHours.breakStart,
+            breakEnd: workingHours.breakEnd,
+          }
+        : null,
       workingNow,
     });
   } catch (error) {
@@ -298,19 +300,16 @@ router.get('/api/working-status', async (_req, res) => {
 
     // Calcular progreso del día si está en horario laboral
     let dayProgress = 0;
-    let nextChange = null;
+    let nextChange: { type: 'open' | 'close'; time: string; label: string } | null = null;
 
     if (workingHours?.isWorkday && workingHours.openTime && workingHours.closeTime) {
       const now = new Date();
       const tz = 'America/Lima';
       const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(now);
-      
-      const [openHour, openMin] = workingHours.openTime.split(':').map(Number);
-      const [closeHour, closeMin] = workingHours.closeTime.split(':').map(Number);
-      
+
       const open = new Date(`${todayStr}T${workingHours.openTime}:00-05:00`);
       const close = new Date(`${todayStr}T${workingHours.closeTime}:00-05:00`);
-      
+
       const total = close.getTime() - open.getTime();
       const elapsed = Math.min(Math.max(now.getTime() - open.getTime(), 0), total);
       dayProgress = total > 0 ? Math.round((elapsed / total) * 100) : 0;
