@@ -1,73 +1,71 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: whatsapp_postgres
+  db:
+    image: postgres:16
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: system15
       POSTGRES_DB: whatsapp_bot
-      TZ: America/Lima
-    ports:
-      - "5432:5432" # En producción puedes hacer "127.0.0.1:5432:5432" o eliminarlo
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
     volumes:
-      - pgdata:/var/lib/postgresql/data
-      # Scripts de inicialización (solo la primera vez que el volumen está vacío)
-      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
-
-  # Crea la DB si el volumen ya existía y no se ejecutan los scripts de init
-  db-init:
-    image: postgres:16-alpine
-    depends_on:
-      postgres:
-        condition: service_healthy
-    entrypoint: >
-      sh -lc "
-      psql -h postgres -U postgres -tc \"SELECT 1 FROM pg_database WHERE datname = 'whatsapp_bot'\" | grep -q 1
-      || createdb -h postgres -U postgres whatsapp_bot
-      "
-    environment:
-      PGPASSWORD: system15
-      TZ: America/Lima
-    restart: "no"
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    profiles: ["simple", "proxy"]
 
   app:
-    build:
-      context: .
-      target: runner
-    container_name: whatsapp_gemini_bot
-    working_dir: /app
+    build: .
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
+    env_file:
+      - ./.env # apunta a .env.docker.dev o .env.docker.prod según el caso
     environment:
-      NODE_ENV: production
-      LOG_LEVEL: info
-      TZ: America/Lima
-      WEB_PORT: 3000
-      SESSION_SECRET: whatsapp-bot-super-secret-key-change-in-production
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}   # ponla en tu .env del host si prefieres
-      DATABASE_URL: "postgresql://postgres:system15@postgres:5432/whatsapp_bot?schema=public"
-      BAILEYS_AUTH_DIR: /app/storage/baileys
+      # Valores por si faltan en .env
+      WEB_PORT: "3000"
+    depends_on:
+      - db
+    volumes:
+      - ./logs:/app/logs
+      - ./baileys_auth:/app/baileys_auth
     ports:
       - "3000:3000"
+    profiles: ["simple"]
+
+  # Producción con proxy HTTPS
+  app_proxy:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      WEB_PORT: "3000"
+    depends_on:
+      - db
     volumes:
-      - storage:/app/storage
-    # (Opcional) healthcheck de la app si tienes /health
-    # healthcheck:
-    #   test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
-    #   interval: 10s
-    #   timeout: 5s
-    #   retries: 5
+      - ./logs:/app/logs
+      - ./baileys_auth:/app/baileys_auth
+    networks:
+      - webnet
+    profiles: ["proxy"]
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - app_proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # Monta tus certificados (ajusta rutas/nombres)
+      - ./certs/fullchain.pem:/etc/ssl/certs/fullchain.pem:ro
+      - ./certs/privkey.pem:/etc/ssl/private/privkey.pem:ro
+    networks:
+      - webnet
+    profiles: ["proxy"]
 
 volumes:
-  pgdata:
-  storage:
+  db_data:
+
+networks:
+  webnet:
+    driver: bridge

@@ -44,8 +44,18 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.WEB_PORT || 3000;
-const isDev = process.env.NODE_ENV !== 'production';
+const PORT = Number(process.env.WEB_PORT || 3000);
+
+// Entorno / proxy flags para cookies
+const isProd = process.env.NODE_ENV === 'production';
+const behindProxy = String(process.env.BEHIND_PROXY || 'false') === 'true';
+const forceSecure = String(process.env.COOKIE_SECURE || (isProd && behindProxy) ? 'true' : 'false') === 'true';
+const crossSite = String(process.env.CROSS_SITE || 'false') === 'true';
+
+// Si estamos detrás de Nginx/Caddy con HTTPS, habilita trust proxy
+if (behindProxy) {
+  app.set('trust proxy', 1);
+}
 
 function prettyConsoleLogError(tag: string, err: any) {
   try {
@@ -67,27 +77,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// ⚠ IMPORTANTE ⚠
-// Quitamos el app.use(fileUpload(...)) global.
-// Si lo dejas global, intercepta TODOS los multipart/form-data
-// y luego multer (en /blocked/api/import) recibe el request roto
-// => "Unexpected end of form"
-// En su lugar, más abajo lo aplicamos SOLO en /api (público).
-
 // ======================
-// SESSION
+// SESSION (config segura por entorno)
 // ======================
-
-// En contenedores/proxy (Docker, Nginx) es necesario
-app.set('trust proxy', 1);
-
-// Configuración de cookie según entorno.
-// - En producción con HTTPS: secure=true y sameSite='none'
-// - En desarrollo (HTTP localhost): secure=false y sameSite='lax'
-//   Puedes forzar con env COOKIE_SECURE=false
-const isProd = process.env.NODE_ENV === 'production';
-const cookieSecure = isProd && process.env.COOKIE_SECURE !== 'false';
-const cookieSameSite: 'lax' | 'strict' | 'none' = cookieSecure ? 'none' : 'lax';
+const sameSite: 'lax' | 'none' = crossSite ? 'none' : 'lax';
+const secureCookie = forceSecure; // ya evaluado arriba
 
 app.use(
   session({
@@ -95,9 +89,10 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: cookieSecure,      // false en HTTP local; true en prod HTTPS
+      // Si CROSS_SITE=true (otro origen), exigimos SameSite=None y Secure
+      sameSite,
+      secure: secureCookie,
       httpOnly: true,
-      sameSite: cookieSameSite,  // 'none' si secure=true; 'lax' si no
       maxAge: 24 * 60 * 60 * 1000, // 24h
     },
   })
@@ -112,7 +107,7 @@ app.set('views', path.join(__dirname, 'views'));
 // Helper global para las vistas
 app.use((req, res, next) => {
   res.locals.page = req.path.split('/')[1] || 'dashboard';
-  res.locals.user = (req.session as any)?.username || null;
+  res.locals.user = (req as any).session?.username || null;
   next();
 });
 
@@ -126,13 +121,9 @@ app.use('/auth', authRouter);
 // API pública externa
 // - NO usa requireAuth (sesión web)
 // - Valida con API key adentro de apiRouter
-// - Necesita fileUpload SOLO para /api/send-media
-//
-// Entonces montamos un "sub-app" con fileUpload ANTES de apiRouter,
-// pero NO lo aplicamos al resto del panel.
+// - Necesita fileUpload SOLO para /api (público).
 const publicApiApp = express.Router();
 
-// este middleware SOLO afecta rutas dentro de /api
 publicApiApp.use(
   fileUpload({
     useTempFiles: false,
@@ -142,17 +133,15 @@ publicApiApp.use(
   })
 );
 
-// ahora montamos las rutas públicas reales
 publicApiApp.use('/', apiRouter);
 
-// y finalmente lo colgamos en /api
+// Montaje en /api SOLO de este subrouter con fileUpload
 app.use('/api', publicApiApp);
 
 // ======================
 // RUTAS PRIVADAS (panel)
 // ======================
 
-// Dashboard y operaciones principales
 app.use('/', requireAuth, dashboardRouter);
 app.use('/contacts', requireAuth, contactsRouter);
 app.use('/blocked', requireAuth, blockedRouter); // ← multer vive adentro de este router
@@ -206,7 +195,7 @@ app.use(
           name: err?.name,
           stack: err?.stack,
           code: err?.code,
-          meta: err?.meta || null,
+          meta: (err as any)?.meta || null,
           url: req.originalUrl,
           method: req.method,
         },
@@ -217,6 +206,7 @@ app.use(
     }
 
     // respuesta al cliente
+    const isDev = process.env.NODE_ENV !== 'production';
     if (isDev) {
       res
         .status(500)
@@ -301,13 +291,13 @@ export function startWebServer() {
     logger.info('   -> POST /api/send-media');
     logger.info('');
     logger.info('📦 Contacts extras (panel interno):');
-    logger.info('   -> GET    /contacts/api-export         (exportar contactos/multiempresa)');
-    logger.info('   -> POST   /contacts/api-import         (importar desde Excel parseado)');
-    logger.info('   -> POST   /contacts/api/:contactId/company                (agregar empresa)');
-    logger.info('   -> POST   /contacts/api/:contactId/company/:companyId/primary  (marcar primaria)');
-    logger.info('   -> DELETE /contacts/api/:contactId/company/:companyId     (quitar empresa)');
-    logger.info('   -> PUT    /contacts/api/contact/:contactId                (editar contacto)');
-    logger.info('   -> DELETE /contacts/api/contact/:contactId                (eliminar contacto)');
+    logger.info('   -> GET    /contacts/api-export');
+    logger.info('   -> POST   /contacts/api-import');
+    logger.info('   -> POST   /contacts/api/:contactId/company');
+    logger.info('   -> POST   /contacts/api/:contactId/company/:companyId/primary');
+    logger.info('   -> DELETE /contacts/api/:contactId/company/:companyId');
+    logger.info('   -> PUT    /contacts/api/contact/:contactId');
+    logger.info('   -> DELETE /contacts/api/contact/:contactId');
     logger.info('');
   });
 }
