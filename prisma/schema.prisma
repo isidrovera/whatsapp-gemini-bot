@@ -1,5 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Soporte para ambos engines y entornos Debian bookworm/bullseye
+  binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -157,7 +159,7 @@ model BlockedNumber {
   canSeeHistory      Boolean     @default(false) @map("can_see_history")
   canTalkToHuman     Boolean     @default(false) @map("can_talk_to_human")
   canUseAI           Boolean     @default(false) @map("can_use_ai")
-  canUseAutoResponse Boolean     @default(true) @map("can_use_auto_response")
+  canUseAutoResponse Boolean     @default(true)  @map("can_use_auto_response")
   customPermissions  Json?       @map("custom_permissions")
   notes              String?
   blockedBy          String?     @map("blocked_by")
