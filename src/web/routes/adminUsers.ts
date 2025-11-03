@@ -17,7 +17,7 @@ router.get('/', async (req, res) => {
       currentUserId: req.session.userId
     });
   } catch (error) {
-    logger.error('Error loading admin users:', error);
+    logger.error({ err: error },'Error loading admin users:');
     res.status(500).send('Error loading admin users');
   }
 });
@@ -28,7 +28,7 @@ router.get('/api', async (req, res) => {
     const admins = await adminModel.getAll();
     res.json(admins);
   } catch (error) {
-    logger.error('Error getting admins:', error);
+    logger.error({ err: error },'Error getting admins:');
     res.status(500).json({ error: 'Error getting admins' });
   }
 });
@@ -42,7 +42,7 @@ router.get('/api/:id', async (req, res) => {
     }
     res.json(admin);
   } catch (error) {
-    logger.error('Error getting admin:', error);
+    logger.error({ err: error },'Error getting admin:');
     res.status(500).json({ error: 'Error getting admin' });
   }
 });
@@ -83,7 +83,7 @@ router.post('/api/validate-dni', async (req, res) => {
       }
     });
   } catch (error) {
-    logger.error('Error validating DNI:', error);
+    logger.error({ err: error },'Error validating DNI:');
     res.status(500).json({ 
       success: false,
       error: 'Error al validar DNI' 
@@ -124,7 +124,7 @@ router.post('/api', async (req, res) => {
       }
     });
   } catch (error) {
-    logger.error('Error creating admin:', error);
+    logger.error({ err: error },'Error creating admin:');
     res.status(500).json({ error: 'Error creating admin' });
   }
 });
@@ -147,7 +147,7 @@ router.put('/api/:id', async (req, res) => {
     const admin = await adminModel.updateAdmin(req.params.id, updateData);
     res.json({ success: true, admin });
   } catch (error) {
-    logger.error('Error updating admin:', error);
+    logger.error({ err: error },'Error updating admin:');
     res.status(500).json({ error: 'Error updating admin' });
   }
 });
@@ -168,7 +168,7 @@ router.post('/api/:id/change-password', async (req, res) => {
     await adminModel.changePassword(req.params.id, currentPassword, newPassword);
     res.json({ success: true, message: 'Password changed successfully' });
   } catch (error) {
-    logger.error('Error changing password:', error);
+    logger.error({ err: error },'Error changing password:');
     
     if (error instanceof Error && error.message === 'Current password is incorrect') {
       return res.status(400).json({ error: 'Current password is incorrect' });
@@ -200,7 +200,7 @@ router.post('/api/:id/reset-password', async (req, res) => {
     await adminModel.updatePassword(req.params.id, newPassword);
     res.json({ success: true, message: 'Password reset successfully' });
   } catch (error) {
-    logger.error('Error resetting password:', error);
+    logger.error({ err: error },'Error resetting password:');
     res.status(500).json({ error: 'Error resetting password' });
   }
 });
@@ -216,7 +216,7 @@ router.delete('/api/:id', async (req, res) => {
     await adminModel.deleteAdmin(req.params.id);
     res.json({ success: true, message: 'Admin deleted successfully' });
   } catch (error) {
-    logger.error('Error deleting admin:', error);
+    logger.error({ err: error },'Error deleting admin:');
     
     if (error instanceof Error && error.message === 'Cannot delete the last admin user') {
       return res.status(400).json({ error: 'Cannot delete the last admin user' });
@@ -264,7 +264,7 @@ router.post('/api/:id/2fa/setup', async (req, res) => {
       qrCode: qrCodeUrl
     });
   } catch (error) {
-    logger.error('Error setting up 2FA:', error);
+    logger.error({ err: error },'Error setting up 2FA:');
     res.status(500).json({ error: 'Error setting up 2FA' });
   }
 });
@@ -316,7 +316,7 @@ router.post('/api/:id/2fa/enable', async (req, res) => {
       message: '2FA enabled successfully'
     });
   } catch (error) {
-    logger.error('Error enabling 2FA:', error);
+    logger.error({ err: error },'Error enabling 2FA:');
     res.status(500).json({ error: 'Error enabling 2FA' });
   }
 });
@@ -357,7 +357,7 @@ router.post('/api/:id/2fa/disable', async (req, res) => {
       message: '2FA disabled successfully'
     });
   } catch (error) {
-    logger.error('Error disabling 2FA:', error);
+    logger.error({ err: error },'Error disabling 2FA:');
     res.status(500).json({ error: 'Error disabling 2FA' });
   }
 });

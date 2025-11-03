@@ -68,7 +68,7 @@ function detectRequiredData(text: string): {
  * Carga datos dinámicos según lo que necesite el template
  */
 async function loadDynamicData(required: ReturnType<typeof detectRequiredData>) {
-  const data: any = {};
+  const data: Record<string, string> = {};
 
   try {
     // Cargar departamentos si se necesitan
@@ -89,15 +89,14 @@ async function loadDynamicData(required: ReturnType<typeof detectRequiredData>) 
 
       // Variables por departamento específico (dinámico para CUALQUIER departamento)
       for (const dept of departments) {
-        // Normalizar nombre del departamento a clave válida
         // "Soporte Técnico" → "soporte_tecnico"
-        const key = dept.name
+        const key = String(dept.name ?? '')
           .toLowerCase()
           .normalize('NFD')
           .replace(/[\u0300-\u036f]/g, '') // quitar acentos
           .replace(/\s+/g, '_'); // espacios a guión bajo
 
-        data[`${key}_nombre`] = dept.name;
+        data[`${key}_nombre`] = dept.name ?? '';
         data[`${key}_telefono`] = dept.phoneNumber || 'No disponible';
         data[`${key}_contactos`] = dept.contacts
           ?.map((c: any) => `${c.name}: ${c.phoneNumber || c.whatsapp || 'Sin teléfono'}`)
@@ -134,14 +133,14 @@ async function loadDynamicData(required: ReturnType<typeof detectRequiredData>) 
       data.catalogo = products
         .slice(0, 10)
         .map((p: any, i: number) => {
-          const price = p.price ? ` - S/ ${p.price.toFixed(2)}` : '';
+          const price = typeof p.price === 'number' ? ` - S/ ${p.price.toFixed(2)}` : '';
           return `${i + 1}. ${p.name}${price}`;
         })
         .join('\n');
     }
 
-  } catch (error) {
-    logger.error('[AUTO-RESPONSE] Error loading dynamic data:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error }, '[AUTO-RESPONSE] Error loading dynamic data');
   }
 
   return data;
@@ -201,31 +200,33 @@ async function processVariables(
   if (context?.product) {
     result = result.replace(/\{\{producto\}\}/gi, context.product.name || '');
     result = result.replace(/\{\{categoria\}\}/gi, context.product.category || '');
-    result = result.replace(/\{\{precio\}\}/gi, context.product.price ? `S/ ${context.product.price.toFixed(2)}` : 'Consultar');
+    result = result.replace(/\{\{precio\}\}/gi, typeof context.product.price === 'number' ? `S/ ${context.product.price.toFixed(2)}` : 'Consultar');
   }
 
-  // Fecha/hora
+  // Fecha/hora (Lima)
   const now = new Date();
   const dateStr = now.toLocaleDateString('es-PE', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-  });
+    timeZone: 'America/Lima',
+  } as Intl.DateTimeFormatOptions);
   const timeStr = now.toLocaleTimeString('es-PE', {
     hour: '2-digit',
     minute: '2-digit',
-  });
+    timeZone: 'America/Lima',
+  } as Intl.DateTimeFormatOptions);
 
   result = result.replace(/\{\{fecha\}\}/gi, dateStr);
   result = result.replace(/\{\{hora\}\}/gi, timeStr);
 
   // Variables personalizadas
   if (context?.customVars) {
-    Object.entries(context.customVars).forEach(([key, value]) => {
+    for (const [key, value] of Object.entries(context.customVars)) {
       const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'gi');
       result = result.replace(regex, value);
-    });
+    }
   }
 
   // ==========================================
@@ -256,8 +257,8 @@ export async function getAll() {
     return await prisma.autoResponse.findMany({
       orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
     });
-  } catch (error) {
-    logger.error('Error getting auto responses:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error }, 'Error getting auto responses');
     return [];
   }
 }
@@ -268,8 +269,8 @@ export async function getActive() {
       where: { isActive: true },
       orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
     });
-  } catch (error) {
-    logger.error('Error getting active auto responses:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error }, 'Error getting active auto responses');
     return [];
   }
 }
@@ -277,8 +278,8 @@ export async function getActive() {
 export async function findById(id: string) {
   try {
     return await prisma.autoResponse.findUnique({ where: { id } });
-  } catch (error) {
-    logger.error('Error finding auto response by id:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id }, 'Error finding auto response by id');
     return null;
   }
 }
@@ -294,8 +295,8 @@ export async function create(input: AutoResponseInput) {
         category: input.category ?? null,
       },
     });
-  } catch (error) {
-    logger.error('Error creating auto response:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, input }, 'Error creating auto response');
     throw error;
   }
 }
@@ -312,8 +313,8 @@ export async function update(id: string, input: Partial<AutoResponseInput>) {
         ...(input.category !== undefined ? { category: input.category } : {}),
       },
     });
-  } catch (error) {
-    logger.error('Error updating auto response:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id, input }, 'Error updating auto response');
     throw error;
   }
 }
@@ -322,8 +323,8 @@ export async function remove(id: string) {
   try {
     await prisma.autoResponse.delete({ where: { id } });
     return true;
-  } catch (error) {
-    logger.error('Error deleting auto response:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id }, 'Error deleting auto response');
     throw error;
   }
 }
@@ -373,8 +374,8 @@ export async function findByTrigger(message: string) {
     }
 
     return null;
-  } catch (error) {
-    logger.error('Error searching auto response by trigger:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error }, 'Error searching auto response by trigger');
     return null;
   }
 }
@@ -418,10 +419,9 @@ export async function findAndProcessResponse(
     const processedResponse = await processVariables(autoResponse.response, context);
 
     logger.info(`[AUTO-RESPONSE] Triggered: "${autoResponse.trigger}" with dynamic variables`);
-
     return processedResponse;
-  } catch (error) {
-    logger.error('Error finding and processing auto response:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, message }, 'Error finding and processing auto response');
     return null;
   }
 }

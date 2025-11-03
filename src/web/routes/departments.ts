@@ -1,284 +1,301 @@
-// src/routes/departments.js
-import express from 'express';
-import * as departmentModel from '../../models/department.js';
-import { logger } from '../../utils/logger.js';
-import util from 'util';
+// src/web/routes/departments.ts
+import express, { Request, Response } from 'express'
+import * as departmentModel from '../../models/department.js'
+import { logger } from '../../utils/logger.js'
+import util from 'util'
 
-const router = express.Router();
+const router = express.Router()
 
-function prettyLogError(tag, error) {
+/** Normaliza cualquier error (unknown) a info segura para log y response */
+function getErrInfo(err: unknown): { message: string; stack?: string } {
+  if (err instanceof Error) return { message: err.message, stack: err.stack }
+  // Prisma a veces trae objetos planos
   try {
-    console.error(`\n🔥 [${tag}] ERROR START ------------------`);
-    // util.inspect evita fallos por objetos circulares
-    console.error(util.inspect(error, { depth: null, colors: true }));
-    console.error('stack:', error && error.stack ? error.stack : '<no stack>');
-    console.error(`🔥 [${tag}] ERROR END --------------------\n`);
-  } catch (e) {
-    console.error('Failed to pretty-log error:', e);
-    console.error(String(error));
+    if (typeof err === 'object' && err !== null) {
+      return { message: util.inspect(err, { depth: 1 }) }
+    }
+  } catch { /* ignore */ }
+  return { message: String(err ?? 'Unknown error') }
+}
+
+/** Pretty print a consola (opcional en dev) */
+function prettyLogError(tag: string, err: unknown) {
+  const info = getErrInfo(err)
+  // Usa console solo como respaldo; pino es el principal
+  // Evita reventar si hay objetos circulares
+  console.error(`\n🔥 [${tag}] ERROR START ------------------`)
+  try {
+    console.error(util.inspect(err, { depth: null, colors: true }))
+  } catch {
+    console.error(String(err))
   }
+  console.error('stack:', info.stack ?? '<no stack>')
+  console.error(`🔥 [${tag}] ERROR END --------------------\n`)
+}
+
+/** Obtiene nombre de usuario de forma segura sin depender de tipos extra */
+function getUserName(req: Request): string {
+  const anyReq = req as any
+  return (
+    anyReq?.user?.name ||
+    anyReq?.user?.username ||
+    anyReq?.session?.user?.name ||
+    anyReq?.session?.user?.username ||
+    'Admin'
+  )
 }
 
 /**
- * Ver página de departamentos
+ * Página: Departamentos
  */
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    logger.info('Loading departments page...');
-    const departments = await departmentModel.getAll();
+    logger.info('Loading departments page...')
+    const departments = await departmentModel.getAll()
+    const safeDepartments = Array.isArray(departments) ? departments : []
+    logger.info({ count: safeDepartments.length }, 'Departments loaded')
 
-    logger.info(`Loaded ${Array.isArray(departments) ? departments.length : 0} departments`);
-
-    // Asegurar que departments es un array
-    const safeDepartments = Array.isArray(departments) ? departments : [];
-
-    // Render normal
     res.render('departments', {
       title: 'Departamentos',
       departments: safeDepartments,
-      user: req.user?.name || req.user?.username || 'Admin'
-    });
-  } catch (error) {
-    // 1) Imprime en consola sin fiarse del logger
-    prettyLogError('/departments GET', error);
+      user: getUserName(req),
+    })
+  } catch (err: unknown) {
+    prettyLogError('/departments GET', err)
+    const info = getErrInfo(err)
+    logger.error({ err, ...info }, 'Error loading departments page')
 
-    // 2) Logea con el logger (meta object para winston)
-    try {
-      logger.error('Error loading departments page', {
-        message: error?.message,
-        name: error?.name,
-        stack: error?.stack,
-        code: error?.code,
-        meta: error?.meta || null
-      });
-    } catch (e) {
-      // si logger falla, lo aseguramos con console
-      console.error('Logger failed when logging error:', e);
-    }
-
-    // 3) Si la vista falla al renderizar, respondemos con fallback
-    // En desarrollo puedes enviar el stack para ver en el browser,
-    // pero en prod enviar un mensaje genérico.
-    const isDev = process.env.NODE_ENV !== 'production';
+    const isDev = process.env.NODE_ENV !== 'production'
     if (isDev) {
-      res.status(500).send(`<pre>Internal server error\n\n${error && error.stack ? error.stack : String(error)}</pre>`);
+      res
+        .status(500)
+        .send(`<pre>Internal server error\n\n${info.stack ?? info.message}</pre>`)
     } else {
       res.status(500).render('departments', {
         title: 'Departamentos',
         departments: [],
-        user: req.user?.name || req.user?.username || 'Admin',
-        error: 'Internal server error'
-      });
+        user: getUserName(req),
+        error: 'Internal server error',
+      })
     }
   }
-});
+})
 
-// API: Obtener todos los departamentos
-router.get('/api', async (req, res) => {
+/**
+ * API: listar todos
+ */
+router.get('/api', async (_req: Request, res: Response) => {
   try {
-    const departments = await departmentModel.getAll();
-    res.json(departments || []);
-  } catch (error) {
-    prettyLogError('/departments/api GET', error);
-    logger.error('Error getting departments', { message: error?.message, stack: error?.stack });
-    res.status(500).json({ error: 'Error getting departments', message: error?.message });
+    const departments = await departmentModel.getAll()
+    res.json(Array.isArray(departments) ? departments : [])
+  } catch (err: unknown) {
+    prettyLogError('/departments/api GET', err)
+    const info = getErrInfo(err)
+    logger.error({ err, ...info }, 'Error getting departments')
+    res.status(500).json({ error: 'Error getting departments', message: info.message })
   }
-});
+})
 
-// API: Obtener departamento por ID
-router.get('/api/:id', async (req, res) => {
+/**
+ * API: obtener por id
+ */
+router.get('/api/:id', async (req: Request, res: Response) => {
   try {
-    const department = await departmentModel.findById(req.params.id);
-    if (!department) return res.status(404).json({ error: 'Department not found' });
-    res.json(department);
-  } catch (error) {
-    prettyLogError('/departments/api/:id GET', error);
-    logger.error('Error getting department', { message: error?.message, stack: error?.stack });
-    res.status(500).json({ error: 'Error getting department', message: error?.message });
+    const department = await departmentModel.findById(req.params.id)
+    if (!department) return res.status(404).json({ error: 'Department not found' })
+    res.json(department)
+  } catch (err: unknown) {
+    prettyLogError('/departments/api/:id GET', err)
+    const info = getErrInfo(err)
+    logger.error({ err, ...info }, 'Error getting department')
+    res.status(500).json({ error: 'Error getting department', message: info.message })
   }
-});
+})
 
-// API: Crear departamento
-router.post('/api', async (req, res) => {
+/**
+ * API: crear
+ */
+router.post('/api', async (req: Request, res: Response) => {
   try {
-    const { name, description, phoneNumber, isActive, sortOrder } = req.body;
-    if (!name) return res.status(400).json({ error: 'Name is required' });
+    const { name, description, phoneNumber, isActive, sortOrder } = req.body ?? {}
+    if (!name) return res.status(400).json({ error: 'Name is required' })
 
     const department = await departmentModel.create({
       name,
       description,
       phoneNumber,
       isActive: isActive !== false,
-      sortOrder: sortOrder || 0,
-    });
-
-    res.json(department);
-  } catch (error) {
-    prettyLogError('/departments/api POST', error);
-    logger.error('Error creating department', { message: error?.message, stack: error?.stack });
-    res.status(500).json({ error: 'Error creating department', message: error?.message });
+      sortOrder: sortOrder ?? 0,
+    })
+    res.json(department)
+  } catch (err: unknown) {
+    prettyLogError('/departments/api POST', err)
+    const info = getErrInfo(err)
+    logger.error({ err, ...info }, 'Error creating department')
+    res.status(500).json({ error: 'Error creating department', message: info.message })
   }
-});
+})
 
-// API: Actualizar departamento
-router.put('/api/:id', async (req, res) => {
+/**
+ * API: actualizar
+ */
+router.put('/api/:id', async (req: Request, res: Response) => {
   try {
-    const { name, description, phoneNumber, isActive, sortOrder } = req.body;
+    const { name, description, phoneNumber, isActive, sortOrder } = req.body ?? {}
     const department = await departmentModel.update(req.params.id, {
       name,
       description,
       phoneNumber,
       isActive,
       sortOrder,
-    });
-    res.json(department);
-  } catch (error) {
-    prettyLogError('/departments/api/:id PUT', error);
-    logger.error('Error updating department', { message: error?.message, stack: error?.stack });
-    res.status(500).json({ error: 'Error updating department', message: error?.message });
+    })
+    res.json(department)
+  } catch (err: unknown) {
+    prettyLogError('/departments/api/:id PUT', err)
+    const info = getErrInfo(err)
+    logger.error({ err, ...info }, 'Error updating department')
+    res.status(500).json({ error: 'Error updating department', message: info.message })
   }
-});
+})
 
-// API: Eliminar departamento
-router.delete('/api/:id', async (req, res) => {
+/**
+ * API: eliminar
+ */
+router.delete('/api/:id', async (req: Request, res: Response) => {
   try {
-    await departmentModel.remove(req.params.id);
-    res.json({ success: true });
-  } catch (error) {
-    prettyLogError('/departments/api/:id DELETE', error);
-    logger.error('Error deleting department', { message: error?.message, stack: error?.stack });
-    res.status(500).json({ error: 'Error deleting department', message: error?.message });
+    await departmentModel.remove(req.params.id)
+    res.json({ success: true })
+  } catch (err: unknown) {
+    prettyLogError('/departments/api/:id DELETE', err)
+    const info = getErrInfo(err)
+    logger.error({ err, ...info }, 'Error deleting department')
+    res.status(500).json({ error: 'Error deleting department', message: info.message })
   }
-});
-// API: Agregar keyword a un departamento
-router.post('/api/:id/keywords', async (req, res) => {
-  try {
-    const departmentId = req.params.id;
-    const { keyword, priority } = req.body;
+})
 
-    if (!keyword || keyword.trim() === '') {
-      return res.status(400).json({ error: 'keyword is required' });
+/**
+ * API: agregar keyword
+ */
+router.post('/api/:id/keywords', async (req: Request, res: Response) => {
+  try {
+    const departmentId = req.params.id
+    const { keyword, priority } = req.body ?? {}
+    if (!keyword || String(keyword).trim() === '') {
+      return res.status(400).json({ error: 'keyword is required' })
     }
 
-    const created = await departmentModel.addKeyword(
-      departmentId,
-      keyword,
-      priority ?? 1
-    );
+    const created = await departmentModel.addKeyword(departmentId, String(keyword), priority ?? 1)
+    res.json(created)
+  } catch (err: unknown) {
+    prettyLogError('/departments/api/:id/keywords POST', err)
+    const info = getErrInfo(err)
+    const code = (err as any)?.code
+    logger.error({ err, code, ...info }, 'Error adding keyword')
 
-    res.json(created);
-  } catch (error) {
-    prettyLogError('/departments/api/:id/keywords POST', error);
-    logger.error('Error adding keyword', { message: error?.message, stack: error?.stack });
-
-    // Prisma unique constraint? (departmentId+keyword ya existe)
-    if (error.code === 'P2002') {
-      return res.status(409).json({ error: 'Keyword already exists for this department' });
+    if (code === 'P2002') {
+      return res.status(409).json({ error: 'Keyword already exists for this department' })
     }
-
-    res.status(500).json({ error: 'Error adding keyword', message: error?.message });
+    res.status(500).json({ error: 'Error adding keyword', message: info.message })
   }
-});
+})
 
-// API: Actualizar keyword
-router.put('/api/keywords/:keywordId', async (req, res) => {
+/**
+ * API: actualizar keyword
+ */
+router.put('/api/keywords/:keywordId', async (req: Request, res: Response) => {
   try {
-    const { keywordId } = req.params;
-    const { keyword, priority } = req.body;
-
-    const updated = await departmentModel.updateKeyword(keywordId, {
-      keyword,
-      priority,
-    });
-
-    res.json(updated);
-  } catch (error) {
-    prettyLogError('/departments/api/keywords/:keywordId PUT', error);
-    logger.error('Error updating keyword', { message: error?.message, stack: error?.stack });
-    res.status(500).json({ error: 'Error updating keyword', message: error?.message });
+    const { keywordId } = req.params
+    const { keyword, priority } = req.body ?? {}
+    const updated = await departmentModel.updateKeyword(keywordId, { keyword, priority })
+    res.json(updated)
+  } catch (err: unknown) {
+    prettyLogError('/departments/api/keywords/:keywordId PUT', err)
+    const info = getErrInfo(err)
+    logger.error({ err, ...info }, 'Error updating keyword')
+    res.status(500).json({ error: 'Error updating keyword', message: info.message })
   }
-});
+})
 
-// API: Eliminar keyword
-router.delete('/api/keywords/:keywordId', async (req, res) => {
+/**
+ * API: eliminar keyword
+ */
+router.delete('/api/keywords/:keywordId', async (req: Request, res: Response) => {
   try {
-    const { keywordId } = req.params;
-
-    await departmentModel.removeKeyword(keywordId);
-
-    res.json({ success: true });
-  } catch (error) {
-    prettyLogError('/departments/api/keywords/:keywordId DELETE', error);
-    logger.error('Error removing keyword', { message: error?.message, stack: error?.stack });
-    res.status(500).json({ error: 'Error removing keyword', message: error?.message });
+    const { keywordId } = req.params
+    await departmentModel.removeKeyword(keywordId)
+    res.json({ success: true })
+  } catch (err: unknown) {
+    prettyLogError('/departments/api/keywords/:keywordId DELETE', err)
+    const info = getErrInfo(err)
+    logger.error({ err, ...info }, 'Error removing keyword')
+    res.status(500).json({ error: 'Error removing keyword', message: info.message })
   }
-});
-// API: Agregar contacto a un departamento
-router.post('/api/:id/contacts', async (req, res) => {
-  try {
-    const departmentId = req.params.id;
-    const { name, phoneNumber, role, isActive, sortOrder } = req.body;
+})
 
+/**
+ * API: agregar contacto
+ */
+router.post('/api/:id/contacts', async (req: Request, res: Response) => {
+  try {
+    const departmentId = req.params.id
+    const { name, phoneNumber, role, isActive, sortOrder } = req.body ?? {}
     if (!name || !phoneNumber) {
-      return res.status(400).json({ error: 'name and phoneNumber are required' });
+      return res.status(400).json({ error: 'name and phoneNumber are required' })
     }
-
     const created = await departmentModel.addContact({
       departmentId,
       name,
       phoneNumber,
-      role: role || null,
-      isActive: isActive !== false, // default true
-      sortOrder: sortOrder || 0,
-    });
-
-    res.json(created);
-  } catch (error) {
-    prettyLogError('/departments/api/:id/contacts POST', error);
-    logger.error('Error adding contact', { message: error?.message, stack: error?.stack });
-    res.status(500).json({ error: 'Error adding contact', message: error?.message });
+      role: role ?? null,
+      isActive: isActive !== false,
+      sortOrder: sortOrder ?? 0,
+    })
+    res.json(created)
+  } catch (err: unknown) {
+    prettyLogError('/departments/api/:id/contacts POST', err)
+    const info = getErrInfo(err)
+    logger.error({ err, ...info }, 'Error adding contact')
+    res.status(500).json({ error: 'Error adding contact', message: info.message })
   }
-});
+})
 
-// API: Actualizar contacto
-router.put('/api/contacts/:contactId', async (req, res) => {
+/**
+ * API: actualizar contacto
+ */
+router.put('/api/contacts/:contactId', async (req: Request, res: Response) => {
   try {
-    const { contactId } = req.params;
-    const { name, phoneNumber, role, isActive, sortOrder } = req.body;
-
+    const { contactId } = req.params
+    const { name, phoneNumber, role, isActive, sortOrder } = req.body ?? {}
     const updated = await departmentModel.updateContact(contactId, {
       name,
       phoneNumber,
       role,
       isActive,
       sortOrder,
-    });
-
-    res.json(updated);
-  } catch (error) {
-    prettyLogError('/departments/api/contacts/:contactId PUT', error);
-    logger.error('Error updating contact', { message: error?.message, stack: error?.stack });
-    res.status(500).json({ error: 'Error updating contact', message: error?.message });
+    })
+    res.json(updated)
+  } catch (err: unknown) {
+    prettyLogError('/departments/api/contacts/:contactId PUT', err)
+    const info = getErrInfo(err)
+    logger.error({ err, ...info }, 'Error updating contact')
+    res.status(500).json({ error: 'Error updating contact', message: info.message })
   }
-});
+})
 
-// API: Eliminar contacto
-router.delete('/api/contacts/:contactId', async (req, res) => {
+/**
+ * API: eliminar contacto
+ */
+router.delete('/api/contacts/:contactId', async (req: Request, res: Response) => {
   try {
-    const { contactId } = req.params;
-
-    await departmentModel.removeContact(contactId);
-
-    res.json({ success: true });
-  } catch (error) {
-    prettyLogError('/departments/api/contacts/:contactId DELETE', error);
-    logger.error('Error removing contact', { message: error?.message, stack: error?.stack });
-    res.status(500).json({ error: 'Error removing contact', message: error?.message });
+    const { contactId } = req.params
+    await departmentModel.removeContact(contactId)
+    res.json({ success: true })
+  } catch (err: unknown) {
+    prettyLogError('/departments/api/contacts/:contactId DELETE', err)
+    const info = getErrInfo(err)
+    logger.error({ err, ...info }, 'Error removing contact')
+    res.status(500).json({ error: 'Error removing contact', message: info.message })
   }
-});
+})
 
-// Resto de rutas (toggle, sort-order, keywords, contacts, etc.)...
-// ---- For brevity you can keep your existing implementations but ensure
-// they also call prettyLogError(...) inside all catch blocks as above.
-
-export default router;
+export default router

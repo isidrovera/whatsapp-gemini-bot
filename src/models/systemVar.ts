@@ -82,7 +82,7 @@ export async function getVariablesForPrompt(): Promise<Record<string, string>> {
       break_end: todayHours?.breakEnd || '14:00',
     };
   } catch (error) {
-    logger.error('Error getting variables for prompt:', error);
+    logger.error({ err: error },'Error getting variables for prompt:');
     
     // Fallback seguro
     return {
@@ -276,7 +276,7 @@ export async function getScheduleContext(): Promise<string> {
     return scheduleInfo;
     
   } catch (error) {
-    logger.error('Error getting schedule context:', error);
+    logger.error({ err: error },'Error getting schedule context:');
     return '\n⚠️ No se pudo obtener información de horarios.\n';
   }
 }
@@ -316,7 +316,7 @@ export async function getDepartmentsContext(): Promise<string> {
     
     return context;
   } catch (error) {
-    logger.error('Error getting departments context:', error);
+    logger.error({ err: error },'Error getting departments context:');
     return '';
   }
 }
@@ -363,7 +363,7 @@ export async function getProductsContext(category?: string): Promise<string> {
     
     return context;
   } catch (error) {
-    logger.error('Error getting products context:', error);
+    logger.error({ err: error },'Error getting products context:');
     return '';
   }
 }
@@ -372,7 +372,7 @@ export async function getProductCategories(): Promise<string[]> {
   try {
     return await productModel.getCategories();
   } catch (error) {
-    logger.error('Error getting product categories:', error);
+    logger.error({ err: error },'Error getting product categories:');
     return [];
   }
 }
@@ -387,7 +387,7 @@ export async function getMessageTemplate(category: string, name: string): Promis
     const template = templates.find(t => t.name === name);
     return template?.content || null;
   } catch (error) {
-    logger.error('Error getting message template:', error);
+    logger.error({ err: error },'Error getting message template:');
     return null;
   }
 }
@@ -403,7 +403,7 @@ export async function renderMessageTemplate(
     
     return messageTemplateModel.render(content, variables);
   } catch (error) {
-    logger.error('Error rendering message template:', error);
+    logger.error({ err: error },'Error rendering message template:');
     return null;
   }
 }
@@ -465,7 +465,7 @@ export async function initDefaults() {
     
     logger.info('✅ SystemVar defaults initialized');
   } catch (error) {
-    logger.error('Error initializing systemVar defaults:', error);
+    logger.error({ err: error },'Error initializing systemVar defaults:');
   }
 }
 

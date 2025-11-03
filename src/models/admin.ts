@@ -13,8 +13,8 @@ export async function findByUsername(username: string) {
     return await prisma.admin.findUnique({
       where: { username },
     });
-  } catch (error) {
-    logger.error('Error finding admin by username:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, username }, 'Error finding admin by username');
     return null;
   }
 }
@@ -51,8 +51,8 @@ export async function create(
         dni: extra?.dni,
       },
     });
-  } catch (error) {
-    logger.error('Error creating admin:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, username }, 'Error creating admin');
     throw error;
   }
 }
@@ -66,8 +66,8 @@ export async function verifyPassword(username: string, password: string): Promis
     if (!admin) return false;
 
     return await bcrypt.compare(password, admin.password);
-  } catch (error) {
-    logger.error('Error verifying password:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, username }, 'Error verifying password');
     return false;
   }
 }
@@ -89,8 +89,8 @@ export async function initDefaultAdmin() {
       logger.info('✅ Default admin created (username: admin, password: admin123)');
       logger.warn('⚠️  IMPORTANTE: Cambia la contraseña por defecto inmediatamente');
     }
-  } catch (error) {
-    logger.error('Error initializing default admin:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error }, 'Error initializing default admin');
   }
 }
 
@@ -117,8 +117,8 @@ export async function getAll() {
       },
       orderBy: { createdAt: 'desc' },
     });
-  } catch (error) {
-    logger.error('Error getting admins:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error }, 'Error getting admins');
     return [];
   }
 }
@@ -134,8 +134,8 @@ export async function updatePassword(id: string, newPassword: string) {
       where: { id }, // ✅ Usar id en lugar de username
       data: { password: hashedPassword },
     });
-  } catch (error) {
-    logger.error('Error updating password:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id }, 'Error updating password');
     throw error;
   }
 }
@@ -163,8 +163,8 @@ export async function changePassword(id: string, currentPassword: string, newPas
       where: { id },
       data: { password: hashedPassword },
     });
-  } catch (error) {
-    logger.error('Error changing password:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id }, 'Error changing password');
     throw error;
   }
 }
@@ -190,8 +190,8 @@ export async function updateAdmin(
       where: { id },
       data,
     });
-  } catch (error: any) {
-    logger.error('Error updating admin:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id, data }, 'Error updating admin');
     throw error;
   }
 }
@@ -211,8 +211,8 @@ export async function deleteAdmin(id: string) {
     return await prisma.admin.delete({
       where: { id },
     });
-  } catch (error) {
-    logger.error('Error deleting admin:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id }, 'Error deleting admin');
     throw error;
   }
 }
@@ -242,8 +242,8 @@ export async function findById(id: string) {
         updatedAt: true,
       },
     });
-  } catch (error) {
-    logger.error('Error finding admin by id:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id }, 'Error finding admin by id');
     return null;
   }
 }
@@ -260,8 +260,8 @@ export async function enable2FA(id: string, secret: string) {
         twoFASecret: secret,
       },
     });
-  } catch (error) {
-    logger.error('Error enabling 2FA:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id }, 'Error enabling 2FA');
     throw error;
   }
 }
@@ -278,8 +278,8 @@ export async function disable2FA(id: string) {
         twoFASecret: null,
       },
     });
-  } catch (error) {
-    logger.error('Error disabling 2FA:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id }, 'Error disabling 2FA');
     throw error;
   }
 }
@@ -296,8 +296,8 @@ export async function updateLastLogin(id: string, ip?: string | null) {
         lastLoginIp: ip ?? undefined,
       },
     });
-  } catch (error) {
-    logger.error('Error updating last login for admin:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id, ip }, 'Error updating last login for admin');
     return null;
   }
 }

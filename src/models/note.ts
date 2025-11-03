@@ -20,7 +20,7 @@ export async function recordDaily(data: {
       create: data,
     });
   } catch (error) {
-    logger.error('Error recording daily metric:', error);
+    logger.error({ err: error },'Error recording daily metric:');
     throw error;
   }
 }
@@ -31,7 +31,7 @@ export async function getByDate(date: Date) {
       where: { date },
     });
   } catch (error) {
-    logger.error('Error getting metric by date:', error);
+    logger.error({ err: error },'Error getting metric by date:');
     return null;
   }
 }
@@ -48,7 +48,7 @@ export async function getByDateRange(startDate: Date, endDate: Date) {
       orderBy: { date: 'asc' },
     });
   } catch (error) {
-    logger.error('Error getting metrics by date range:', error);
+    logger.error({ err: error },'Error getting metrics by date range:');
     return [];
   }
 }
@@ -61,7 +61,7 @@ export async function getLastDays(days: number) {
 
     return await getByDateRange(startDate, endDate);
   } catch (error) {
-    logger.error('Error getting last days metrics:', error);
+    logger.error({ err: error },'Error getting last days metrics:');
     return [];
   }
 }
@@ -127,7 +127,7 @@ export async function calculateToday() {
       humanTakeovers,
     };
   } catch (error) {
-    logger.error('Error calculating today metrics:', error);
+    logger.error({ err: error },'Error calculating today metrics:');
     return null;
   }
 }

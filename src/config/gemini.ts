@@ -49,10 +49,11 @@ async function getApiKey(): Promise<string> {
     logger.debug(`[GEMINI-CONFIG]   Length: ${apiKeyFromDb?.length || 0} chars`);
     
     if (apiKeyFromDb && apiKeyFromDb.trim().length >= 20) {
-      const maskedKey = apiKeyFromDb.trim().substring(0, 8) + '...' + apiKeyFromDb.trim().substring(apiKeyFromDb.trim().length - 4);
+      const key = apiKeyFromDb.trim();
+      const maskedKey = key.substring(0, 8) + '...' + key.substring(key.length - 4);
       logger.info(`[GEMINI-CONFIG] ✓ API key found in database: ${maskedKey}`);
       logger.debug('[GEMINI-CONFIG] Using Gemini API key from database');
-      return apiKeyFromDb.trim();
+      return key;
     }
     
     logger.error('[GEMINI-CONFIG] ✗ API key is missing or too short');
@@ -99,8 +100,7 @@ export async function getGeminiModel(): Promise<GenerativeModel> {
     
     if (cachedApiKey && cachedApiKey !== apiKey) {
       logger.info('[GEMINI-CONFIG] ⚠ API key changed, resetting cache');
-      logger.debug(`[GEMINI-CONFIG]   Old key: ${cachedApiKey.substring(0, 8)}...`);
-      logger.debug(`[GEMINI-CONFIG]   New key: ${apiKey.substring(0, 8)}...`);
+      logger.debug({ oldKeyPrefix: cachedApiKey.substring(0, 8), newKeyPrefix: apiKey.substring(0, 8) }, '[GEMINI-CONFIG] Keys diff');
       cachedModel = null;
       cachedApiKey = null;
     }
@@ -153,14 +153,14 @@ export async function getGeminiModel(): Promise<GenerativeModel> {
       ],
     };
 
-    logger.debug('[GEMINI-CONFIG] Configuration:', {
+    logger.debug({
       model: modelConfig.model,
       temperature: modelConfig.generationConfig.temperature,
       topP: modelConfig.generationConfig.topP,
       topK: modelConfig.generationConfig.topK,
       maxOutputTokens: modelConfig.generationConfig.maxOutputTokens,
       safetySettingsCount: modelConfig.safetySettings.length,
-    });
+    }, '[GEMINI-CONFIG] Configuration');
 
     logger.debug('[GEMINI-CONFIG] Step 3.4: Creating generative model instance...');
     cachedModel = genAI.getGenerativeModel(modelConfig);
@@ -185,7 +185,7 @@ export async function getGeminiModel(): Promise<GenerativeModel> {
     logger.error(`[GEMINI-CONFIG]   Status: ${error?.status || 'N/A'}`);
     
     if (error?.response) {
-      logger.error('[GEMINI-CONFIG]   Response:', JSON.stringify(error.response, null, 2));
+      logger.error({ response: error.response }, '[GEMINI-CONFIG]   Response');
     }
     
     if (error?.stack) {
@@ -254,7 +254,7 @@ export async function geminiSelfTest(): Promise<boolean> {
     }
     
     if (error?.response) {
-      logger.error('[GEMINI-TEST] Error response:', JSON.stringify(error.response, null, 2));
+      logger.error({ response: error.response }, '[GEMINI-TEST] Error response');
     }
     
     if (error?.stack) {
@@ -393,7 +393,7 @@ export async function generateResponse(prompt: string, context?: string): Promis
     logger.error(`[GEMINI-GENERATE] Error code: ${error?.code || 'N/A'}`);
     
     if (error?.response) {
-      logger.error('[GEMINI-GENERATE] Error response:', JSON.stringify(error.response, null, 2));
+      logger.error({ response: error.response }, '[GEMINI-GENERATE] Error response');
     }
     
     if (error?.stack) {
@@ -483,7 +483,7 @@ export async function getGeminiInfo(): Promise<{
       source,
     };
     
-    logger.info('[GEMINI-INFO] Configuration info:', info);
+    logger.info({ info }, '[GEMINI-INFO] Configuration info');
     return info;
   } catch (error: any) {
     logger.warn('[GEMINI-INFO] Could not get full configuration info');
@@ -495,7 +495,7 @@ export async function getGeminiInfo(): Promise<{
       source: 'default' as const,
     };
     
-    logger.debug('[GEMINI-INFO] Returning fallback info:', fallbackInfo);
+    logger.debug({ fallbackInfo }, '[GEMINI-INFO] Returning fallback info');
     return fallbackInfo;
   }
 }

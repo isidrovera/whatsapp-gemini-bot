@@ -3,7 +3,7 @@ import { getPrismaClient } from '../../config/database.js';
 import { logger } from '../../utils/logger.js';
 import { getConnectionStatus, hasQR, getBotPhoneNumber } from '../../services/whatsapp.js';
 import * as workingHoursModel from '../../models/workingHours.js';
-import * as adminModel from '../../models/admin.js'; // ✅ AGREGAR ESTA LÍNEA
+import * as adminModel from '../../models/admin.js';
 
 const router = express.Router();
 const prisma = getPrismaClient();
@@ -23,7 +23,7 @@ async function safeCount<T>(fn: () => Promise<T>): Promise<number> {
     if (typeof r?.count === 'number') return r.count;
     return 0;
   } catch (e: any) {
-    logger.debug('safeCount fallback:', e.message);
+    logger.debug({ err: e, message: e?.message }, 'safeCount fallback:');
     return 0;
   }
 }
@@ -32,15 +32,15 @@ async function safeList<T>(fn: () => Promise<T[]>): Promise<T[]> {
   try {
     return await fn();
   } catch (e: any) {
-    logger.debug('safeList fallback:', e.message);
+    logger.debug({ err: e, message: e?.message }, 'safeList fallback:');
     return [];
   }
 }
 
 // ============= VISTA SSR DASHBOARD =============
-router.get('/', async (req, res) => { // ✅ CAMBIAR _req por req
+router.get('/', async (req, res) => {
   try {
-    // ✅ AGREGAR: Obtener datos completos del admin logueado
+    // Obtener datos completos del admin logueado
     const adminId = req.session?.userId;
     let currentAdmin = null;
     
@@ -48,7 +48,7 @@ router.get('/', async (req, res) => { // ✅ CAMBIAR _req por req
       try {
         currentAdmin = await adminModel.findById(adminId);
       } catch (error) {
-        logger.error('Error loading admin data:', error);
+        logger.error({ err: error }, 'Error loading admin data:');
       }
     }
 
@@ -73,7 +73,7 @@ router.get('/', async (req, res) => { // ✅ CAMBIAR _req por req
       // últimos productos
       recentProducts,
 
-      // 👇 NUEVO: horarios de trabajo
+      // horarios de trabajo
       workingHours,
       workingNow,
     ] = await Promise.all([
@@ -112,7 +112,7 @@ router.get('/', async (req, res) => { // ✅ CAMBIAR _req por req
       // KPI tags
       safeCount(() => prisma.tag.count() as any),
 
-      // KPI plantillas
+      // KPI plantillas - usando safeCount para manejar si no existe el modelo
       safeCount(() => prisma.template.count() as any),
 
       // últimos productos
@@ -133,22 +133,22 @@ router.get('/', async (req, res) => { // ✅ CAMBIAR _req por req
         })
       ),
 
-      // 👇 NUEVO: obtener horario de hoy
+      // obtener horario de hoy
       (async () => {
         try {
           return await workingHoursModel.getTodayHours();
-        } catch (e) {
-          logger.debug('Error getting today hours:', e);
+        } catch (e: any) {
+          logger.debug({ err: e, message: e?.message }, 'Error getting today hours:');
           return null;
         }
       })(),
 
-      // 👇 NUEVO: verificar si está abierto ahora
+      // verificar si está abierto ahora
       (async () => {
         try {
           return await workingHoursModel.isWorkingNow();
-        } catch (e) {
-          logger.debug('Error checking working now:', e);
+        } catch (e: any) {
+          logger.debug({ err: e, message: e?.message }, 'Error checking working now:');
           return false;
         }
       })(),
@@ -181,16 +181,16 @@ router.get('/', async (req, res) => { // ✅ CAMBIAR _req por req
       recentProducts,
       whatsappStatus,
       
-      // 👇 NUEVO: pasar horarios a la vista
+      // pasar horarios a la vista
       workingHours,
       workingNow,
       
-      // ✅ CAMBIAR: Pasar objeto completo del admin en lugar de solo el nombre
-      user: currentAdmin, // Ahora pasa el objeto completo con id, name, email, avatar, role, etc.
-      currentUser: currentAdmin, // También como currentUser por compatibilidad
+      // Pasar objeto completo del admin en lugar de solo el nombre
+      user: currentAdmin,
+      currentUser: currentAdmin,
     });
   } catch (error) {
-    logger.error('Error loading dashboard:', error);
+    logger.error({ err: error }, 'Error loading dashboard:');
     res.status(500).send('Error loading dashboard');
   }
 });
@@ -215,7 +215,7 @@ router.get('/api/kpis/today', async (_req, res) => {
       tagsCount,
       templatesCount,
 
-      // 👇 NUEVO: horarios
+      // horarios
       workingHours,
       workingNow,
     ] = await Promise.all([
@@ -232,7 +232,7 @@ router.get('/api/kpis/today', async (_req, res) => {
       safeCount(() => prisma.tag.count() as any),
       safeCount(() => prisma.template.count() as any),
 
-      // 👇 NUEVO: horarios para API
+      // horarios para API
       (async () => {
         try {
           return await workingHoursModel.getTodayHours();
@@ -271,7 +271,7 @@ router.get('/api/kpis/today', async (_req, res) => {
         hasQR: hasQR(),
         botNumber: typeof getBotPhoneNumber === 'function' ? getBotPhoneNumber() : null,
       },
-      // 👇 NUEVO: incluir horarios en API
+      // incluir horarios en API
       workingHours: workingHours ? {
         dayOfWeek: workingHours.dayOfWeek,
         isWorkday: workingHours.isWorkday,
@@ -283,7 +283,7 @@ router.get('/api/kpis/today', async (_req, res) => {
       workingNow,
     });
   } catch (error) {
-    logger.error('Error getting KPIs:', error);
+    logger.error({ err: error }, 'Error getting KPIs:');
     res.status(500).json({ success: false, error: 'Error getting KPIs' });
   }
 });
@@ -342,7 +342,7 @@ router.get('/api/working-status', async (_req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    logger.error('Error getting working status:', error);
+    logger.error({ err: error }, 'Error getting working status:');
     res.status(500).json({ success: false, error: 'Error getting working status' });
   }
 });

@@ -16,7 +16,7 @@ router.get('/new', async (req, res) => {
       categories,
     });
   } catch (err) {
-    logger.error('Error loading new product form:', err);
+    logger.error({ err }, 'Error loading new product form:');
     res.status(500).send('Error loading new product form');
   }
 });
@@ -40,7 +40,7 @@ router.get('/', async (req, res) => {
       categories,
     });
   } catch (error) {
-    logger.error('Error loading products:', error);
+    logger.error({ err: error }, 'Error loading products:');
     res.status(500).send('Error loading products');
   }
 });
@@ -60,7 +60,7 @@ router.get('/api', async (req, res) => {
     
     res.json(products);
   } catch (error) {
-    logger.error('Error getting products:', error);
+    logger.error({ err: error }, 'Error getting products:');
     res.status(500).json({ error: 'Error getting products' });
   }
 });
@@ -71,7 +71,7 @@ router.get('/api/categories', async (_req, res) => {
     const categories = await productModel.getCategories();
     res.json(categories);
   } catch (error) {
-    logger.error('Error getting categories:', error);
+    logger.error({ err: error }, 'Error getting categories:');
     res.status(500).json({ error: 'Error getting categories' });
   }
 });
@@ -85,7 +85,7 @@ router.get('/api/:id', async (req, res) => {
     }
     res.json(product);
   } catch (error) {
-    logger.error('Error getting product:', error);
+    logger.error({ err: error }, 'Error getting product:');
     res.status(500).json({ error: 'Error getting product' });
   }
 });
@@ -111,7 +111,7 @@ router.post('/api', async (req, res) => {
 
     res.json(product);
   } catch (error) {
-    logger.error('Error creating product:', error);
+    logger.error({ err: error }, 'Error creating product:');
     res.status(500).json({ error: 'Error creating product' });
   }
 });
@@ -133,7 +133,7 @@ router.put('/api/:id', async (req, res) => {
 
     res.json(product);
   } catch (error) {
-    logger.error('Error updating product:', error);
+    logger.error({ err: error }, 'Error updating product:');
     res.status(500).json({ error: 'Error updating product' });
   }
 });
@@ -144,7 +144,7 @@ router.delete('/api/:id', async (req, res) => {
     await productModel.remove(req.params.id);
     res.json({ success: true });
   } catch (error) {
-    logger.error('Error deleting product:', error);
+    logger.error({ err: error }, 'Error deleting product:');
     res.status(500).json({ error: 'Error deleting product' });
   }
 });
@@ -161,7 +161,7 @@ router.post('/api/:id/keywords', async (req, res) => {
     const result = await productModel.addKeyword(req.params.id, keyword);
     res.json(result);
   } catch (error) {
-    logger.error('Error adding keyword:', error);
+    logger.error({ err: error }, 'Error adding keyword:');
     res.status(500).json({ error: 'Error adding keyword' });
   }
 });
@@ -172,7 +172,7 @@ router.delete('/api/keywords/:keywordId', async (req, res) => {
     await productModel.removeKeyword(req.params.keywordId);
     res.json({ success: true });
   } catch (error) {
-    logger.error('Error removing keyword:', error);
+    logger.error({ err: error }, 'Error removing keyword:');
     res.status(500).json({ error: 'Error removing keyword' });
   }
 });
@@ -183,7 +183,7 @@ router.get('/api/search/:query', async (req, res) => {
     const results = await productModel.searchByKeyword(req.params.query);
     res.json(results);
   } catch (error) {
-    logger.error('Error searching products:', error);
+    logger.error({ err: error }, 'Error searching products:');
     res.status(500).json({ error: 'Error searching products' });
   }
 });

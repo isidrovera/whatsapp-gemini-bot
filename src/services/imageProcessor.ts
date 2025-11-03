@@ -393,10 +393,7 @@ export async function processImage(
     logger.info('[IMAGE] Analysis:', result);
     return result;
   } catch (err: any) {
-    logger.error('[IMAGE] processImage failed:', {
-      message: err?.message,
-      stack: err?.stack,
-    });
+    logger.error({ message: err?.message, stack: err?.stack }, '[IMAGE] processImage failed:');
     return buildFallbackResult('image', {
       rawSummary: 'Imagen recibida (análisis falló).',
     });
@@ -452,10 +449,7 @@ export async function processAudio(
     logger.info('[AUDIO] Analysis:', result);
     return result;
   } catch (err: any) {
-    logger.error('[AUDIO] processAudio failed:', {
-      message: err?.message,
-      stack: err?.stack,
-    });
+    logger.error({ message: err?.message, stack: err?.stack }, '[AUDIO] processAudio failed:');
     return buildFallbackResult('audio', {
       rawSummary: 'Audio recibido (análisis falló).',
     });
@@ -510,10 +504,7 @@ export async function processVideo(
     logger.info('[VIDEO] Analysis:', result);
     return result;
   } catch (err: any) {
-    logger.error('[VIDEO] processVideo failed:', {
-      message: err?.message,
-      stack: err?.stack,
-    });
+    logger.error({ message: err?.message, stack: err?.stack }, '[VIDEO] processVideo failed:');
     return buildFallbackResult('video', {
       rawSummary: 'Video recibido (análisis falló).',
     });
@@ -582,13 +573,10 @@ export async function processDocument(
     if ((!result.mediaTypeClass || result.mediaTypeClass === 'otro') && isPdf) {
       result.mediaTypeClass = 'pdf';
     }
-    logger.info('[DOCUMENT] Analysis:', result);
+    logger.info(result, '[DOCUMENT] Analysis:');
     return result;
   } catch (err: any) {
-    logger.error('[DOCUMENT] processDocument failed:', {
-      message: err?.message,
-      stack: err?.stack,
-    });
+    logger.error({ message: err?.message, stack: err?.stack }, '[DOCUMENT] processDocument failed:');
     return buildFallbackResult('document', {
       rawSummary: 'Documento recibido (análisis falló).',
     });

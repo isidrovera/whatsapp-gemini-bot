@@ -13,7 +13,7 @@ export async function save(phoneNumber: string, role: 'USER' | 'ASSISTANT' | 'SY
       },
     });
   } catch (error) {
-    logger.error('Error saving conversation:', error);
+    logger.error({ err: error },'Error saving conversation:');
     throw error;
   }
 }
@@ -27,7 +27,7 @@ export async function getHistory(phoneNumber: string, limit: number = 10) {
     });
     return history.reverse();
   } catch (error) {
-    logger.error('Error getting conversation history:', error);
+    logger.error({ err: error },'Error getting conversation history:');
     return [];
   }
 }
@@ -48,7 +48,7 @@ export async function deleteOld(days: number = 30) {
     logger.info(`Deleted ${result.count} old conversation records`);
     return result.count;
   } catch (error) {
-    logger.error('Error deleting old conversations:', error);
+    logger.error({ err: error },'Error deleting old conversations:');
     return 0;
   }
 }
@@ -73,7 +73,7 @@ export async function getStatistics(phoneNumber: string) {
       assistantMessages,
     };
   } catch (error) {
-    logger.error('Error getting conversation statistics:', error);
+    logger.error({ err: error },'Error getting conversation statistics:');
     return { total: 0, userMessages: 0, assistantMessages: 0 };
   }
 }

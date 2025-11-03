@@ -1,104 +1,63 @@
 services:
-  # Base de datos PostgreSQL
   postgres:
     image: postgres:16-alpine
-    container_name: whatsapp-bot-db
+    container_name: whatsapp_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-system15}
-      POSTGRES_DB: ${POSTGRES_DB:-whatsapp_bot}
-      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: system15
+      POSTGRES_DB: whatsapp_bot           # <-- ya crea la DB en bootstrap si el volumen es nuevo
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      # Script para crear base de datos automáticamente
-      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
-    networks:
-      - whatsapp-network
+      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-whatsapp_bot}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Scripts de inicialización (solo la primera vez que el volumen está vacío)
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
 
-  # Bot de WhatsApp
-  whatsapp-bot:
+  # Crea la DB si el volumen ya existía y no se ejecutan los scripts de init
+  db-init:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: >
+      sh -lc "
+      psql -h postgres -U postgres -tc \"SELECT 1 FROM pg_database WHERE datname = 'whatsapp_bot'\" | grep -q 1
+      || createdb -h postgres -U postgres whatsapp_bot
+      "
+    environment:
+      PGPASSWORD: system15
+    restart: "no"
+
+  app:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: whatsapp-gemini-bot
+      target: runner
+    container_name: whatsapp_gemini_bot
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     environment:
-      # Base de datos
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-system15}@postgres:5432/${POSTGRES_DB:-whatsapp_bot}?schema=public
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-system15}
-      POSTGRES_DB: ${POSTGRES_DB:-whatsapp_bot}
-      
-      # Gemini AI
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      
-      # APIs externas
-      RENIEC_API_TOKEN: ${RENIEC_API_TOKEN:-}
-      SUNAT_API_TOKEN: ${SUNAT_API_TOKEN:-}
-      
-      # Web Server
-      WEB_PORT: ${WEB_PORT:-3000}
-      
-      # Session
-      SESSION_SECRET: ${SESSION_SECRET:-whatsapp-bot-super-secret-key-change-in-production}
-      
-      # Configuración
-      NODE_ENV: ${NODE_ENV:-production}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ENV: production
+      LOG_LEVEL: info
+      WEB_PORT: 3000
+      SESSION_SECRET: whatsapp-bot-super-secret-key-change-in-production
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}   # ponla en tu .env del host si prefieres
+      DATABASE_URL: postgresql://postgres:system15@postgres:5432/whatsapp_bot?schema=public
+      BAILEYS_AUTH_DIR: /app/storage/baileys
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - "3000:3000"
     volumes:
-      # Persistir sesión de WhatsApp
-      - whatsapp_sessions:/app/baileys_auth
-      # Logs
-      - ./logs:/app/logs
-    networks:
-      - whatsapp-network
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-
-  # Prisma Studio (opcional - solo ejecutar cuando sea necesario)
-  prisma-studio:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: whatsapp-bot-studio
-    restart: "no"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-system15}@postgres:5432/${POSTGRES_DB:-whatsapp_bot}?schema=public
-    ports:
-      - "5555:5555"
-    command: npx prisma studio --port 5555 --hostname 0.0.0.0
-    networks:
-      - whatsapp-network
-    profiles:
-      - tools
+      - storage:/app/storage
 
 volumes:
-  postgres_data:
-    driver: local
-  whatsapp_sessions:
-    driver: local
-
-networks:
-  whatsapp-network:
-    driver: bridge
+  pgdata:
+  storage:

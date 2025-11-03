@@ -188,7 +188,7 @@ app.use(
 
     // logger estructurado
     try {
-      logger.error('Web server error', {
+      logger.error({
         message: err?.message,
         name: err?.name,
         stack: err?.stack,
@@ -196,7 +196,7 @@ app.use(
         meta: err?.meta || null,
         url: req.originalUrl,
         method: req.method,
-      });
+      }, 'Web server error');
     } catch (e) {
       console.error('Logger failed while logging error:', e);
     }
@@ -222,12 +222,12 @@ app.use(
 process.on('unhandledRejection', (reason) => {
   try {
     prettyConsoleLogError('unhandledRejection', reason);
-    logger.error('Unhandled Rejection', {
+    logger.error({
       reason:
         reason && (reason as any).stack
           ? (reason as any).stack
           : reason,
-    });
+    }, 'Unhandled Rejection');
   } catch (e) {
     console.error('Error logging unhandledRejection', e);
   }
@@ -236,10 +236,10 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (err) => {
   try {
     prettyConsoleLogError('uncaughtException', err);
-    logger.error('Uncaught Exception', {
+    logger.error({
       message: err?.message,
       stack: err?.stack,
-    });
+    }, 'Uncaught Exception');
   } catch (e) {
     console.error('Error logging uncaughtException', e);
   } finally {

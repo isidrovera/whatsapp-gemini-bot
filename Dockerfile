@@ -1,83 +1,46 @@
-# Dockerfile
+# ===== BUILDER =====
 FROM node:20-alpine AS builder
 
-# Instalar dependencias del sistema
-RUN apk add --no-cache \
-    libc6-compat \
-    openssl \
-    postgresql-client
-
 WORKDIR /app
+ENV CI=true
 
-# Copiar archivos de dependencias
+# Herramientas nativas si alguna lib C lo requiere
+RUN apk add --no-cache python3 make g++ git
+
+# Instala TODAS las deps (incluyendo dev) para poder compilar TS y generar Prisma
 COPY package*.json ./
-COPY prisma ./prisma/
+RUN npm ci
 
-# Instalar TODAS las dependencias (incluidas dev) para poder compilar
-RUN npm ci && \
-    npm cache clean --force
+# Copia código y prisma
+COPY tsconfig.json ./tsconfig.json
+COPY prisma ./prisma
+COPY src ./src
 
-# Generar cliente de Prisma
+# Genera Prisma Client y compila TS
 RUN npx prisma generate
-
-# Copiar código fuente
-COPY . .
-
-# Compilar TypeScript
 RUN npm run build
 
-# ===== Etapa de producción =====
-FROM node:20-alpine AS production
+# Deja solo dependencias de producción (y conserva el Prisma Client generado)
+RUN npm prune --omit=dev
 
-# Instalar dependencias del sistema
-RUN apk add --no-cache \
-    libc6-compat \
-    openssl \
-    postgresql-client
-
+# ===== RUNNER =====
+FROM node:20-alpine AS runner
 WORKDIR /app
+ENV NODE_ENV=production
 
-# Copiar archivos de dependencias
-COPY package*.json ./
-COPY prisma ./prisma/
+# Copia node_modules YA PRUNED + Prisma Client desde el builder
+COPY --from=builder /app/node_modules ./node_modules
 
-# Instalar SOLO dependencias de producción
-RUN npm ci --only=production && \
-    npm cache clean --force
-
-# Generar cliente de Prisma
-RUN npx prisma generate
-
-# Copiar el código compilado desde builder
+# Copia Prisma schema (para migrate deploy en runtime) y el build
+COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/dist ./dist
 
-# Copiar otros archivos necesarios
-COPY --from=builder /app/src/web/views ./src/web/views
+# Storage (Baileys, adjuntos, etc.)
+RUN mkdir -p /app/storage/baileys
 
-# Crear usuario no-root
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nodejs
+# Entrypoint: aplica migraciones y arranca
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-# Cambiar permisos
-RUN chown -R nodejs:nodejs /app
-
-# Crear directorio para sesiones de WhatsApp
-RUN mkdir -p /app/baileys_auth && \
-    chown -R nodejs:nodejs /app/baileys_auth
-
-# Copiar script de inicio
-COPY docker-entrypoint.sh /app/
-RUN chmod +x /app/docker-entrypoint.sh && \
-    chown nodejs:nodejs /app/docker-entrypoint.sh
-
-USER nodejs
-
-# Exponer puerto
 EXPOSE 3000
-
-# Variables de entorno por defecto
-ENV NODE_ENV=production \
-    WEB_PORT=3000
-
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["npm", "start"]
+ENTRYPOINT ["/entrypoint.sh"]

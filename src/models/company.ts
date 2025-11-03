@@ -1,3 +1,4 @@
+// src/models/company.ts
 import { getPrismaClient } from '../config/database.js';
 import { logger } from '../utils/logger.js';
 
@@ -5,7 +6,7 @@ const prisma = getPrismaClient();
 
 // ========== EMPRESAS ==========
 
-// Lista todas las empresas (resumen). Incluimos campos fiscales básicos para editar desde listado si quieres.
+// Lista todas las empresas (resumen).
 export async function getAllCompanies() {
   try {
     return await prisma.company.findMany({
@@ -25,8 +26,8 @@ export async function getAllCompanies() {
         branches: { select: { id: true } },
       },
     });
-  } catch (err) {
-    logger.error('getAllCompanies error:', err);
+  } catch (err: unknown) {
+    logger.error({ err }, 'getAllCompanies error');
     return [];
   }
 }
@@ -47,8 +48,8 @@ export async function getCompanyById(companyId: string) {
         },
       },
     });
-  } catch (err) {
-    logger.error('getCompanyById error:', err);
+  } catch (err: unknown) {
+    logger.error({ err, companyId }, 'getCompanyById error');
     return null;
   }
 }
@@ -84,8 +85,8 @@ export async function createCompany(input: {
         name: input.razonSocial,
       },
     });
-  } catch (err: any) {
-    logger.error('createCompany error:', err);
+  } catch (err: unknown) {
+    logger.error({ err, input: { tipoDoc: input.tipoDoc, numeroDoc: input.numeroDoc } }, 'createCompany error');
     throw err;
   }
 }
@@ -106,31 +107,17 @@ export async function updateCompany(
     return await prisma.company.update({
       where: { id: companyId },
       data: {
-        ...(data.razonSocial !== undefined
-          ? { razonSocial: data.razonSocial, name: data.razonSocial }
-          : {}),
-        ...(data.estadoSunat !== undefined
-          ? { estadoSunat: data.estadoSunat }
-          : {}),
-        ...(data.condicionSunat !== undefined
-          ? { condicionSunat: data.condicionSunat }
-          : {}),
-        ...(data.direccionFiscal !== undefined
-          ? { direccionFiscal: data.direccionFiscal }
-          : {}),
-        ...(data.distritoFiscal !== undefined
-          ? { distritoFiscal: data.distritoFiscal }
-          : {}),
-        ...(data.provinciaFiscal !== undefined
-          ? { provinciaFiscal: data.provinciaFiscal }
-          : {}),
-        ...(data.departamentoFiscal !== undefined
-          ? { departamentoFiscal: data.departamentoFiscal }
-          : {}),
+        ...(data.razonSocial !== undefined ? { razonSocial: data.razonSocial, name: data.razonSocial } : {}),
+        ...(data.estadoSunat !== undefined ? { estadoSunat: data.estadoSunat } : {}),
+        ...(data.condicionSunat !== undefined ? { condicionSunat: data.condicionSunat } : {}),
+        ...(data.direccionFiscal !== undefined ? { direccionFiscal: data.direccionFiscal } : {}),
+        ...(data.distritoFiscal !== undefined ? { distritoFiscal: data.distritoFiscal } : {}),
+        ...(data.provinciaFiscal !== undefined ? { provinciaFiscal: data.provinciaFiscal } : {}),
+        ...(data.departamentoFiscal !== undefined ? { departamentoFiscal: data.departamentoFiscal } : {}),
       },
     });
-  } catch (err: any) {
-    logger.error('updateCompany error:', err);
+  } catch (err: unknown) {
+    logger.error({ err, companyId, data }, 'updateCompany error');
     throw err;
   }
 }
@@ -140,8 +127,8 @@ export async function deleteCompany(companyId: string) {
     return await prisma.company.delete({
       where: { id: companyId },
     });
-  } catch (err: any) {
-    logger.error('deleteCompany error:', err);
+  } catch (err: unknown) {
+    logger.error({ err, companyId }, 'deleteCompany error');
     throw err;
   }
 }
@@ -177,8 +164,8 @@ export async function createBranch(
         isActive: data.isActive !== false,
       },
     });
-  } catch (err: any) {
-    logger.error('createBranch error:', err);
+  } catch (err: unknown) {
+    logger.error({ err, companyId, data: { nombre: data.nombre } }, 'createBranch error');
     throw err;
   }
 }
@@ -212,8 +199,8 @@ export async function updateBranch(
         ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
       },
     });
-  } catch (err: any) {
-    logger.error('updateBranch error:', err);
+  } catch (err: unknown) {
+    logger.error({ err, branchId, data }, 'updateBranch error');
     throw err;
   }
 }
@@ -223,8 +210,8 @@ export async function deleteBranch(branchId: string) {
     return await prisma.branch.delete({
       where: { id: branchId },
     });
-  } catch (err: any) {
-    logger.error('deleteBranch error:', err);
+  } catch (err: unknown) {
+    logger.error({ err, branchId }, 'deleteBranch error');
     throw err;
   }
 }
@@ -254,8 +241,8 @@ export async function createBranchContact(
         isActive: data.isActive !== false,
       },
     });
-  } catch (err: any) {
-    logger.error('createBranchContact error:', err);
+  } catch (err: unknown) {
+    logger.error({ err, branchId, data: { nombre: data.nombre } }, 'createBranchContact error');
     throw err;
   }
 }
@@ -283,8 +270,8 @@ export async function updateBranchContact(
         ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
       },
     });
-  } catch (err: any) {
-    logger.error('updateBranchContact error:', err);
+  } catch (err: unknown) {
+    logger.error({ err, contactId, data }, 'updateBranchContact error');
     throw err;
   }
 }
@@ -294,8 +281,8 @@ export async function deleteBranchContact(contactId: string) {
     return await prisma.branchContact.delete({
       where: { id: contactId },
     });
-  } catch (err: any) {
-    logger.error('deleteBranchContact error:', err);
+  } catch (err: unknown) {
+    logger.error({ err, contactId }, 'deleteBranchContact error');
     throw err;
   }
 }
@@ -305,60 +292,23 @@ export async function deleteBranchContact(contactId: string) {
 // ===============================
 
 export async function exportAllCompanyDataFlat() {
-  const companies = await prisma.company.findMany({
-    orderBy: { razonSocial: 'asc' },
-    include: {
-      branches: {
-        orderBy: { nombre: 'asc' },
-        include: {
-          contacts: {
-            orderBy: { nombre: 'asc' },
+  try {
+    const companies = await prisma.company.findMany({
+      orderBy: { razonSocial: 'asc' },
+      include: {
+        branches: {
+          orderBy: { nombre: 'asc' },
+          include: {
+            contacts: { orderBy: { nombre: 'asc' } },
           },
         },
       },
-    },
-  });
+    });
 
-  const rows: any[] = [];
+    const rows: any[] = [];
 
-  companies.forEach((co) => {
-    if (!co.branches || co.branches.length === 0) {
-      rows.push({
-        companyId: co.id,
-        tipoDoc: co.tipoDoc,
-        numeroDoc: co.numeroDoc,
-        razonSocial: co.razonSocial,
-        estadoSunat: co.estadoSunat ?? '',
-        condicionSunat: co.condicionSunat ?? '',
-        direccionFiscal: co.direccionFiscal ?? '',
-        distritoFiscal: co.distritoFiscal ?? '',
-        provinciaFiscal: co.provinciaFiscal ?? '',
-        departamentoFiscal: co.departamentoFiscal ?? '',
-
-        branchId: '',
-        branchNombre: '',
-        branchDireccion: '',
-        branchDistrito: '',
-        branchProvincia: '',
-        branchDepartamento: '',
-        branchReferencia: '',
-        branchTelefono: '',
-        branchEmail: '',
-        branchIsActive: '',
-
-        contactId: '',
-        contactNombre: '',
-        contactCargo: '',
-        contactEmail: '',
-        contactCelular: '',
-        contactWhatsapp: '',
-        contactIsActive: '',
-      });
-      return;
-    }
-
-    co.branches.forEach((br) => {
-      if (!br.contacts || br.contacts.length === 0) {
+    companies.forEach((co) => {
+      if (!co.branches || co.branches.length === 0) {
         rows.push({
           companyId: co.id,
           tipoDoc: co.tipoDoc,
@@ -371,16 +321,16 @@ export async function exportAllCompanyDataFlat() {
           provinciaFiscal: co.provinciaFiscal ?? '',
           departamentoFiscal: co.departamentoFiscal ?? '',
 
-          branchId: br.id,
-          branchNombre: br.nombre,
-          branchDireccion: br.direccion,
-          branchDistrito: br.distrito ?? '',
-          branchProvincia: br.provincia ?? '',
-          branchDepartamento: br.departamento ?? '',
-          branchReferencia: br.referencia ?? '',
-          branchTelefono: br.telefono ?? '',
-          branchEmail: br.email ?? '',
-          branchIsActive: br.isActive ? 'true' : 'false',
+          branchId: '',
+          branchNombre: '',
+          branchDireccion: '',
+          branchDistrito: '',
+          branchProvincia: '',
+          branchDepartamento: '',
+          branchReferencia: '',
+          branchTelefono: '',
+          branchEmail: '',
+          branchIsActive: '',
 
           contactId: '',
           contactNombre: '',
@@ -393,43 +343,83 @@ export async function exportAllCompanyDataFlat() {
         return;
       }
 
-      br.contacts.forEach((ct) => {
-        rows.push({
-          companyId: co.id,
-          tipoDoc: co.tipoDoc,
-          numeroDoc: co.numeroDoc,
-          razonSocial: co.razonSocial,
-          estadoSunat: co.estadoSunat ?? '',
-          condicionSunat: co.condicionSunat ?? '',
-          direccionFiscal: co.direccionFiscal ?? '',
-          distritoFiscal: co.distritoFiscal ?? '',
-          provinciaFiscal: co.provinciaFiscal ?? '',
-          departamentoFiscal: co.departamentoFiscal ?? '',
+      co.branches.forEach((br) => {
+        if (!br.contacts || br.contacts.length === 0) {
+          rows.push({
+            companyId: co.id,
+            tipoDoc: co.tipoDoc,
+            numeroDoc: co.numeroDoc,
+            razonSocial: co.razonSocial,
+            estadoSunat: co.estadoSunat ?? '',
+            condicionSunat: co.condicionSunat ?? '',
+            direccionFiscal: co.direccionFiscal ?? '',
+            distritoFiscal: co.distritoFiscal ?? '',
+            provinciaFiscal: co.provinciaFiscal ?? '',
+            departamentoFiscal: co.departamentoFiscal ?? '',
 
-          branchId: br.id,
-          branchNombre: br.nombre,
-          branchDireccion: br.direccion,
-          branchDistrito: br.distrito ?? '',
-          branchProvincia: br.provincia ?? '',
-          branchDepartamento: br.departamento ?? '',
-          branchReferencia: br.referencia ?? '',
-          branchTelefono: br.telefono ?? '',
-          branchEmail: br.email ?? '',
-          branchIsActive: br.isActive ? 'true' : 'false',
+            branchId: br.id,
+            branchNombre: br.nombre,
+            branchDireccion: br.direccion,
+            branchDistrito: br.distrito ?? '',
+            branchProvincia: br.provincia ?? '',
+            branchDepartamento: br.departamento ?? '',
+            branchReferencia: br.referencia ?? '',
+            branchTelefono: br.telefono ?? '',
+            branchEmail: br.email ?? '',
+            branchIsActive: br.isActive ? 'true' : 'false',
 
-          contactId: ct.id,
-          contactNombre: ct.nombre,
-          contactCargo: ct.cargo ?? '',
-          contactEmail: ct.email ?? '',
-          contactCelular: ct.celular ?? '',
-          contactWhatsapp: ct.whatsapp ?? '',
-          contactIsActive: ct.isActive ? 'true' : 'false',
+            contactId: '',
+            contactNombre: '',
+            contactCargo: '',
+            contactEmail: '',
+            contactCelular: '',
+            contactWhatsapp: '',
+            contactIsActive: '',
+          });
+          return;
+        }
+
+        br.contacts.forEach((ct) => {
+          rows.push({
+            companyId: co.id,
+            tipoDoc: co.tipoDoc,
+            numeroDoc: co.numeroDoc,
+            razonSocial: co.razonSocial,
+            estadoSunat: co.estadoSunat ?? '',
+            condicionSunat: co.condicionSunat ?? '',
+            direccionFiscal: co.direccionFiscal ?? '',
+            distritoFiscal: co.distritoFiscal ?? '',
+            provinciaFiscal: co.provinciaFiscal ?? '',
+            departamentoFiscal: co.departamentoFiscal ?? '',
+
+            branchId: br.id,
+            branchNombre: br.nombre,
+            branchDireccion: br.direccion,
+            branchDistrito: br.distrito ?? '',
+            branchProvincia: br.provincia ?? '',
+            branchDepartamento: br.departamento ?? '',
+            branchReferencia: br.referencia ?? '',
+            branchTelefono: br.telefono ?? '',
+            branchEmail: br.email ?? '',
+            branchIsActive: br.isActive ? 'true' : 'false',
+
+            contactId: ct.id,
+            contactNombre: ct.nombre,
+            contactCargo: ct.cargo ?? '',
+            contactEmail: ct.email ?? '',
+            contactCelular: ct.celular ?? '',
+            contactWhatsapp: ct.whatsapp ?? '',
+            contactIsActive: ct.isActive ? 'true' : 'false',
+          });
         });
       });
     });
-  });
 
-  return rows;
+    return rows;
+  } catch (err: unknown) {
+    logger.error({ err }, 'exportAllCompanyDataFlat error');
+    throw err;
+  }
 }
 
 export async function importFlatRows(rows: any[]) {
@@ -453,9 +443,7 @@ export async function importFlatRows(rows: any[]) {
     const provinciaFiscal = raw.provinciaFiscal ? String(raw.provinciaFiscal).trim() : null;
     const departamentoFiscal = raw.departamentoFiscal ? String(raw.departamentoFiscal).trim() : null;
 
-    if (!tipoDoc || !numeroDoc || !razonSocial) {
-      continue;
-    }
+    if (!tipoDoc || !numeroDoc || !razonSocial) continue;
 
     // upsert empresa
     const existingCompany = await prisma.company.findFirst({
@@ -500,20 +488,16 @@ export async function importFlatRows(rows: any[]) {
     const branchNombre = (raw.branchNombre || '').toString().trim();
     const branchDireccion = (raw.branchDireccion || '').toString().trim();
 
-    let branchRecord = null;
+    let branchRecord: { id: string } | null = null;
     if (branchNombre || branchDireccion) {
       const uniqueNombre = branchNombre || 'SIN NOMBRE';
       const uniqueDireccion = branchDireccion || 'SIN DIRECCION';
 
       const existingBranch = await prisma.branch.findFirst({
-        where: {
-          companyId: company.id,
-          nombre: uniqueNombre,
-          direccion: uniqueDireccion,
-        },
+        where: { companyId: company.id, nombre: uniqueNombre, direccion: uniqueDireccion },
       });
 
-      const branchData: any = {
+      const branchData: Record<string, unknown> = {
         distrito: raw.branchDistrito ? String(raw.branchDistrito).trim() : null,
         provincia: raw.branchProvincia ? String(raw.branchProvincia).trim() : null,
         departamento: raw.branchDepartamento ? String(raw.branchDepartamento).trim() : null,
@@ -556,7 +540,7 @@ export async function importFlatRows(rows: any[]) {
           },
         });
 
-        const contactData: any = {
+        const contactData: Record<string, unknown> = {
           cargo: raw.contactCargo ? String(raw.contactCargo).trim() : null,
           email: raw.contactEmail ? String(raw.contactEmail).trim() : null,
           celular: contactCelular || null,

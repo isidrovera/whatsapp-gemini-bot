@@ -1,3 +1,4 @@
+// src/models/calendar.ts
 import { getPrismaClient } from '../config/database.js';
 import { logger } from '../utils/logger.js';
 
@@ -31,15 +32,15 @@ export async function create(
     const row = await prisma.calendarEvent.create({
       data: {
         title,
-        date: ymdToUTCDate(ymd), // 👈 Prisma espera Date/ISO completo
+        date: ymdToUTCDate(ymd), // Prisma espera Date
         type,
         description,
         isRecurring: !!isRecurring,
       },
     });
     return serializeEvent(row);
-  } catch (error) {
-    logger.error('Error creating calendar event:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, title, date, type }, 'Error creating calendar event');
     throw error;
   }
 }
@@ -48,8 +49,8 @@ export async function getAll() {
   try {
     const rows = await prisma.calendarEvent.findMany({ orderBy: { date: 'asc' } });
     return rows.map(serializeEvent);
-  } catch (error) {
-    logger.error('Error getting calendar events:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error }, 'Error getting calendar events');
     return [];
   }
 }
@@ -71,8 +72,8 @@ export async function getUpcoming(days: number = 30) {
       orderBy: { date: 'asc' },
     });
     return rows.map(serializeEvent);
-  } catch (error) {
-    logger.error('Error getting upcoming events:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, days }, 'Error getting upcoming events');
     return [];
   }
 }
@@ -81,8 +82,8 @@ export async function findById(id: string) {
   try {
     const row = await prisma.calendarEvent.findUnique({ where: { id } });
     return row ? serializeEvent(row) : null;
-  } catch (error) {
-    logger.error('Error finding calendar event:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id }, 'Error finding calendar event');
     return null;
   }
 }
@@ -98,15 +99,15 @@ export async function update(
   }
 ) {
   try {
-    const payload: any = { ...data };
+    const payload: Record<string, unknown> = { ...data };
     if (data.date) {
       const ymd = toYMD(data.date);
-      payload.date = ymdToUTCDate(ymd); // 👈 normalizamos
+      payload.date = ymdToUTCDate(ymd); // normalizamos
     }
     const row = await prisma.calendarEvent.update({ where: { id }, data: payload });
     return serializeEvent(row);
-  } catch (error) {
-    logger.error('Error updating calendar event:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id, data }, 'Error updating calendar event');
     throw error;
   }
 }
@@ -114,8 +115,8 @@ export async function update(
 export async function remove(id: string) {
   try {
     return await prisma.calendarEvent.delete({ where: { id } });
-  } catch (error) {
-    logger.error('Error deleting calendar event:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id }, 'Error deleting calendar event');
     throw error;
   }
 }
@@ -127,8 +128,8 @@ export async function findByDateAndTitle(dateYMD: string, title: string) {
     return await prisma.calendarEvent.findFirst({
       where: { date: target, title },
     });
-  } catch (error) {
-    logger.error('Error finding calendar event by date+title:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, dateYMD, title }, 'Error finding calendar event by date+title');
     return null;
   }
 }
@@ -144,8 +145,8 @@ export async function isHoliday(date: Date | string): Promise<boolean> {
       },
     });
     return !!found;
-  } catch (error) {
-    logger.error('Error checking if holiday:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, date }, 'Error checking if holiday');
     return false;
   }
 }
@@ -158,8 +159,8 @@ export async function getTodayEvent() {
       where: { date: ymdToUTCDate(ymd) },
     });
     return row ? serializeEvent(row) : null;
-  } catch (error) {
-    logger.error('Error getting today event:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error }, 'Error getting today event');
     return null;
   }
 }

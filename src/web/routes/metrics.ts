@@ -109,8 +109,8 @@ router.get('/', async (req, res) => {
     // 5. Actividad reciente
     // =============================
     // Tomamos las últimas 20 entradas de conversationHistory
-    // y unimos contacto + (opcional) departamento.
-    // NOTA: ajusta nombres de campos según tu schema real.
+    // Si tu schema NO tiene relaciones directas contact/department en conversationHistory,
+    // hacemos una query separada para obtener esos datos
     const recentRows = await prisma.conversationHistory.findMany({
       take: 20,
       orderBy: { createdAt: 'desc' },
@@ -118,30 +118,48 @@ router.get('/', async (req, res) => {
         id: true,
         createdAt: true,
         phoneNumber: true,
-        message: true,
-        // si tienes relación con contacto:
-        contact: {
-          select: {
-            name: true,
-          },
-        },
-        // si tienes relación con departamento ej. departmentId -> department.name:
-        department: {
-          select: {
-            name: true,
-          },
-        },
+        role: true,
+        content: true,
       },
     });
 
-    const recentActivity = recentRows.map(r => ({
-      timestamp: r.createdAt,
-      contactName: r.contact?.name || null,
-      phoneNumber: r.phoneNumber,
-      department: r.department?.name || null,
-      type: 'Mensaje', // placeholder: podrías usar r.type si existe
-      status: 'pending', // placeholder: podrías mapear a 'resolved' etc
-    }));
+    // Obtener información de contactos asociados a estos números
+    const phoneNumbers = [...new Set(recentRows.map(r => r.phoneNumber))];
+    const contacts = await prisma.contact.findMany({
+      where: { phoneNumber: { in: phoneNumbers } },
+      select: {
+        phoneNumber: true,
+        name: true,
+      },
+    });
+
+    // Crear mapa de phoneNumber -> contact
+    const contactMap = new Map(contacts.map(c => [c.phoneNumber, c]));
+
+    // Si tienes departmentId en conversationHistory, descomenta esto:
+    // const conversationsWithDept = await prisma.conversationHistory.findMany({
+    //   where: { id: { in: recentRows.map(r => r.id) } },
+    //   select: {
+    //     id: true,
+    //     departmentId: true,
+    //     department: {
+    //       select: { name: true }
+    //     }
+    //   }
+    // });
+    // const deptMap = new Map(conversationsWithDept.map(c => [c.id, c.department?.name || null]));
+
+    const recentActivity = recentRows.map(r => {
+      const contact = contactMap.get(r.phoneNumber);
+      return {
+        timestamp: r.createdAt,
+        contactName: contact?.name || 'Desconocido',
+        phoneNumber: r.phoneNumber,
+        department: 'Sin departamento', // Si tienes departmentId: deptMap.get(r.id) || 'Sin departamento'
+        type: 'Mensaje',
+        status: 'pending',
+      };
+    });
 
     // =============================
     // 6. Tiempos de respuesta por dept
@@ -178,10 +196,7 @@ router.get('/', async (req, res) => {
       responseTimesByDept,
     });
   } catch (err: any) {
-    logger.error('Error rendering /metrics', {
-      message: err?.message,
-      stack: err?.stack,
-    });
+    logger.error({ err, message: err?.message, stack: err?.stack }, 'Error rendering /metrics');
 
     // fallback para no dejarte en 404
     res.status(500).render('metrics', {
@@ -258,7 +273,7 @@ router.get('/api/messages-per-hour', async (req, res) => {
     const values = result.map((r) => parseInt(r.cnt, 10));
     res.json({ labels, values, date: limaDate });
   } catch (error) {
-    logger.error('Error in /metrics/api/messages-per-hour:', error);
+    logger.error({ err: error }, 'Error in /metrics/api/messages-per-hour:');
     res.status(500).json({ error: 'Error getting messages per hour' });
   }
 });
@@ -294,7 +309,7 @@ router.get('/api/department-distribution', async (req, res) => {
     const values = rows.map((r) => parseInt(r.cnt, 10));
     res.json({ labels, values, date: limaDate });
   } catch (error) {
-    logger.error('Error in /metrics/api/department-distribution:', error);
+    logger.error({ err: error }, 'Error in /metrics/api/department-distribution:');
     res
       .status(500)
       .json({ error: 'Error getting department distribution' });
@@ -365,7 +380,7 @@ router.get('/api/summary', async (_req, res) => {
       avg_first_response_hours,
     });
   } catch (error) {
-    logger.error('Error in /metrics/api/summary:', error);
+    logger.error({ err: error }, 'Error in /metrics/api/summary:');
     res
       .status(500)
       .json({ error: 'Error getting metrics summary' });

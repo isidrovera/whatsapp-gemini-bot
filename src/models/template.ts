@@ -1,6 +1,6 @@
 // src/models/template.ts
-import { getPrismaClient } from '../config/database'   // ⬅️ sin .js
-import { logger } from '../utils/logger'               // ⬅️ sin .js
+import { getPrismaClient } from '../config/database.js'   // ⬅️ agrega .js
+import { logger } from '../utils/logger.js'               // ⬅️ agrega .js
 import type { Prisma, MessageTemplate } from '@prisma/client'
 
 const prisma = getPrismaClient()
@@ -14,7 +14,7 @@ export async function getAll(): Promise<MessageTemplate[]> {
       ],
     })
   } catch (error) {
-    logger.error('Error getting templates:', error)
+    logger.error({ err: error }, 'Error getting templates:')
     return []
   }
 }
@@ -29,7 +29,7 @@ export async function getActive(): Promise<MessageTemplate[]> {
       ],
     })
   } catch (error) {
-    logger.error('Error getting active templates:', error)
+    logger.error({ err: error }, 'Error getting active templates:')
     return []
   }
 }
@@ -37,31 +37,26 @@ export async function getActive(): Promise<MessageTemplate[]> {
 export async function getByCategory(category: string): Promise<MessageTemplate[]> {
   try {
     return await prisma.messageTemplate.findMany({
-      where: {
-        category,
-        isActive: true,
-      },
+      where: { category, isActive: true },
       orderBy: { name: 'asc' },
     })
   } catch (error) {
-    logger.error('Error getting templates by category:', error)
+    logger.error({ err: error }, 'Error getting templates by category:')
     return []
   }
 }
 
 export async function findById(id: string): Promise<MessageTemplate | null> {
   try {
-    return await prisma.messageTemplate.findUnique({
-      where: { id },
-    })
+    return await prisma.messageTemplate.findUnique({ where: { id } })
   } catch (error) {
-    logger.error('Error finding template:', error)
+    logger.error({ err: error }, 'Error finding template:')
     return null
   }
 }
 
-// Tipos de entrada seguros para create/update
-type CreateTemplateInput = Pick<MessageTemplate, 'name' | 'content' | 'category'> &
+type CreateTemplateInput =
+  Pick<MessageTemplate, 'name' | 'content' | 'category'> &
   Partial<Pick<MessageTemplate, 'variables' | 'isActive'>>
 
 type UpdateTemplateInput = Partial<
@@ -72,67 +67,47 @@ export async function create(data: CreateTemplateInput): Promise<MessageTemplate
   try {
     return await prisma.messageTemplate.create({ data })
   } catch (error) {
-    logger.error('Error creating template:', error)
+    logger.error({ err: error }, 'Error creating template:')
     throw error
   }
 }
 
 export async function update(id: string, data: UpdateTemplateInput): Promise<MessageTemplate> {
   try {
-    return await prisma.messageTemplate.update({
-      where: { id },
-      data,
-    })
+    return await prisma.messageTemplate.update({ where: { id }, data })
   } catch (error) {
-    logger.error('Error updating template:', error)
+    logger.error({ err: error }, 'Error updating template:')
     throw error
   }
 }
 
 export async function remove(id: string): Promise<MessageTemplate> {
   try {
-    return await prisma.messageTemplate.delete({
-      where: { id },
-    })
+    return await prisma.messageTemplate.delete({ where: { id } })
   } catch (error) {
-    logger.error('Error deleting template:', error)
+    logger.error({ err: error }, 'Error deleting template:')
     throw error
   }
 }
 
-/**
- * Renderizar template con variables: reemplaza {{clave}} por su valor.
- * Si faltan variables, las deja tal cual (útil para depurar).
- */
-export function render(
-  content: string,
-  variables: Record<string, string>
-): string {
+/** Renderizar template con variables: reemplaza {{clave}} por su valor. */
+export function render(content: string, variables: Record<string, string>): string {
   let result = content
-
-  // Si tus claves pueden tener caracteres especiales, habría que escapar.
-  // Aquí asumimos claves tipo \w (coincide con extractVariables).
   for (const [key, value] of Object.entries(variables)) {
     const regex = new RegExp(`{{${key}}}`, 'g')
     result = result.replace(regex, value)
   }
-
   return result
 }
 
-/**
- * Extraer variables de un template: devuelve ['nombre', 'ruc'] para
- * "Hola {{nombre}}, tu RUC es {{ruc}}"
- */
+/** Extrae variables: "Hola {{nombre}}, tu RUC es {{ruc}}" -> ['nombre','ruc'] */
 export function extractVariables(content: string): string[] {
   const regex = /{{(\w+)}}/g
-  const variables: string[] = []
-  let match: RegExpExecArray | null
-
-  while ((match = regex.exec(content)) !== null) {
-    const key = match[1]
-    if (!variables.includes(key)) variables.push(key)
+  const vars: string[] = []
+  let m: RegExpExecArray | null
+  while ((m = regex.exec(content)) !== null) {
+    const key = m[1]
+    if (!vars.includes(key)) vars.push(key)
   }
-
-  return variables
+  return vars
 }

@@ -99,7 +99,7 @@ export async function initializeOdoo(): Promise<void> {
 
     logger.info('[ODOO] Odoo integration ready ✅')
   } catch (err: any) {
-    logger.error('[ODOO] Health-check failed:', err?.message ?? err)
+    logger.error({ err, message: err?.message }, '[ODOO] Health-check failed:')
     throw new Error(`Odoo initialization failed: ${err?.message ?? String(err)}`)
   }
 }
@@ -170,7 +170,7 @@ export async function getCustomerInfo(
       return null
     }
   } catch (error) {
-    logger.error('[ODOO] Error connecting to Odoo API:', error)
+    logger.error({ err: error }, '[ODOO] Error connecting to Odoo API:')
     return null
   }
 }

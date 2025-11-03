@@ -175,7 +175,7 @@ export async function linkExistingCompanyToContact(
 
     return pivot;
   } catch (error) {
-    logger.error('Error linking existing company:', error);
+    logger.error({ err: error },'Error linking existing company:');
     throw error;
   }
 }
@@ -262,7 +262,7 @@ export async function linkExistingCompanyByRucAndSetPrimary(
 
     return { ok: true };
   } catch (error) {
-    logger.error('linkExistingCompanyByRucAndSetPrimary error:', error);
+    logger.error({ err: error },'linkExistingCompanyByRucAndSetPrimary error:');
     return { ok: false, reason: 'EXCEPTION' };
   }
 }
@@ -289,7 +289,7 @@ export async function findByPhone(phoneNumber: string) {
       },
     });
   } catch (error) {
-    logger.error('Error finding contact by phone:', error);
+    logger.error({ err: error },'Error finding contact by phone:');
     return null;
   }
 }
@@ -310,7 +310,7 @@ export async function findByBillysId(billysId: string) {
       },
     });
   } catch (error) {
-    logger.error('Error finding contact by billysId:', error);
+    logger.error({ err: error },'Error finding contact by billysId:');
     return null;
   }
 }
@@ -354,7 +354,7 @@ export async function getAll(limit?: number, offset?: number) {
       };
     });
   } catch (error) {
-    logger.error('Error getting all contacts:', error);
+    logger.error({ err: error },'Error getting all contacts:');
     return [];
   }
 }
@@ -367,7 +367,7 @@ export async function isRegistered(phoneNumber: string): Promise<boolean> {
     const contact = await findByPhone(phoneNumber);
     return contact?.state === 'REGISTERED';
   } catch (error) {
-    logger.error('Error checking registration:', error);
+    logger.error({ err: error },'Error checking registration:');
     return false;
   }
 }
@@ -402,7 +402,7 @@ export async function getAllCompaniesForContact(contactId: string) {
       isPrimary: cc.isPrimary || false,
     }));
   } catch (error) {
-    logger.error('Error getting companies for contact:', error);
+    logger.error({ err: error },'Error getting companies for contact:');
     return [];
   }
 }
@@ -463,7 +463,7 @@ export async function create(phoneNumber: string, billysId?: string) {
       },
     });
   } catch (error: any) {
-    logger.error('Error creating contact:', error);
+    logger.error({ err: error },'Error creating contact:');
     throw error;
   }
 }
@@ -526,7 +526,7 @@ export async function linkBillysId(phoneNumber: string, billysId: string) {
       data: { billysId },
     });
   } catch (error) {
-    logger.error('Error linking billysId:', error);
+    logger.error({ err: error },'Error linking billysId:');
     throw error;
   }
 }
@@ -559,7 +559,7 @@ export async function updateDNI(
       },
     });
   } catch (error) {
-    logger.error('Error updating DNI:', error);
+    logger.error({ err: error },'Error updating DNI:');
     throw error;
   }
 }
@@ -630,7 +630,7 @@ export async function updateRUC(
       },
     });
   } catch (error) {
-    logger.error('Error updating RUC:', error);
+    logger.error({ err: error },'Error updating RUC:');
     throw error;
   }
 }
@@ -646,7 +646,7 @@ export async function updateState(phoneNumber: string, state: string) {
       data: { state },
     });
   } catch (error) {
-    logger.error('Error updating state:', error);
+    logger.error({ err: error },'Error updating state:');
     throw error;
   }
 }
@@ -689,7 +689,7 @@ export async function updateContactInfo(
       data,
     });
   } catch (error) {
-    logger.error('Error updating contact info:', error);
+    logger.error({ err: error },'Error updating contact info:');
     throw error;
   }
 }
@@ -768,7 +768,7 @@ export async function addCompanyToContact(
 
     return pivot;
   } catch (error) {
-    logger.error('Error adding company to contact:', error);
+    logger.error({ err: error },'Error adding company to contact:');
     throw error;
   }
 }
@@ -809,7 +809,7 @@ export async function setPrimaryCompany(
 
     return true;
   } catch (error) {
-    logger.error('Error setting primary company:', error);
+    logger.error({ err: error },'Error setting primary company:');
     throw error;
   }
 }
@@ -873,7 +873,7 @@ export async function removeCompanyFromContact(
 
     return true;
   } catch (error) {
-    logger.error('Error removing company from contact:', error);
+    logger.error({ err: error },'Error removing company from contact:');
     throw error;
   }
 }
@@ -893,7 +893,7 @@ export async function setHumanTakeover(phoneNumber: string) {
       },
     });
   } catch (error) {
-    logger.error('Error setting human takeover:', error);
+    logger.error({ err: error },'Error setting human takeover:');
     throw error;
   }
 }
@@ -909,7 +909,7 @@ export async function releaseHumanTakeover(phoneNumber: string) {
       },
     });
   } catch (error) {
-    logger.error('Error releasing human takeover:', error);
+    logger.error({ err: error },'Error releasing human takeover:');
     throw error;
   }
 }
@@ -958,7 +958,7 @@ export async function shouldBotRespond(
     );
     return false;
   } catch (error) {
-    logger.error('Error checking if bot should respond:', error);
+    logger.error({ err: error },'Error checking if bot should respond:');
     // en caso de error no bloqueamos al bot
     return true;
   }
@@ -996,7 +996,7 @@ export async function blockContact(
 
     return updated;
   } catch (error) {
-    logger.error('Error blocking contact:', error);
+    logger.error({ err: error },'Error blocking contact:');
     throw error;
   }
 }
@@ -1016,7 +1016,7 @@ export async function unblockContact(phoneNumber: string) {
     // no eliminamos forzosamente el registro de BlockedNumber (auditoría)
     return updated;
   } catch (error) {
-    logger.error('Error unblocking contact:', error);
+    logger.error({ err: error },'Error unblocking contact:');
     throw error;
   }
 }
@@ -1084,7 +1084,7 @@ export async function exportContactsToExcelData() {
       };
     });
   } catch (error) {
-    logger.error('Error preparing export data:', error);
+    logger.error({ err: error },'Error preparing export data:');
     throw error;
   }
 }
@@ -1159,7 +1159,7 @@ export async function importContactsFromExcel(rows: Array<{
 
       results.push({ phoneNumber: phone, status: 'OK' });
     } catch (err: any) {
-      logger.error('Error importing row:', err);
+      logger.error({ err: error },'Error importing row:');
       results.push({
         phoneNumber: row.phoneNumber,
         status: 'ERROR',
@@ -1204,7 +1204,7 @@ export async function deleteContact(contactId: string) {
 
     return true;
   } catch (error) {
-    logger.error('Error deleting contact:', error);
+    logger.error({ err: error },'Error deleting contact:');
     throw error;
   }
 }

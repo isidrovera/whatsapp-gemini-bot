@@ -1,13 +1,18 @@
 // src/web/routes/api.ts
 import express, { Request, Response } from 'express';
-import { logger } from '../../utils/logger';
+import { logger } from '../../utils/logger.js';
 import {
   sendDirectMessage,
   sendMediaToPhone,
-} from '../../services/whatsapp';
-import { validateApiKey } from '../middleware/auth';
+} from '../../services/whatsapp.js';
+import { validateApiKey } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Extiende Request para incluir la propiedad que inyecta el middleware
+interface RequestWithApiKey extends Request {
+  apiKey?: { name?: string };
+}
 
 interface SendMessageRequest {
   to: string;
@@ -29,6 +34,7 @@ router.post(
   '/send-message',
   validateApiKey,
   async (req: Request, res: Response) => {
+    const r = req as RequestWithApiKey;
     try {
       const { to, message } = req.body as SendMessageRequest;
 
@@ -51,7 +57,8 @@ router.post(
       }
 
       logger.info(
-        `[API] (${req.apiKey?.name || 'unknown-key'}) Sending message to ${cleanPhone}`
+        { apiKey: r.apiKey?.name ?? 'unknown-key', to: cleanPhone },
+        '[API] Sending message'
       );
 
       // ahora usamos sendDirectMessage, que devuelve resp de Baileys
@@ -66,12 +73,13 @@ router.post(
           sentAt: new Date().toISOString(),
         },
       });
-    } catch (error: any) {
-      logger.error('[API] Error sending message:', error);
+    } catch (e) {
+      logger.error({ err: e }, '[API] Error sending message');
+      const err = e as any;
       return res.status(500).json({
         success: false,
         error: 'Error al enviar mensaje',
-        details: error.message,
+        details: err?.message,
       });
     }
   }
@@ -92,6 +100,7 @@ router.post(
   '/send-media',
   validateApiKey,
   async (req: Request, res: Response) => {
+    const r = req as RequestWithApiKey;
     try {
       const { to, caption, url } = req.body as SendMediaRequest;
       const file = (req as any).files?.file;
@@ -116,13 +125,13 @@ router.post(
       if (!file && !url) {
         return res.status(400).json({
           success: false,
-          error:
-            'Debe proporcionar un archivo (file) o una URL (url)',
+          error: 'Debe proporcionar un archivo (file) o una URL (url)',
         });
       }
 
       logger.info(
-        `[API] (${req.apiKey?.name || 'unknown-key'}) Sending media to ${cleanPhone}`
+        { apiKey: r.apiKey?.name ?? 'unknown-key', to: cleanPhone, hasFile: !!file, hasUrl: !!url },
+        '[API] Sending media'
       );
 
       let result: any = null;
@@ -130,9 +139,9 @@ router.post(
       if (file) {
         // Enviar el archivo que subieron vía multipart/form-data
         result = await sendMediaToPhone(cleanPhone, {
-          buffer: file.data,
-          mime: file.mimetype,
-          fileName: file.name,
+          buffer: file.data as Buffer, // si Multer tipa distinto, forzamos a Buffer
+          mime: file.mimetype as string,
+          fileName: file.name as string,
           caption,
         });
       } else if (url) {
@@ -154,12 +163,13 @@ router.post(
           sentAt: new Date().toISOString(),
         },
       });
-    } catch (error: any) {
-      logger.error('[API] Error sending media:', error);
+    } catch (e) {
+      logger.error({ err: e }, '[API] Error sending media');
+      const err = e as any;
       return res.status(500).json({
         success: false,
         error: 'Error al enviar archivo multimedia',
-        details: error.message,
+        details: err?.message,
       });
     }
   }

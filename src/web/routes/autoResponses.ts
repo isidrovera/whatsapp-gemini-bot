@@ -11,7 +11,7 @@ router.get('/new', async (_req, res) => {
       title: 'Nueva Auto-respuesta',
     });
   } catch (error) {
-    logger.error('Error loading new auto-response form:', error);
+    logger.error({ err: error },'Error loading new auto-response form:');
     res.status(500).send('Error loading new auto-response form');
   }
 });
@@ -29,7 +29,7 @@ router.get('/', async (_req, res) => {
       responses
     });
   } catch (error) {
-    logger.error('Error loading auto responses:', error);
+    logger.error({ err: error },'Error loading auto responses:');
     res.status(500).send('Error loading auto responses');
   }
 });
@@ -40,7 +40,7 @@ router.get('/api', async (_req, res) => {
     const responses = await autoResponseModel.getAll();
     res.json(responses);
   } catch (error) {
-    logger.error('Error getting auto responses:', error);
+    logger.error({ err: error },'Error getting auto responses:');
     res.status(500).json({ error: 'Error getting auto responses' });
   }
 });
@@ -54,7 +54,7 @@ router.get('/api/:id', async (req, res) => {
     }
     res.json(response);
   } catch (error) {
-    logger.error('Error getting auto response:', error);
+    logger.error({ err: error },'Error getting auto response:');
     res.status(500).json({ error: 'Error getting auto response' });
   }
 });
@@ -78,7 +78,7 @@ router.post('/api', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    logger.error('Error creating auto response:', error);
+    logger.error({ err: error },'Error creating auto response:');
     res.status(500).json({ error: 'Error creating auto response' });
   }
 });
@@ -98,7 +98,7 @@ router.put('/api/:id', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    logger.error('Error updating auto response:', error);
+    logger.error({ err: error },'Error updating auto response:');
     res.status(500).json({ error: 'Error updating auto response' });
   }
 });
@@ -109,7 +109,7 @@ router.delete('/api/:id', async (req, res) => {
     await autoResponseModel.remove(req.params.id);
     res.json({ success: true });
   } catch (error) {
-    logger.error('Error deleting auto response:', error);
+    logger.error({ err: error },'Error deleting auto response:');
     res.status(500).json({ error: 'Error deleting auto response' });
   }
 });
@@ -126,7 +126,7 @@ router.post('/api/test', async (req, res) => {
     const result = await autoResponseModel.findByTrigger(message);
     res.json(result);
   } catch (error) {
-    logger.error('Error testing trigger:', error);
+    logger.error({ err: error },'Error testing trigger:');
     res.status(500).json({ error: 'Error testing trigger' });
   }
 });
@@ -175,7 +175,7 @@ router.post('/api/test-with-variables', async (req, res) => {
       res.json({ found: false });
     }
   } catch (error) {
-    logger.error('Error testing trigger with variables:', error);
+    logger.error({ err: error },'Error testing trigger with variables:');
     res.status(500).json({ error: 'Error testing trigger with variables' });
   }
 });

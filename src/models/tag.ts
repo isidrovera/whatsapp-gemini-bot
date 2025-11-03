@@ -9,7 +9,7 @@ export async function getAll() {
       orderBy: { name: 'asc' },
     });
   } catch (error) {
-    logger.error('Error getting tags:', error);
+    logger.error({ err: error },'Error getting tags:');
     return [];
   }
 }
@@ -20,7 +20,7 @@ export async function findById(id: string) {
       where: { id },
     });
   } catch (error) {
-    logger.error('Error finding tag:', error);
+    logger.error({ err: error },'Error finding tag:');
     return null;
   }
 }
@@ -33,7 +33,7 @@ export async function create(data: {
   try {
     return await prisma.tag.create({ data });
   } catch (error) {
-    logger.error('Error creating tag:', error);
+    logger.error({ err: error },'Error creating tag:');
     throw error;
   }
 }
@@ -49,7 +49,7 @@ export async function update(id: string, data: {
       data,
     });
   } catch (error) {
-    logger.error('Error updating tag:', error);
+    logger.error({ err: error },'Error updating tag:');
     throw error;
   }
 }
@@ -60,7 +60,7 @@ export async function remove(id: string) {
       where: { id },
     });
   } catch (error) {
-    logger.error('Error deleting tag:', error);
+    logger.error({ err: error },'Error deleting tag:');
     throw error;
   }
 }
@@ -75,7 +75,7 @@ export async function assignToConversation(phoneNumber: string, tagId: string) {
       },
     });
   } catch (error) {
-    logger.error('Error assigning tag:', error);
+    logger.error({ err: error },'Error assigning tag:');
     throw error;
   }
 }
@@ -98,7 +98,7 @@ export async function removeFromConversation(phoneNumber: string, tagId: string)
 
     return null;
   } catch (error) {
-    logger.error('Error removing tag:', error);
+    logger.error({ err: error },'Error removing tag:');
     throw error;
   }
 }
@@ -115,7 +115,7 @@ export async function getByConversation(phoneNumber: string) {
 
     return conversationTags.map(ct => ct.tag);
   } catch (error) {
-    logger.error('Error getting tags for conversation:', error);
+    logger.error({ err: error },'Error getting tags for conversation:');
     return [];
   }
 }
@@ -129,7 +129,7 @@ export async function getConversationsByTag(tagId: string) {
 
     return conversationTags.map(ct => ct.phoneNumber);
   } catch (error) {
-    logger.error('Error getting conversations by tag:', error);
+    logger.error({ err: error },'Error getting conversations by tag:');
     return [];
   }
 }

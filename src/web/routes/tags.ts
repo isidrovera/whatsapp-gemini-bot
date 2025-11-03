@@ -13,7 +13,7 @@ router.get('/', async (req, res) => {
       templates
     });
   } catch (error) {
-    logger.error('Error loading templates:', error);
+    logger.error({ err: error },'Error loading templates:');
     res.status(500).send('Error loading templates');
   }
 });
@@ -32,7 +32,7 @@ router.get('/api', async (req, res) => {
     
     res.json(templates);
   } catch (error) {
-    logger.error('Error getting templates:', error);
+    logger.error({ err: error },'Error getting templates:');
     res.status(500).json({ error: 'Error getting templates' });
   }
 });
@@ -46,7 +46,7 @@ router.get('/api/:id', async (req, res) => {
     }
     res.json(template);
   } catch (error) {
-    logger.error('Error getting template:', error);
+    logger.error({ err: error },'Error getting template:');
     res.status(500).json({ error: 'Error getting template' });
   }
 });
@@ -73,7 +73,7 @@ router.post('/api', async (req, res) => {
 
     res.json(template);
   } catch (error) {
-    logger.error('Error creating template:', error);
+    logger.error({ err: error },'Error creating template:');
     res.status(500).json({ error: 'Error creating template' });
   }
 });
@@ -94,7 +94,7 @@ router.put('/api/:id', async (req, res) => {
     const template = await templateModel.update(req.params.id, updateData);
     res.json(template);
   } catch (error) {
-    logger.error('Error updating template:', error);
+    logger.error({ err: error },'Error updating template:');
     res.status(500).json({ error: 'Error updating template' });
   }
 });
@@ -105,7 +105,7 @@ router.delete('/api/:id', async (req, res) => {
     await templateModel.remove(req.params.id);
     res.json({ success: true });
   } catch (error) {
-    logger.error('Error deleting template:', error);
+    logger.error({ err: error },'Error deleting template:');
     res.status(500).json({ error: 'Error deleting template' });
   }
 });
@@ -123,7 +123,7 @@ router.post('/api/:id/render', async (req, res) => {
     const rendered = templateModel.render(template.content, variables || {});
     res.json({ content: rendered });
   } catch (error) {
-    logger.error('Error rendering template:', error);
+    logger.error({ err: error },'Error rendering template:');
     res.status(500).json({ error: 'Error rendering template' });
   }
 });

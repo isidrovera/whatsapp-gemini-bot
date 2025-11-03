@@ -33,7 +33,7 @@ router.get('/', async (req, res) => {
       page: 'blocked'
     });
   } catch (error) {
-    logger.error('Error loading blocked:', error);
+    logger.error({ err: error },'Error loading blocked:');
     res.status(500).send('Error loading blocked numbers');
   }
 });
@@ -44,7 +44,7 @@ router.get('/api', async (req, res) => {
     const blocked = await blockedModel.getAll();
     res.json(blocked);
   } catch (error) {
-    logger.error('Error getting blocked:', error);
+    logger.error({ err: error },'Error getting blocked:');
     res.status(500).json({ error: 'Error getting blocked' });
   }
 });
@@ -56,7 +56,7 @@ router.get('/api/permissions/:identifier', async (req, res) => {
     const permissions = await blockedModel.getPermissions(identifier);
     res.json(permissions);
   } catch (error) {
-    logger.error('Error getting permissions:', error);
+    logger.error({ err: error },'Error getting permissions:');
     res.status(500).json({ error: 'Error getting permissions' });
   }
 });
@@ -132,7 +132,7 @@ router.post('/api', async (req, res) => {
     });
     
   } catch (error: any) {
-    logger.error('Error blocking:', error);
+    logger.error({ err: error },'Error blocking:');
     res.status(500).json({ 
       success: false,
       error: error.message || 'Error al agregar restricción' 
@@ -153,7 +153,7 @@ router.put('/api/:identifier/access-level', async (req, res) => {
     await blockedModel.setAccessLevel(identifier, accessLevel, reason, blockedBy);
     res.json({ success: true, message: 'Nivel de acceso actualizado' });
   } catch (error) {
-    logger.error('Error setting access level:', error);
+    logger.error({ err: error },'Error setting access level:');
     res.status(500).json({ error: 'Error al establecer nivel de acceso' });
   }
 });
@@ -167,7 +167,7 @@ router.put('/api/:identifier/permissions', async (req, res) => {
     await blockedModel.setCustomPermissions(identifier, permissions);
     res.json({ success: true, message: 'Permisos actualizados' });
   } catch (error) {
-    logger.error('Error setting permissions:', error);
+    logger.error({ err: error },'Error setting permissions:');
     res.status(500).json({ error: 'Error al establecer permisos' });
   }
 });
@@ -179,7 +179,7 @@ router.delete('/api/:identifier', async (req, res) => {
     await blockedModel.unblock(identifier);
     res.json({ success: true, message: 'Desbloqueado exitosamente' });
   } catch (error) {
-    logger.error('Error unblocking:', error);
+    logger.error({ err: error },'Error unblocking:');
     res.status(500).json({ error: 'Error al desbloquear' });
   }
 });
@@ -265,7 +265,7 @@ router.post('/api/import', upload.single('file'), async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('Error importing Excel:', error);
+    logger.error({ err: error },'Error importing Excel:');
     res.status(500).json({ error: 'Error al importar archivo' });
   }
 });
@@ -314,7 +314,7 @@ router.get('/api/template', (req, res) => {
 
     logger.info('Template Excel downloaded');
   } catch (error) {
-    logger.error('Error generating template:', error);
+    logger.error({ err: error },'Error generating template:');
     res.status(500).json({ error: 'Error al generar plantilla' });
   }
 });
@@ -364,7 +364,7 @@ router.get('/api/export', async (req, res) => {
 
     logger.info(`Exported ${blocked.length} blocked entries to Excel`);
   } catch (error) {
-    logger.error('Error exporting to Excel:', error);
+    logger.error({ err: error },'Error exporting to Excel:');
     res.status(500).json({ error: 'Error al exportar datos' });
   }
 });

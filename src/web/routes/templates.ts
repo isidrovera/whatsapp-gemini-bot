@@ -32,7 +32,7 @@ router.get('/new', async (req, res) => {
   // podrías precargar categorías desde BD si tienes algo tipo Templates.getCategories()
   res.render('template_new', {
     title: 'Nueva Plantilla',
-    user: req.session?.user?.name || 'Admin',
+    user: req.session?.username || 'Admin',
   });
 });
 
@@ -50,7 +50,7 @@ router.get('/', async (req, res) => {
 
   res.render('templates', {
     title: 'Plantillas',
-    user: req.session?.user?.name || 'Admin',
+    user: req.session?.username || 'Admin',
     templates,
   });
 });

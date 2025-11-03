@@ -202,7 +202,7 @@ async function main() {
     global.__appInitialized = true
 
   } catch (error) {
-    logger.error('❌ Fatal error starting bot:', error)
+    logger.error({ err: error },'❌ Fatal error starting bot:')
     process.exit(1)
   }
 }
@@ -294,7 +294,7 @@ async function displayConfigInfo() {
 
     logger.info('')
   } catch (error) {
-    logger.error('Error displaying config info:', error)
+    logger.error({ err: error },'Error displaying config info:')
   }
 }
 
@@ -322,7 +322,7 @@ function setupGracefulShutdown() {
       logger.info('✅ Shutdown complete')
       process.exit(0)
     } catch (error) {
-      logger.error('Error during shutdown:', error)
+      logger.error({ err: error },'Error during shutdown:')
       process.exit(1)
     }
   }
@@ -331,12 +331,12 @@ function setupGracefulShutdown() {
   process.on('SIGTERM', () => shutdown('SIGTERM'))
 
   process.on('uncaughtException', (error) => {
-    logger.error('Uncaught Exception:', error)
+    logger.error({ err: error },'Uncaught Exception:')
     shutdown('uncaughtException')
   })
 
   process.on('unhandledRejection', (reason, promise) => {
-    logger.error('Unhandled Rejection at:', promise, 'reason:', reason)
+    logger.error({ err: error },'Unhandled Rejection at:', promise, 'reason:', reason)
   })
 }
 

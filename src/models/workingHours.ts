@@ -38,7 +38,7 @@ export async function initDefaults() {
       logger.info('✅ Default working hours initialized');
     }
   } catch (error) {
-    logger.error('Error initializing working hours:', error);
+    logger.error({ err: error },'Error initializing working hours:');
   }
 }
 
@@ -46,7 +46,7 @@ export async function getAll() {
   try {
     return await prisma.workingHours.findMany({ orderBy: { dayOfWeek: 'asc' } });
   } catch (error) {
-    logger.error('Error getting working hours:', error);
+    logger.error({ err: error },'Error getting working hours:');
     return [];
   }
 }
@@ -55,7 +55,7 @@ export async function getByDay(dayOfWeek: number) {
   try {
     return await prisma.workingHours.findUnique({ where: { dayOfWeek } });
   } catch (error) {
-    logger.error('Error getting working hours by day:', error);
+    logger.error({ err: error },'Error getting working hours by day:');
     return null;
   }
 }
@@ -73,7 +73,7 @@ export async function update(
   try {
     return await prisma.workingHours.update({ where: { dayOfWeek }, data });
   } catch (error) {
-    logger.error('Error updating working hours:', error);
+    logger.error({ err: error },'Error updating working hours:');
     throw error;
   }
 }
@@ -308,7 +308,7 @@ export async function getScheduleContextForAI(): Promise<string> {
     // concatenar
     return [line1, line2, line3].filter(Boolean).join('\n');
   } catch (error) {
-    logger.error('Error building schedule context for AI:', error);
+    logger.error({ err: error },'Error building schedule context for AI:');
     return 'Información de horario no disponible en este momento.';
   }
 }

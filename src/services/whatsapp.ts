@@ -93,7 +93,7 @@ async function ensureCleanAuthFolder() {
     fs.mkdirSync(AUTH_FOLDER, { recursive: true });
     logger.info('📁 AUTH folder creada nuevamente (clean).');
   } catch (err) {
-    logger.error('No se pudo limpiar/recrear AUTH_FOLDER:', err);
+    logger.error({ err }, 'No se pudo limpiar/recrear AUTH_FOLDER:');
   }
 }
 
@@ -356,7 +356,7 @@ async function saveProvisionalRUC(phoneE164: string, ruc: string) {
       data: { ruc },
     });
   } catch (err) {
-    logger.warn('No se pudo guardar RUC provisional:', err);
+    logger.warn({ err }, 'No se pudo guardar RUC provisional:');
   }
 }
 
@@ -399,7 +399,7 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
           qrDataURL = await QRCode.toDataURL(qr);
           logger.info('✅ QR available at: http://localhost:3000/auth/qr');
         } catch (error) {
-          logger.error('Error generating QR data URL:', error);
+          logger.error({ err: error }, 'Error generating QR data URL:');
           qrDataURL = null;
         }
 
@@ -427,9 +427,8 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
           // reiniciar en modo forzado → mostrará QR
           setTimeout(() => {
             initializeWhatsApp(true).catch((err) =>
-              logger.error(
-                'Error reinitializing WhatsApp after loggedOut:',
-                err
+              logger.error({ err }, 
+                'Error reinitializing WhatsApp after loggedOut:'
               )
             );
           }, 1000);
@@ -438,7 +437,7 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
         }
 
         // otros errores → reconectar normal
-        logger.warn('Connection closed. Reconnecting...', statusCode);
+        logger.warn({ statusCode }, 'Connection closed. Reconnecting...');
 
         isReady = false;
         botPhoneNumber = null;
@@ -447,7 +446,7 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
 
         setTimeout(() => {
           initializeWhatsApp().catch((err) =>
-            logger.error('Error reinitializing WhatsApp:', err)
+            logger.error({ err }, 'Error reinitializing WhatsApp:')
           );
         }, 3000);
       }
@@ -474,7 +473,7 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
 
     logger.info('WhatsApp client initialized');
   } catch (error) {
-    logger.error('Error initializing WhatsApp:', error);
+    logger.error({ err: error }, 'Error initializing WhatsApp:');
     throw error;
   }
 }
@@ -554,9 +553,16 @@ async function handleIncomingMessage(
       logger.debug('Ignoring local append upsert (likely our own send)');
       return;
     }
-    if (isFromBotById(message.key?.id ?? null)) {
+    
+    // Null check para message.key
+    if (!message.key || !message.key.id) {
+      logger.debug('Ignoring message without valid key');
+      return;
+    }
+
+    if (isFromBotById(message.key.id)) {
       logger.debug(
-        `Ignoring message id=${message.key?.id} (sent by bot recently)`
+        `Ignoring message id=${message.key.id} (sent by bot recently)`
       );
       return;
     }
@@ -607,13 +613,15 @@ async function handleIncomingMessage(
     // 2. Obtener permisos del usuario
     const permissions = await blockedModel.getPermissions(normalizedPhone);
     
-    logger.debug(`[PERMISSIONS] ${normalizedPhone} - Level: ${permissions.accessLevel}`, {
+    logger.debug({
+      phoneNumber: normalizedPhone,
+      accessLevel: permissions.accessLevel,
       odoo: permissions.permissions.odoo,
       tickets: permissions.permissions.tickets,
       ai: permissions.permissions.ai,
       human: permissions.permissions.human,
       autoresponse: permissions.permissions.autoresponse
-    });
+    }, `[PERMISSIONS] ${normalizedPhone} - Access control check`);
 
     // takeover humano?
     const shouldRespond = await contactModel.shouldBotRespond(normalizedPhone);
@@ -661,19 +669,19 @@ async function handleIncomingMessage(
             mediaAnalysisResult.rawSummary ||
             null;
 
-          logger.info('[WHATSAPP] Media analysis summary:', {
+          logger.info({
             summary: mediaAnalysisResult.rawSummary,
             serial: mediaAnalysisResult.detectedSerial,
             errorCode: mediaAnalysisResult.detectedErrorCode,
             anydesk: mediaAnalysisResult.detectedAnydesk,
             class: mediaAnalysisResult.mediaTypeClass,
-          });
+          }, '[WHATSAPP] Media analysis summary:');
         }
       } catch (err: any) {
-        logger.error('[WHATSAPP] Media processing error:', {
+        logger.error({
           message: err?.message,
           stack: err?.stack,
-        });
+        }, '[WHATSAPP] Media processing error:');
       }
     }
 
@@ -701,7 +709,14 @@ async function handleIncomingMessage(
     // asegurar contacto
     await contactModel.getOrCreate(normalizedPhone);
     let contact = await contactModel.findByPhone(normalizedPhone);
-    let state = contact?.state || 'NEW';
+    
+    // Null check para contact
+    if (!contact) {
+      logger.error(`[CONTACT] Failed to create or retrieve contact for ${normalizedPhone}`);
+      return;
+    }
+    
+    let state = contact.state || 'NEW';
 
     // ==========================================================
     // 0. HORARIO / URGENCIA
@@ -735,17 +750,17 @@ async function handleIncomingMessage(
           finalMessageText,
           {
             contact: {
-              name: contact?.name || null,
-              dni: contact?.dni || null,
+              name: contact.name || null,
+              dni: contact.dni || null,
               phoneNumber: normalizedPhone,
-              companyName: contact?.companyName || null,
-              ruc: contact?.ruc || null,
+              companyName: contact.companyName || null,
+              ruc: contact.ruc || null,
             },
             company: {
-              razonSocial: contact?.companyName || null,
-              numeroDoc: contact?.ruc || null,
-              name: contact?.companyName || null,
-              ruc: contact?.ruc || null,
+              razonSocial: contact.companyName || null,
+              numeroDoc: contact.ruc || null,
+              name: contact.companyName || null,
+              ruc: contact.ruc || null,
             },
             customVars: {},
           }
@@ -778,17 +793,17 @@ async function handleIncomingMessage(
         finalMessageText,
         {
           contact: {
-            name: contact?.name || null,
-            dni: contact?.dni || null,
+            name: contact.name || null,
+            dni: contact.dni || null,
             phoneNumber: normalizedPhone,
-            companyName: contact?.companyName || null,
-            ruc: contact?.ruc || null,
+            companyName: contact.companyName || null,
+            ruc: contact.ruc || null,
           },
           company: {
-            razonSocial: contact?.companyName || null,
-            numeroDoc: contact?.ruc || null,
-            name: contact?.companyName || null,
-            ruc: contact?.ruc || null,
+            razonSocial: contact.companyName || null,
+            numeroDoc: contact.ruc || null,
+            name: contact.companyName || null,
+            ruc: contact.ruc || null,
           },
           customVars: {},
         }
@@ -872,8 +887,14 @@ async function handleIncomingMessage(
 
       if (linkRes.ok === true) {
         contact = await contactModel.findByPhone(normalizedPhone);
+        
+        // Null check
+        if (!contact) {
+          logger.error(`[CONTACT] Contact disappeared after linking company for ${normalizedPhone}`);
+          return;
+        }
 
-        if (contact?.companies && contact.companies.length > 1) {
+        if (contact.companies && contact.companies.length > 1) {
           await contactModel.updateState(
             normalizedPhone,
             'SELECTING_COMPANY'
@@ -889,6 +910,12 @@ async function handleIncomingMessage(
 
         await contactModel.updateState(normalizedPhone, 'MENU');
         contact = await contactModel.findByPhone(normalizedPhone);
+        
+        // Null check
+        if (!contact) {
+          logger.error(`[CONTACT] Contact disappeared after state update for ${normalizedPhone}`);
+          return;
+        }
 
         await sendMessage(
           senderJid,
@@ -924,8 +951,14 @@ async function handleIncomingMessage(
       );
 
       contact = await contactModel.findByPhone(normalizedPhone);
+      
+      // Null check
+      if (!contact) {
+        logger.error(`[CONTACT] Contact disappeared after RUC update for ${normalizedPhone}`);
+        return;
+      }
 
-      if (contact?.companies && contact.companies.length > 1) {
+      if (contact.companies && contact.companies.length > 1) {
         await contactModel.updateState(
           normalizedPhone,
           'SELECTING_COMPANY'
@@ -941,6 +974,12 @@ async function handleIncomingMessage(
 
       await contactModel.updateState(normalizedPhone, 'MENU');
       contact = await contactModel.findByPhone(normalizedPhone);
+      
+      // Null check
+      if (!contact) {
+        logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
+        return;
+      }
 
       await sendMessage(
         senderJid,
@@ -954,7 +993,14 @@ async function handleIncomingMessage(
       const razonSocialManual = finalMessageText.trim();
 
       contact = await contactModel.findByPhone(normalizedPhone);
-      const provisionalRuc = contact?.ruc || '';
+      
+      // Null check
+      if (!contact) {
+        logger.error(`[CONTACT] Contact not found for ${normalizedPhone}`);
+        return;
+      }
+      
+      const provisionalRuc = contact.ruc || '';
 
       if (!provisionalRuc || provisionalRuc.length !== 11) {
         await contactModel.updateState(normalizedPhone, 'WAITING_RUC');
@@ -972,8 +1018,14 @@ async function handleIncomingMessage(
       );
 
       contact = await contactModel.findByPhone(normalizedPhone);
+      
+      // Null check
+      if (!contact) {
+        logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
+        return;
+      }
 
-      if (contact?.companies && contact.companies.length > 1) {
+      if (contact.companies && contact.companies.length > 1) {
         await contactModel.updateState(
           normalizedPhone,
           'SELECTING_COMPANY'
@@ -989,6 +1041,12 @@ async function handleIncomingMessage(
 
       await contactModel.updateState(normalizedPhone, 'MENU');
       contact = await contactModel.findByPhone(normalizedPhone);
+      
+      // Null check
+      if (!contact) {
+        logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
+        return;
+      }
 
       await sendMessage(
         senderJid,
@@ -1000,7 +1058,7 @@ async function handleIncomingMessage(
 
     if (state === 'SELECTING_COMPANY') {
       const idxChosen = parseInt(finalMessageText.trim(), 10) - 1;
-      const empresas = contact?.companies || [];
+      const empresas = contact.companies || [];
 
       if (
         Number.isNaN(idxChosen) ||
@@ -1024,6 +1082,12 @@ async function handleIncomingMessage(
       await contactModel.updateState(normalizedPhone, 'MENU');
 
       contact = await contactModel.findByPhone(normalizedPhone);
+      
+      // Null check
+      if (!contact) {
+        logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
+        return;
+      }
 
       await sendMessage(
         senderJid,
@@ -1274,6 +1338,12 @@ async function handleIncomingMessage(
       await contactModel.updateState(normalizedPhone, 'MENU');
 
       contact = await contactModel.findByPhone(normalizedPhone);
+      
+      // Null check
+      if (!contact) {
+        logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
+        return;
+      }
 
       await sendMessage(
         senderJid,
@@ -1291,6 +1361,13 @@ async function handleIncomingMessage(
     );
     await contactModel.updateState(normalizedPhone, 'MENU');
     contact = await contactModel.findByPhone(normalizedPhone);
+    
+    // Null check
+    if (!contact) {
+      logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
+      return;
+    }
+    
     await sendMessage(senderJid, await buildMainMenu(contact));
     return;
   } catch (error: any) {
@@ -1326,7 +1403,7 @@ export async function sendMessage(jid: string, text: string): Promise<void> {
     }
     logger.info(`Message sent to ${jid}: ${text.substring(0, 80)}...`);
   } catch (error) {
-    logger.error('Error sending message:', error);
+    logger.error({ err: error }, 'Error sending message:');
     throw error;
   }
 }
@@ -1355,7 +1432,7 @@ export async function sendDirectMessage(phoneE164: string, text: string) {
 
     return resp;
   } catch (error) {
-    logger.error('Error sending direct message:', error);
+    logger.error({ err: error }, 'Error sending direct message:');
     throw error;
   }
 }
@@ -1423,12 +1500,13 @@ export async function sendMedia(jid: string, payload: SendMediaPayload) {
     return resp;
   } catch (error: any) {
     const boom = error?.output;
-    logger.error('Error sending media:', {
+    logger.error({
+      err: error,
       msg: error?.message,
       code: error?.code || boom?.statusCode,
       data: error?.data || boom?.payload,
       stack: error?.stack,
-    });
+    }, 'Error sending media:');
     throw error;
   }
 }
@@ -1497,7 +1575,7 @@ export async function disconnectSession(): Promise<void> {
       await sock.logout();
       logger.info('WhatsApp disconnected via disconnectSession()');
     } catch (error) {
-      logger.error('Error disconnecting WhatsApp:', error);
+      logger.error({ err: error }, 'Error disconnecting WhatsApp:');
     }
   }
 
@@ -1515,9 +1593,8 @@ export async function forceNewQRState(): Promise<void> {
       'forceNewQRState(): WhatsApp client reinitialized, waiting for QR scan'
     );
   } catch (err) {
-    logger.error(
-      'forceNewQRState() failed to reinitialize WhatsApp:',
-      err
+    logger.error({ err },
+      'forceNewQRState() failed to reinitialize WhatsApp:'
     );
   }
 }

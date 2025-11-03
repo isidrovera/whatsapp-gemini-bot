@@ -6,6 +6,11 @@ import { logger } from '../../utils/logger.js';
 
 const router = express.Router();
 
+// Tipado mínimo para acceder a session.userId sin que TS se queje
+interface RequestWithSession extends Request {
+  session: { userId?: string };
+}
+
 /**
  * GET /api-keys
  * Lista todas las API keys (protegido, solo admins)
@@ -14,18 +19,23 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const keys = await apiKeyModel.list();
 
-    // Mostrar solo parcial de la clave
-    const sanitizedKeys = keys.map(k => ({
-      ...k,
-      key: `${k.key.substring(0, 15)}...${k.key.substring(k.key.length - 4)}`,
-    }));
+    // Mostrar solo parcial de la clave (manejo seguro de longitudes)
+    const sanitizedKeys = keys.map((k: any) => {
+      const key = String(k.key ?? '');
+      const head = key.substring(0, Math.min(15, key.length));
+      const tail = key.length > 4 ? key.substring(key.length - 4) : key;
+      return {
+        ...k,
+        key: `${head}...${tail}`,
+      };
+    });
 
     res.json({
       success: true,
       data: sanitizedKeys,
     });
-  } catch (error: any) {
-    logger.error('[API-KEYS] Error listing keys:', error);
+  } catch (e) {
+    logger.error({ err: e }, '[API-KEYS] Error listing keys');
     res.status(500).json({
       success: false,
       error: 'Error al listar API keys',
@@ -37,9 +47,13 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
  * POST /api-keys
  * Crea una nueva API key (protegido, solo admins)
  */
-router.post('/', requireAuth, async (req: Request, res: Response) => {
+router.post('/', requireAuth, async (req: RequestWithSession, res: Response) => {
   try {
-    const { name, description, expiresAt } = req.body;
+    const { name, description, expiresAt } = req.body as {
+      name?: string;
+      description?: string;
+      expiresAt?: string;
+    };
 
     if (!name) {
       return res.status(400).json({
@@ -60,8 +74,8 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
       message: 'API key creada exitosamente',
       data: apiKey, // Aquí sí devolvemos la key completa UNA SOLA VEZ
     });
-  } catch (error: any) {
-    logger.error('[API-KEYS] Error creating key:', error);
+  } catch (e) {
+    logger.error({ err: e }, '[API-KEYS] Error creating key');
     res.status(500).json({
       success: false,
       error: 'Error al crear API key',
@@ -75,7 +89,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
  */
 router.patch('/:id/deactivate', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const ok = await apiKeyModel.deactivate(id);
 
     if (!ok) {
@@ -89,8 +103,8 @@ router.patch('/:id/deactivate', requireAuth, async (req: Request, res: Response)
       success: true,
       message: 'API key desactivada',
     });
-  } catch (error: any) {
-    logger.error('[API-KEYS] Error deactivating key:', error);
+  } catch (e) {
+    logger.error({ err: e }, '[API-KEYS] Error deactivating key');
     res.status(500).json({
       success: false,
       error: 'Error al desactivar API key',
@@ -104,7 +118,7 @@ router.patch('/:id/deactivate', requireAuth, async (req: Request, res: Response)
  */
 router.patch('/:id/activate', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const ok = await apiKeyModel.activate(id);
 
     if (!ok) {
@@ -118,8 +132,8 @@ router.patch('/:id/activate', requireAuth, async (req: Request, res: Response) =
       success: true,
       message: 'API key activada',
     });
-  } catch (error: any) {
-    logger.error('[API-KEYS] Error activating key:', error);
+  } catch (e) {
+    logger.error({ err: e }, '[API-KEYS] Error activating key');
     res.status(500).json({
       success: false,
       error: 'Error al activar API key',
@@ -133,7 +147,7 @@ router.patch('/:id/activate', requireAuth, async (req: Request, res: Response) =
  */
 router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const ok = await apiKeyModel.remove(id);
 
     if (!ok) {
@@ -147,8 +161,8 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response) => {
       success: true,
       message: 'API key eliminada',
     });
-  } catch (error: any) {
-    logger.error('[API-KEYS] Error deleting key:', error);
+  } catch (e) {
+    logger.error({ err: e }, '[API-KEYS] Error deleting key');
     res.status(500).json({
       success: false,
       error: 'Error al eliminar API key',

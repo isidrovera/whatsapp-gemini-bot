@@ -15,7 +15,7 @@ export async function getAll() {
       ],
     });
   } catch (error) {
-    logger.error('Error getting products:', error);
+    logger.error({ err: error },'Error getting products:');
     return [];
   }
 }
@@ -33,7 +33,7 @@ export async function getActive() {
       ],
     });
   } catch (error) {
-    logger.error('Error getting active products:', error);
+    logger.error({ err: error },'Error getting active products:');
     return [];
   }
 }
@@ -51,7 +51,7 @@ export async function getByCategory(category: string) {
       orderBy: { sortOrder: 'asc' },
     });
   } catch (error) {
-    logger.error('Error getting products by category:', error);
+    logger.error({ err: error },'Error getting products by category:');
     return [];
   }
 }
@@ -65,7 +65,7 @@ export async function findById(id: string) {
       },
     });
   } catch (error) {
-    logger.error('Error finding product:', error);
+    logger.error({ err: error },'Error finding product:');
     return null;
   }
 }
@@ -82,7 +82,7 @@ export async function create(data: {
   try {
     return await prisma.product.create({ data });
   } catch (error) {
-    logger.error('Error creating product:', error);
+    logger.error({ err: error },'Error creating product:');
     throw error;
   }
 }
@@ -102,7 +102,7 @@ export async function update(id: string, data: {
       data,
     });
   } catch (error) {
-    logger.error('Error updating product:', error);
+    logger.error({ err: error },'Error updating product:');
     throw error;
   }
 }
@@ -113,7 +113,7 @@ export async function remove(id: string) {
       where: { id },
     });
   } catch (error) {
-    logger.error('Error deleting product:', error);
+    logger.error({ err: error },'Error deleting product:');
     throw error;
   }
 }
@@ -128,7 +128,7 @@ export async function addKeyword(productId: string, keyword: string) {
       },
     });
   } catch (error) {
-    logger.error('Error adding product keyword:', error);
+    logger.error({ err: error },'Error adding product keyword:');
     throw error;
   }
 }
@@ -139,7 +139,7 @@ export async function removeKeyword(id: string) {
       where: { id },
     });
   } catch (error) {
-    logger.error('Error removing product keyword:', error);
+    logger.error({ err: error },'Error removing product keyword:');
     throw error;
   }
 }
@@ -185,7 +185,7 @@ export async function searchByKeyword(message: string) {
 
     return matches;
   } catch (error) {
-    logger.error('Error searching products by keyword:', error);
+    logger.error({ err: error },'Error searching products by keyword:');
     return [];
   }
 }
@@ -200,7 +200,7 @@ export async function getCategories() {
 
     return products.map(p => p.category);
   } catch (error) {
-    logger.error('Error getting categories:', error);
+    logger.error({ err: error },'Error getting categories:');
     return [];
   }
 }
@@ -254,7 +254,7 @@ export async function getProductsContextForAI(): Promise<string> {
 
     return blocks.join('\n').trim();
   } catch (error) {
-    logger.error('Error building products context for AI:', error);
+    logger.error({ err: error },'Error building products context for AI:');
     return 'Catálogo no disponible.';
   }
 }

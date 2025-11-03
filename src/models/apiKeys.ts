@@ -1,8 +1,8 @@
 // src/models/apiKey.ts
 import { getPrismaClient } from '../config/database.js';
 const prisma = getPrismaClient();
-import { logger } from '../utils/logger';
-import crypto from 'crypto';
+import { logger } from '../utils/logger.js';
+import crypto from 'node:crypto';
 
 export interface ApiKey {
   id: string;
@@ -35,7 +35,7 @@ export async function create(
 ): Promise<ApiKey> {
   try {
     const key = generateApiKey();
-    
+
     const apiKey = await prisma.apiKey.create({
       data: {
         name,
@@ -47,9 +47,9 @@ export async function create(
     });
 
     logger.info(`[API-KEY] Created new API key: ${name} (${apiKey.id})`);
-    return apiKey;
-  } catch (error) {
-    logger.error('[API-KEY] Error creating API key:', error);
+    return apiKey as ApiKey;
+  } catch (error: unknown) {
+    logger.error({ err: error, name, createdBy }, '[API-KEY] Error creating API key');
     throw error;
   }
 }
@@ -65,7 +65,8 @@ export async function validate(key: string): Promise<ApiKey | null> {
     });
 
     if (!apiKey) {
-      logger.warn(`[API-KEY] Invalid key attempt: ${key.substring(0, 10)}...`);
+      const prefix = (key ?? '').slice(0, 10);
+      logger.warn(`[API-KEY] Invalid key attempt: ${prefix}...`);
       return null;
     }
 
@@ -80,18 +81,20 @@ export async function validate(key: string): Promise<ApiKey | null> {
       return null;
     }
 
-    // Actualizar última vez usada (sin esperar)
-    prisma.apiKey.update({
-      where: { id: apiKey.id },
-      data: { lastUsedAt: new Date() },
-    }).catch(err => {
-      logger.error('[API-KEY] Error updating lastUsedAt:', err);
-    });
+    // Actualizar última vez usada (sin await; logea si falla)
+    prisma.apiKey
+      .update({
+        where: { id: apiKey.id },
+        data: { lastUsedAt: new Date() },
+      })
+      .catch((err: unknown) => {
+        logger.error({ err, id: apiKey.id }, '[API-KEY] Error updating lastUsedAt');
+      });
 
     logger.debug(`[API-KEY] Valid key used: ${apiKey.name}`);
-    return apiKey;
-  } catch (error) {
-    logger.error('[API-KEY] Error validating key:', error);
+    return apiKey as ApiKey;
+  } catch (error: unknown) {
+    logger.error({ err: error }, '[API-KEY] Error validating key');
     return null;
   }
 }
@@ -105,9 +108,9 @@ export async function list(): Promise<ApiKey[]> {
       orderBy: { createdAt: 'desc' },
     });
 
-    return keys;
-  } catch (error) {
-    logger.error('[API-KEY] Error listing keys:', error);
+    return keys as ApiKey[];
+  } catch (error: unknown) {
+    logger.error({ err: error }, '[API-KEY] Error listing keys');
     throw error;
   }
 }
@@ -117,11 +120,12 @@ export async function list(): Promise<ApiKey[]> {
  */
 export async function findById(id: string): Promise<ApiKey | null> {
   try {
-    return await prisma.apiKey.findUnique({
+    const item = await prisma.apiKey.findUnique({
       where: { id },
     });
-  } catch (error) {
-    logger.error('[API-KEY] Error finding key:', error);
+    return (item as ApiKey) ?? null;
+  } catch (error: unknown) {
+    logger.error({ err: error, id }, '[API-KEY] Error finding key');
     return null;
   }
 }
@@ -138,8 +142,8 @@ export async function deactivate(id: string): Promise<boolean> {
 
     logger.info(`[API-KEY] Deactivated key: ${id}`);
     return true;
-  } catch (error) {
-    logger.error('[API-KEY] Error deactivating key:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id }, '[API-KEY] Error deactivating key');
     return false;
   }
 }
@@ -156,8 +160,8 @@ export async function activate(id: string): Promise<boolean> {
 
     logger.info(`[API-KEY] Activated key: ${id}`);
     return true;
-  } catch (error) {
-    logger.error('[API-KEY] Error activating key:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id }, '[API-KEY] Error activating key');
     return false;
   }
 }
@@ -173,8 +177,8 @@ export async function remove(id: string): Promise<boolean> {
 
     logger.info(`[API-KEY] Deleted key: ${id}`);
     return true;
-  } catch (error) {
-    logger.error('[API-KEY] Error deleting key:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error, id }, '[API-KEY] Error deleting key');
     return false;
   }
 }
@@ -197,9 +201,9 @@ export async function update(
     });
 
     logger.info(`[API-KEY] Updated key: ${id}`);
-    return updated;
-  } catch (error) {
-    logger.error('[API-KEY] Error updating key:', error);
+    return (updated as ApiKey) ?? null;
+  } catch (error: unknown) {
+    logger.error({ err: error, id, data }, '[API-KEY] Error updating key');
     return null;
   }
 }
@@ -212,8 +216,8 @@ export async function countActive(): Promise<number> {
     return await prisma.apiKey.count({
       where: { isActive: true },
     });
-  } catch (error) {
-    logger.error('[API-KEY] Error counting active keys:', error);
+  } catch (error: unknown) {
+    logger.error({ err: error }, '[API-KEY] Error counting active keys');
     return 0;
   }
 }

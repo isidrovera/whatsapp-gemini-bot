@@ -25,7 +25,7 @@ router.get('/', async (req, res) => {
       contacts 
     });
   } catch (error) {
-    logger.error('Error loading contacts:', error);
+    logger.error({ err: error },'Error loading contacts:');
     res.status(500).send('Error loading contacts');
   }
 });
@@ -50,7 +50,7 @@ router.post('/api/:contactId/company/link-existing', async (req, res) => {
 
     res.json({ success: true, pivot });
   } catch (error) {
-    logger.error('Error linking existing company to contact:', error);
+    logger.error({ err: error },'Error linking existing company to contact:');
     res.status(500).json({ error: 'Error linking existing company to contact' });
   }
 });
@@ -69,7 +69,7 @@ router.get('/api', async (req, res) => {
     );
     res.json(contacts);
   } catch (error) {
-    logger.error('Error getting contacts:', error);
+    logger.error({ err: error },'Error getting contacts:');
     res.status(500).json({ error: 'Error getting contacts' });
   }
 });
@@ -83,7 +83,7 @@ router.get('/api/:phoneNumber', async (req, res) => {
     }
     res.json(contact);
   } catch (error) {
-    logger.error('Error getting contact:', error);
+    logger.error({ err: error },'Error getting contact:');
     res.status(500).json({ error: 'Error getting contact' });
   }
 });
@@ -99,7 +99,7 @@ router.put('/api/:phoneNumber/state', async (req, res) => {
     await contactModel.updateState(req.params.phoneNumber, state);
     res.json({ success: true, message: 'Estado actualizado' });
   } catch (error) {
-    logger.error('Error updating state:', error);
+    logger.error({ err: error },'Error updating state:');
     res.status(500).json({ error: 'Error updating state' });
   }
 });
@@ -111,7 +111,7 @@ router.post('/api/:phoneNumber/block', async (req, res) => {
     await contactModel.blockContact(req.params.phoneNumber, reason || 'Bloqueado desde panel web');
     res.json({ success: true, message: 'Contacto bloqueado' });
   } catch (error) {
-    logger.error('Error blocking contact:', error);
+    logger.error({ err: error },'Error blocking contact:');
     res.status(500).json({ error: 'Error blocking contact' });
   }
 });
@@ -122,7 +122,7 @@ router.post('/api/:phoneNumber/unblock', async (req, res) => {
     await contactModel.unblockContact(req.params.phoneNumber);
     res.json({ success: true, message: 'Contacto desbloqueado' });
   } catch (error) {
-    logger.error('Error unblocking contact:', error);
+    logger.error({ err: error },'Error unblocking contact:');
     res.status(500).json({ error: 'Error unblocking contact' });
   }
 });
@@ -133,7 +133,7 @@ router.post('/api/:phoneNumber/takeover', async (req, res) => {
     await contactModel.setHumanTakeover(req.params.phoneNumber);
     res.json({ success: true, message: 'Takeover activado' });
   } catch (error) {
-    logger.error('Error setting takeover:', error);
+    logger.error({ err: error },'Error setting takeover:');
     res.status(500).json({ error: 'Error setting takeover' });
   }
 });
@@ -144,7 +144,7 @@ router.post('/api/:phoneNumber/release', async (req, res) => {
     await contactModel.releaseHumanTakeover(req.params.phoneNumber);
     res.json({ success: true, message: 'Takeover liberado' });
   } catch (error) {
-    logger.error('Error releasing takeover:', error);
+    logger.error({ err: error },'Error releasing takeover:');
     res.status(500).json({ error: 'Error releasing takeover' });
   }
 });
@@ -167,7 +167,7 @@ router.post('/api/:contactId/company', async (req, res) => {
 
     res.json({ success: true, pivot });
   } catch (error) {
-    logger.error('Error adding company to contact:', error);
+    logger.error({ err: error },'Error adding company to contact:');
     res.status(500).json({ error: 'Error adding company to contact' });
   }
 });
@@ -178,7 +178,7 @@ router.post('/api/:contactId/company/:companyId/primary', async (req, res) => {
     await contactModel.setPrimaryCompany(req.params.contactId, req.params.companyId);
     res.json({ success: true, message: 'Empresa principal actualizada' });
   } catch (error) {
-    logger.error('Error setting primary company:', error);
+    logger.error({ err: error },'Error setting primary company:');
     res.status(500).json({ error: 'Error setting primary company' });
   }
 });
@@ -189,7 +189,7 @@ router.delete('/api/:contactId/company/:companyId', async (req, res) => {
     await contactModel.removeCompanyFromContact(req.params.contactId, req.params.companyId);
     res.json({ success: true, message: 'Empresa removida del contacto' });
   } catch (error) {
-    logger.error('Error removing company from contact:', error);
+    logger.error({ err: error },'Error removing company from contact:');
     res.status(500).json({ error: 'Error removing company from contact' });
   }
 });
@@ -204,7 +204,7 @@ router.put('/api/contact/:contactId', async (req, res) => {
     const updated = await contactModel.updateContactInfo(req.params.contactId, req.body);
     res.json({ success: true, contact: updated });
   } catch (error) {
-    logger.error('Error updating contact info:', error);
+    logger.error({ err: error },'Error updating contact info:');
     res.status(500).json({ error: 'Error updating contact info' });
   }
 });
@@ -215,7 +215,7 @@ router.delete('/api/contact/:contactId', async (req, res) => {
     await contactModel.deleteContact(req.params.contactId);
     res.json({ success: true, message: 'Contacto eliminado' });
   } catch (error) {
-    logger.error('Error deleting contact:', error);
+    logger.error({ err: error },'Error deleting contact:');
     res.status(500).json({ error: 'Error deleting contact' });
   }
 });
@@ -273,7 +273,7 @@ router.get('/api-export', async (req, res) => {
     res.end();
     
   } catch (error) {
-    logger.error('Error exporting contacts:', error);
+    logger.error({ err: error },'Error exporting contacts:');
     res.status(500).json({ error: 'Error exporting contacts' });
   }
 });
@@ -292,7 +292,7 @@ router.post('/api-import', async (req, res) => {
       result,
     });
   } catch (error) {
-    logger.error('Error importing contacts:', error);
+    logger.error({ err: error },'Error importing contacts:');
     res.status(500).json({ error: 'Error importing contacts' });
   }
 });
@@ -376,7 +376,7 @@ router.post('/api-import-file', upload.single('file'), async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('Error importing Excel file:', error);
+    logger.error({ err: error },'Error importing Excel file:');
     res.status(500).json({ 
       error: 'Error procesando el archivo Excel',
       details: error instanceof Error ? error.message : String(error)
@@ -398,7 +398,7 @@ router.get('/api-companies', async (_req, res) => {
 
     res.json({ ok: true, companies });
   } catch (error) {
-    logger.error('Error listing companies:', error);
+    logger.error({ err: error },'Error listing companies:');
     res.status(500).json({ error: 'Error listing companies' });
   }
 });

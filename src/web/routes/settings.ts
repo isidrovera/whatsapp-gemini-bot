@@ -1,9 +1,9 @@
 // src/web/routes/settings.ts
 import express from 'express';
-import * as configModel from '../../models/configuration';
-import * as apiKeyModel from '../../models/apiKeys';
-import { logger } from '../../utils/logger';
-import { reinitializeGemini } from '../../config/gemini';
+import * as configModel from '../../models/configuration.js';
+import * as apiKeyModel from '../../models/apiKeys.js';
+import { logger } from '../../utils/logger.js';
+import { reinitializeGemini } from '../../config/gemini.js';
 
 const router = express.Router();
 
@@ -26,7 +26,7 @@ router.get('/', async (req, res) => {
       grouped,
     });
   } catch (error) {
-    logger.error('Error loading settings:', error);
+    logger.error({ err: error }, 'Error loading settings:');
     res.status(500).send('Error loading settings');
   }
 });
@@ -40,7 +40,7 @@ router.get('/api', async (_req, res) => {
     const configs = await configModel.getAll();
     res.json(configs);
   } catch (error) {
-    logger.error('Error getting all configs:', error);
+    logger.error({ err: error }, 'Error getting all configs:');
     res.status(500).json({ error: 'Error getting configs' });
   }
 });
@@ -50,7 +50,7 @@ router.get('/api/:category', async (req, res) => {
     const configs = await configModel.getByCategory(req.params.category);
     res.json(configs);
   } catch (error) {
-    logger.error('Error getting configs:', error);
+    logger.error({ err: error }, 'Error getting configs:');
     res.status(500).json({ error: 'Error getting configs' });
   }
 });
@@ -60,7 +60,7 @@ router.get('/api/:category/:key', async (req, res) => {
     const value = await configModel.get(req.params.category, req.params.key);
     res.json({ value });
   } catch (error) {
-    logger.error('Error getting config:', error);
+    logger.error({ err: error }, 'Error getting config:');
     res.status(500).json({ error: 'Error getting config' });
   }
 });
@@ -83,7 +83,7 @@ router.post('/api', async (req, res) => {
     await configModel.set(category, key, value || '', isEncrypted === true);
     res.json({ success: true });
   } catch (error) {
-    logger.error('Error updating config:', error);
+    logger.error({ err: error }, 'Error updating config:');
     res.status(500).json({ error: 'Error updating config' });
   }
 });
@@ -113,7 +113,7 @@ router.post('/api/bulk', async (req, res) => {
 
     res.json({ success: true, message: 'Configurations updated successfully' });
   } catch (error) {
-    logger.error('Error updating configs:', error);
+    logger.error({ err: error }, 'Error updating configs:');
     res.status(500).json({ error: 'Error updating configs' });
   }
 });
@@ -123,7 +123,7 @@ router.get('/api/validate', async (_req, res) => {
     const validation = await configModel.validateCritical();
     res.json(validation);
   } catch (error) {
-    logger.error('Error validating configs:', error);
+    logger.error({ err: error }, 'Error validating configs:');
     res.status(500).json({ error: 'Error validating configs' });
   }
 });
@@ -133,7 +133,7 @@ router.get('/api/stats', async (_req, res) => {
     const stats = await configModel.getStats();
     res.json(stats);
   } catch (error) {
-    logger.error('Error getting config stats:', error);
+    logger.error({ err: error }, 'Error getting config stats:');
     res.status(500).json({ error: 'Error getting config stats' });
   }
 });
@@ -149,7 +149,7 @@ router.get('/api/export', async (_req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename=config-backup.json');
     res.send(backup);
   } catch (error) {
-    logger.error('Error exporting configs:', error);
+    logger.error({ err: error }, 'Error exporting configs:');
     res.status(500).json({ error: 'Error exporting configs' });
   }
 });
@@ -168,7 +168,7 @@ router.post('/api/import', async (req, res) => {
       res.status(500).json({ error: 'Error importing configurations' });
     }
   } catch (error) {
-    logger.error('Error importing configs:', error);
+    logger.error({ err: error }, 'Error importing configs:');
     res.status(500).json({ error: 'Error importing configs' });
   }
 });
@@ -185,7 +185,7 @@ router.post('/api/reset/:category', async (req, res) => {
       res.status(500).json({ error: 'Error resetting category' });
     }
   } catch (error) {
-    logger.error('Error resetting category:', error);
+    logger.error({ err: error }, 'Error resetting category:');
     res.status(500).json({ error: 'Error resetting category' });
   }
 });
@@ -198,7 +198,7 @@ router.get('/api/check/:category/:key', async (req, res) => {
     );
     res.json({ isConfigured });
   } catch (error) {
-    logger.error('Error checking config:', error);
+    logger.error({ err: error }, 'Error checking config:');
     res.status(500).json({ error: 'Error checking config' });
   }
 });
@@ -222,7 +222,7 @@ router.post('/api/reinitialize/:service', async (req, res) => {
         });
     }
   } catch (err: any) {
-    logger.error('Error reinitializing service:', err);
+    logger.error({ err }, 'Error reinitializing service:');
     return res.status(500).json({
       success: false,
       error: 'Error al reiniciar el servicio',
@@ -241,7 +241,7 @@ router.get('/api-keys', async (_req, res) => {
     const keys = await apiKeyModel.list();
 
     // Sanitizar preview (solo mostramos parte)
-    const safe = keys.map(k => ({
+    const safe = keys.map((k: any) => ({
       id: k.id,
       name: k.name,
       preview:
@@ -257,7 +257,7 @@ router.get('/api-keys', async (_req, res) => {
 
     res.json({ success: true, data: safe });
   } catch (error: any) {
-    logger.error('[API-KEYS] Error listing keys:', error);
+    logger.error({ err: error }, '[API-KEYS] Error listing keys:');
     res.status(500).json({
       success: false,
       error: 'Error al listar API keys',
@@ -299,7 +299,7 @@ router.post('/api-keys', async (req, res) => {
       },
     });
   } catch (error: any) {
-    logger.error('[API-KEYS] Error creating key:', error);
+    logger.error({ err: error }, '[API-KEYS] Error creating key:');
     res.status(500).json({
       success: false,
       error: 'Error al crear API key',
@@ -332,7 +332,7 @@ router.patch('/api-keys/:id/toggle', async (req, res) => {
       message: enable ? 'API key activada' : 'API key desactivada',
     });
   } catch (error: any) {
-    logger.error('[API-KEYS] Error toggling key:', error);
+    logger.error({ err: error }, '[API-KEYS] Error toggling key:');
     res.status(500).json({
       success: false,
       error: 'Error al cambiar estado de la llave',
@@ -358,7 +358,7 @@ router.delete('/api-keys/:id', async (req, res) => {
       message: 'API key eliminada',
     });
   } catch (error: any) {
-    logger.error('[API-KEYS] Error deleting key:', error);
+    logger.error({ err: error }, '[API-KEYS] Error deleting key:');
     res.status(500).json({
       success: false,
       error: 'Error al eliminar API key',
