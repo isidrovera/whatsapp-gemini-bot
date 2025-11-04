@@ -4,49 +4,59 @@ FROM node:20-bookworm-slim AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 
-# Dependencias nativas (bcrypt, prisma, etc.)
+# Dependencias nativas para compilar deps (bcrypt, prisma engines, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ openssl ca-certificates git \
-  && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*
 
-# Archivos para mejor cache
+# Mejor cache: solo manifests + prisma primero
 COPY package*.json ./
 COPY prisma ./prisma
 
-# Instala deps (dev + prod para compilar TS)
+# Instala TODAS las deps (dev + prod) para compilar y generar cliente
 RUN npm ci
 
-# Copiar el resto del código
+# Copia resto del código
 COPY . .
 
-# Prisma y build
+# Genera Prisma y compila TypeScript
 RUN npx prisma generate || true
 RUN npm run build
 
 # ---- Runtime final ----
 FROM node:20-bookworm-slim AS runner
-WORKDIR /app
 ENV NODE_ENV=production
+ENV NODE_OPTIONS=--enable-source-maps
+ENV TZ=America/Lima
 
-# OpenSSL en runtime (evita el fallback a 1.1.x)
+WORKDIR /app
+
+# OpenSSL (Prisma) + certificados
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 # Copiamos solo lo necesario
 COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
+# Instala SOLO prod deps en runtime para achicar la imagen
+RUN npm ci --omit=dev
+
+# Copia artefactos de build y prisma
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 
-# Vistas EJS (si no se transpilan)
+# Vistas EJS si tu build no las empaqueta
 COPY --from=builder /app/src/web/views ./dist/web/views
 
-# Favicon opcional si lo tienes en raíz
-# COPY ./favicon.ico ./favicon.ico
-
 # Directorios de datos
-RUN mkdir -p /app/logs /app/baileys_auth
+RUN mkdir -p /app/logs /app/baileys_auth \
+ && chown -R node:node /app
+
+# (Opcional) setear TZ del sistema
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# Seguridad: ejecutar como usuario no root
+USER node
 
 EXPOSE 3000
 CMD ["node", "dist/index.js"]
