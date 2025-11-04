@@ -46,13 +46,41 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.WEB_PORT || 3000);
 
-// Entorno / proxy flags para cookies
+/**
+ * ======================
+ * Flags de entorno / proxy (CÁLCULO CORRECTO)
+ * ======================
+ *
+ * - isProd: si NODE_ENV === 'production'
+ * - behindProxy: true si estás detrás de Nginx/Traefik/Caddy con HTTPS
+ * - forceSecure:
+ *     - si el usuario fija COOKIE_SECURE=true → usamos secure
+ *     - si NO definió COOKIE_SECURE → inferimos secure solo si isProd && behindProxy
+ * - crossSite:
+ *     - si usas el panel desde otro origen (dominio distinto), necesitas SameSite=None → requiere Secure=true
+ */
 const isProd = process.env.NODE_ENV === 'production';
 const behindProxy = String(process.env.BEHIND_PROXY || 'false') === 'true';
-const forceSecure = String(process.env.COOKIE_SECURE || (isProd && behindProxy) ? 'true' : 'false') === 'true';
+
+// Si el usuario definió COOKIE_SECURE, lo respetamos;
+// si NO, lo inferimos (solo secure cuando hay proxy HTTPS en producción).
+const forceSecure =
+  process.env.COOKIE_SECURE === 'true' ||
+  (!('COOKIE_SECURE' in process.env) && isProd && behindProxy);
+
 const crossSite = String(process.env.CROSS_SITE || 'false') === 'true';
 
-// Si estamos detrás de Nginx/Caddy con HTTPS, habilita trust proxy
+// SameSite:
+//  - 'lax' para la mayoría de casos (formularios estándar)
+//  - 'none' solo si necesitas cookies entre orígenes (requiere Secure=true por estándar)
+const sameSiteValue: 'lax' | 'none' = crossSite ? 'none' : 'lax';
+
+// Secure final:
+//  - Si SameSite=None → obligatorio Secure=true
+//  - Si SameSite=lax → usamos forceSecure calculado arriba
+const secureCookie = sameSiteValue === 'none' ? true : forceSecure;
+
+// Si estamos detrás de un proxy HTTPS (Nginx/Traefik), informa a Express para que respete X-Forwarded-Proto
 if (behindProxy) {
   app.set('trust proxy', 1);
 }
@@ -80,21 +108,20 @@ app.use(cookieParser());
 // ======================
 // SESSION (config segura por entorno)
 // ======================
-const sameSite: 'lax' | 'none' = crossSite ? 'none' : 'lax';
-const secureCookie = forceSecure; // ya evaluado arriba
-
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'whatsapp-bot-secret-key-change-me',
     resave: false,
     saveUninitialized: false,
     cookie: {
-      // Si CROSS_SITE=true (otro origen), exigimos SameSite=None y Secure
-      sameSite,
-      secure: secureCookie,
+      sameSite: sameSiteValue,   // 'lax' por defecto, 'none' si CROSS_SITE=true
+      secure: secureCookie,      // true solo cuando corresponde (o siempre si SameSite=None)
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24h
+      // No seteamos 'domain' para evitar problemas cuando accedes por IP/localhost/dominio
     },
+    // TODO (prod): usa un store persistente (Prisma/Redis). MemoryStore es solo para dev/entornos simples.
+    // store: new PrismaSessionStore(prisma, { checkPeriod: 2 * 60 * 1000 }),
   })
 );
 
@@ -107,7 +134,8 @@ app.set('views', path.join(__dirname, 'views'));
 // Helper global para las vistas
 app.use((req, res, next) => {
   res.locals.page = req.path.split('/')[1] || 'dashboard';
-  res.locals.user = (req as any).session?.username || null;
+  // @ts-ignore - session tipada por express-session
+  res.locals.user = req.session?.username || null;
   next();
 });
 
