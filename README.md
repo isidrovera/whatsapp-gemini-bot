@@ -112,6 +112,8 @@ MIT
 Tu Nombre
 ```
 
+docker compose --profile simple --env-file .env up -d --build 
+
 ---
 
 ## ✅ **PROYECTO COMPLETO - RESUMEN**

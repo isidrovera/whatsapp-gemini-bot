@@ -6,7 +6,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import util from 'util';
-import fileUpload from 'express-fileupload';
+import fileUpload from 'express-fileupload'; // usado SOLO para /api (send-media)
 import { logger } from '../utils/logger.js';
 
 // Rutas existentes
@@ -37,7 +37,7 @@ import apiRouter from './routes/api.js';
 // Middleware de auth
 import { requireAuth } from './middleware/auth.js';
 
-// Compañías
+// Compañias
 import companiesRouter from './routes/companies.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -46,64 +46,16 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.WEB_PORT || 3000);
 
-/**
- * ======================
- * Flags de entorno / proxy (CÁLCULO CORRECTO)
- * ======================
- */
+// Entorno / proxy flags para cookies
 const isProd = process.env.NODE_ENV === 'production';
 const behindProxy = String(process.env.BEHIND_PROXY || 'false') === 'true';
-
-// Si el usuario definió COOKIE_SECURE, lo respetamos;
-// si NO, lo inferimos (solo secure cuando hay proxy HTTPS en producción).
-const forceSecure =
-  process.env.COOKIE_SECURE === 'true' ||
-  (!('COOKIE_SECURE' in process.env) && isProd && behindProxy);
-
+const forceSecure = String(process.env.COOKIE_SECURE || (isProd && behindProxy) ? 'true' : 'false') === 'true';
 const crossSite = String(process.env.CROSS_SITE || 'false') === 'true';
 
-// SameSite:
-//  - 'lax' para la mayoría de casos (formularios estándar)
-//  - 'none' solo si necesitas cookies entre orígenes (requiere Secure=true por estándar)
-const sameSiteValue: 'lax' | 'none' = crossSite ? 'none' : 'lax';
-
-// Secure final:
-//  - Si SameSite=None → obligatorio Secure=true
-//  - Si SameSite=lax → usamos forceSecure calculado arriba
-const secureCookie = sameSiteValue === 'none' ? true : forceSecure;
-
-// Si estamos detrás de un proxy HTTPS (Nginx/Traefik), informa a Express para que respete X-Forwarded-Proto
+// Si estamos detrás de Nginx/Caddy con HTTPS, habilita trust proxy
 if (behindProxy) {
   app.set('trust proxy', 1);
-  logger.info('✅ Express trust proxy enabled');
 }
-
-// ===== 🔍 DEBUG: Configuración de cookies =====
-logger.info('');
-logger.info('🍪 Cookie & Session Configuration:');
-logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-logger.info('📋 Environment Variables:');
-logger.info(`   NODE_ENV:        ${process.env.NODE_ENV || 'undefined'}`);
-logger.info(`   BEHIND_PROXY:    ${process.env.BEHIND_PROXY || 'undefined'}`);
-logger.info(`   COOKIE_SECURE:   ${process.env.COOKIE_SECURE || 'undefined'}`);
-logger.info(`   CROSS_SITE:      ${process.env.CROSS_SITE || 'undefined'}`);
-logger.info(`   SESSION_SECRET:  ${process.env.SESSION_SECRET ? '✅ SET (' + process.env.SESSION_SECRET.length + ' chars)' : '❌ NOT SET'}`);
-logger.info('');
-logger.info('⚙️  Computed Values:');
-logger.info(`   isProd:          ${isProd}`);
-logger.info(`   behindProxy:     ${behindProxy}`);
-logger.info(`   forceSecure:     ${forceSecure}`);
-logger.info(`   sameSiteValue:   ${sameSiteValue}`);
-logger.info(`   secureCookie:    ${secureCookie}`);
-logger.info(`   trust proxy:     ${behindProxy ? '1 (enabled)' : 'off (disabled)'}`);
-logger.info('');
-logger.info('🍪 Final Cookie Settings:');
-logger.info(`   secure:          ${secureCookie}`);
-logger.info(`   sameSite:        ${sameSiteValue}`);
-logger.info(`   httpOnly:        true`);
-logger.info(`   maxAge:          24h (86400000ms)`);
-logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-logger.info('');
 
 function prettyConsoleLogError(tag: string, err: any) {
   try {
@@ -128,38 +80,23 @@ app.use(cookieParser());
 // ======================
 // SESSION (config segura por entorno)
 // ======================
+const sameSite: 'lax' | 'none' = crossSite ? 'none' : 'lax';
+const secureCookie = forceSecure; // ya evaluado arriba
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'whatsapp-bot-secret-key-change-me',
     resave: false,
     saveUninitialized: false,
     cookie: {
-      sameSite: sameSiteValue,
+      // Si CROSS_SITE=true (otro origen), exigimos SameSite=None y Secure
+      sameSite,
       secure: secureCookie,
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24h
     },
-    // TODO (prod): usa un store persistente (Prisma/Redis). MemoryStore es solo para dev/entornos simples.
-    // store: new PrismaSessionStore(prisma, { checkPeriod: 2 * 60 * 1000 }),
   })
 );
-
-// Middleware de logging de sesiones (debugging)
-app.use((req, res, next) => {
-  const sessionId = (req.session as any)?.id || 'no-session-id';
-  const userId = (req.session as any)?.userId || 'not-authenticated';
-  
-  logger.debug({
-    method: req.method,
-    path: req.path,
-    sessionId: sessionId.substring(0, 8) + '...',
-    userId,
-    hasSession: !!req.session,
-    cookies: Object.keys(req.cookies).length > 0 ? Object.keys(req.cookies) : 'none',
-  }, '🔐 Request session info');
-  
-  next();
-});
 
 // ======================
 // VIEWS
@@ -170,19 +107,8 @@ app.set('views', path.join(__dirname, 'views'));
 // Helper global para las vistas
 app.use((req, res, next) => {
   res.locals.page = req.path.split('/')[1] || 'dashboard';
-  res.locals.user = (req.session as any)?.username || null;
+  res.locals.user = (req as any).session?.username || null;
   next();
-});
-
-// ======================
-// HEALTH CHECK
-// ======================
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-  });
 });
 
 // ======================
@@ -193,6 +119,9 @@ app.get('/health', (req, res) => {
 app.use('/auth', authRouter);
 
 // API pública externa
+// - NO usa requireAuth (sesión web)
+// - Valida con API key adentro de apiRouter
+// - Necesita fileUpload SOLO para /api (público).
 const publicApiApp = express.Router();
 
 publicApiApp.use(
@@ -205,6 +134,8 @@ publicApiApp.use(
 );
 
 publicApiApp.use('/', apiRouter);
+
+// Montaje en /api SOLO de este subrouter con fileUpload
 app.use('/api', publicApiApp);
 
 // ======================
@@ -213,7 +144,7 @@ app.use('/api', publicApiApp);
 
 app.use('/', requireAuth, dashboardRouter);
 app.use('/contacts', requireAuth, contactsRouter);
-app.use('/blocked', requireAuth, blockedRouter);
+app.use('/blocked', requireAuth, blockedRouter); // ← multer vive adentro de este router
 app.use('/conversations', requireAuth, conversationsRouter);
 
 // Gestión de tiempo y horarios
@@ -240,7 +171,6 @@ app.use('/api-keys', requireAuth, apiKeysRouter);
 // 404 handler
 // ======================
 app.use((req, res) => {
-  logger.warn({ path: req.path, method: req.method }, '404 Not Found');
   res.status(404).send('Not Found');
 });
 
@@ -254,8 +184,10 @@ app.use(
     res: express.Response,
     next: express.NextFunction
   ) => {
+    // consola bonita
     prettyConsoleLogError('Web server', err);
 
+    // logger estructurado
     try {
       logger.error(
         {
@@ -273,6 +205,7 @@ app.use(
       console.error('Logger failed while logging error:', e);
     }
 
+    // respuesta al cliente
     const isDev = process.env.NODE_ENV !== 'production';
     if (isDev) {
       res
