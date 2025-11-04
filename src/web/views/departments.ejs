@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <!-- Tailwind (misma config del dashboard) -->
+  <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -31,8 +31,6 @@
     }
   </script>
 
-
-
   <!-- Iconos -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
@@ -45,22 +43,18 @@
         scroll-behavior: auto !important;
       }
     }
-
-    /* Gradient text */
     .gradient-text {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
     }
-
-    /* Icon sizes */
     .icon { width: 1.25rem; height: 1.25rem; }
     .icon-lg { width: 1.75rem; height: 1.75rem; }
-
     .hidden-row { display: none; }
     .badge-on  { background-color: rgba(16,185,129,.15); color:#059669; }
     .badge-off { background-color: rgba(244,63,94,.15);  color:#e11d48; }
+    .chip-off  { opacity:.70; }
   </style>
 </head>
 
@@ -71,7 +65,7 @@
 
   <main id="main-content" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
-    <!-- Volver al Dashboard + breadcrumb (mismos estilos) -->
+    <!-- Volver + breadcrumb -->
     <div class="flex flex-col gap-3">
       <div class="flex items-center justify-between">
         <a href="/"
@@ -97,7 +91,7 @@
       </nav>
     </div>
 
-    <!-- Header (igual estilo que Empresas) -->
+    <!-- Header -->
     <header class="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 px-6 py-5">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -121,7 +115,7 @@
       </div>
     </header>
 
-    <!-- Buscador (calc igual que Empresas) -->
+    <!-- Buscador -->
     <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/50 dark:border-white/5 overflow-hidden">
       <div class="px-6 py-4 border-b border-slate-100 dark:border-white/5 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50">
         <h2 class="text-lg font-bold flex items-center gap-2.5 text-slate-800 dark:text-white">
@@ -136,13 +130,13 @@
         <div class="flex flex-col sm:flex-row sm:items-end gap-4">
           <div class="flex-1">
             <label class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">
-              Buscar por nombre, descripción o teléfono
+              Buscar por nombre, descripción, teléfono, keyword o contacto
             </label>
             <input
               id="searchInput"
               type="text"
               class="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm text-slate-900 dark:text-white outline-none focus:border-indigo-500 transition"
-              placeholder="Ej: Ventas, Soporte, 51999988877"
+              placeholder="Ej: Ventas, Soporte, 51999988877, toner, Juan, etc."
               oninput="filterRows()"
             />
           </div>
@@ -154,7 +148,7 @@
       </div>
     </section>
 
-    <!-- Lista en tabla (mismos estilos de “Lista de Empresas”) -->
+    <!-- Lista -->
     <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/50 dark:border-white/5 overflow-hidden">
       <div class="px-6 py-4 border-b border-slate-100 dark:border-white/5 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50">
         <h2 class="text-lg font-bold flex items-center gap-2.5 text-slate-800 dark:text-white">
@@ -190,7 +184,7 @@
                     d.description || '',
                     d.phoneNumber || '',
                     ...(d.keywords||[]).map(k=>k.keyword).join(' '),
-                    ...(d.contacts||[]).map(c=>`${c.name} ${c.phoneNumber||''} ${c.role||''}`).join(' ')
+                    ...(d.contacts||[]).map(c=>`${c.name} ${c.phoneNumber||''} ${c.role||''} ${(c.isActive?'activo':'inactivo')}`).join(' ')
                   ].join(' ').toLowerCase() %>"
                 >
                   <td class="px-6 py-4">
@@ -210,11 +204,23 @@
                     <%= d.phoneNumber || '-' %>
                   </td>
 
+                  <!-- Palabras clave -->
                   <td class="px-6 py-4">
                     <div class="flex flex-wrap gap-1.5">
                       <% (d.keywords||[]).forEach(k => { %>
-                        <span class="inline-flex items-center gap-1 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 px-2 py-0.5 text-[11px] font-semibold leading-none">
-                          <%= k.keyword %>
+                        <span
+                          class="inline-flex items-center gap-1 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 px-2 py-0.5 text-[11px] font-semibold leading-none"
+                          data-kw-id="<%= k.id %>"
+                          data-kw-text="<%- k.keyword %>"
+                          data-kw-priority="<%= k.priority %>"
+                        >
+                          <i data-lucide="key" class="w-3.5 h-3.5"></i>
+                          <span><%= k.keyword %> · P<%= k.priority %></span>
+
+                          <button class="ml-1 hover:text-amber-600" title="Editar" onclick="openKwEdit('<%= k.id %>','<%= d.id %>','<%- k.keyword %>',<%= k.priority %>)">
+                            <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                          </button>
+
                           <button class="ml-1 hover:text-rose-600" title="Eliminar" onclick="removeKeyword('<%= k.id %>')">
                             <i data-lucide="x" class="w-3.5 h-3.5"></i>
                           </button>
@@ -223,18 +229,50 @@
 
                       <button
                         class="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300 hover:underline text-xs font-semibold"
-                        onclick="openKwModal('<%= d.id %>')">
+                        onclick="openKwNew('<%= d.id %>')">
                         <i data-lucide="plus" class="w-3.5 h-3.5"></i> Agregar
                       </button>
                     </div>
                   </td>
 
+                  <!-- Contactos -->
                   <td class="px-6 py-4">
                     <div class="flex flex-wrap gap-1.5">
                       <% (d.contacts||[]).forEach(c => { %>
-                        <span class="inline-flex items-center gap-1 rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-2 py-0.5 text-[11px] font-semibold leading-none">
+                        <span
+                          class="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold leading-none
+                                 <%= c.isActive ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800/50 dark:text-slate-300 chip-off' %>"
+                          data-ct-id="<%= c.id %>"
+                          data-ct-name="<%- c.name %>"
+                          data-ct-phone="<%- c.phoneNumber||'' %>"
+                          data-ct-role="<%- c.role||'' %>"
+                          data-ct-active="<%= !!c.isActive %>"
+                          data-ct-dept="<%= c.departmentId %>"
+                        >
                           <i data-lucide="user" class="w-3.5 h-3.5"></i>
-                          <span class="truncate max-w-[160px]"><%= c.name %> <%= c.phoneNumber?('· '+c.phoneNumber):'' %> <%= c.role?('· '+c.role):'' %></span>
+                          <span class="truncate max-w-[200px]">
+                            <%= c.name %>
+                            <%= c.phoneNumber?('· '+c.phoneNumber):'' %>
+                            <%= c.role?('· '+c.role):'' %>
+                          </span>
+
+                          <span class="ml-1 text-[10px] <%= c.isActive?'text-emerald-600':'text-rose-600' %>">
+                            (<%= c.isActive ? 'Activo' : 'Inactivo' %>)
+                          </span>
+
+                          <!-- Editar -->
+                          <button class="ml-1 hover:text-amber-600" title="Editar"
+                                  onclick="openCtEdit('<%= c.id %>','<%- c.name %>','<%- c.phoneNumber||'' %>','<%- c.role||'' %>',<%= !!c.isActive %>,'<%= c.departmentId %>')">
+                            <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                          </button>
+
+                          <!-- Toggle rápido -->
+                          <button class="ml-1 hover:text-indigo-700" title="<%= c.isActive?'Desactivar':'Activar' %>"
+                                  onclick="toggleContact('<%= c.id %>', <%= !!c.isActive %>)">
+                            <i data-lucide="power" class="w-3.5 h-3.5"></i>
+                          </button>
+
+                          <!-- Eliminar -->
                           <button class="ml-1 hover:text-rose-600" title="Eliminar" onclick="removeContact('<%= c.id %>')">
                             <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                           </button>
@@ -243,7 +281,7 @@
 
                       <button
                         class="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300 hover:underline text-xs font-semibold"
-                        onclick="openCtModal('<%= d.id %>')">
+                        onclick="openCtNew('<%= d.id %>')">
                         <i data-lucide="user-plus" class="w-3.5 h-3.5"></i> Agregar
                       </button>
                     </div>
@@ -285,7 +323,7 @@
     </section>
   </main>
 
-  <!-- Modal Crear/Editar Departamento -->
+  <!-- Modal Departamento -->
   <div id="dept-modal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
     <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-xl w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden max-h-[90vh] overflow-y-auto">
       <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
@@ -345,13 +383,13 @@
     </div>
   </div>
 
-  <!-- Modal Keyword -->
+  <!-- Modal Keyword (Crear/Editar) -->
   <div id="kw-modal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
     <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
       <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
         <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
           <i data-lucide="key" class="icon text-primary"></i>
-          <span>Agregar palabra clave</span>
+          <span id="kwModalTitle">Agregar palabra clave</span>
         </h2>
         <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="closeKwModal()">
           <i data-lucide="x" class="icon"></i>
@@ -360,6 +398,7 @@
 
       <div class="p-6">
         <input type="hidden" id="kwDeptId" />
+        <input type="hidden" id="kwId" />
         <div class="grid gap-4">
           <div>
             <label class="block text-sm font-semibold mb-2">Palabra clave *</label>
@@ -373,19 +412,19 @@
 
         <div class="mt-6 flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
           <button class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition" onclick="closeKwModal()">Cancelar</button>
-          <button class="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition" onclick="addKeyword()">Agregar</button>
+          <button id="kwSaveBtn" class="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition" onclick="saveKeyword()">Guardar</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Modal Contacto -->
+  <!-- Modal Contacto (Crear/Editar) -->
   <div id="ct-modal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60 backdrop-blur-sm">
     <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-card max-w-md w-[90%] border border-slate-200/70 dark:border-white/10 overflow-hidden">
       <div class="px-6 py-4 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
         <h2 class="text-lg font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
           <i data-lucide="user-plus" class="icon text-primary"></i>
-          <span>Agregar contacto</span>
+          <span id="ctModalTitle">Agregar contacto</span>
         </h2>
         <button class="text-slate-400 hover:text-slate-600 dark:hover:text-white" onclick="closeCtModal()">
           <i data-lucide="x" class="icon"></i>
@@ -394,6 +433,7 @@
 
       <div class="p-6">
         <input type="hidden" id="ctDeptId" />
+        <input type="hidden" id="ctId" />
         <div class="grid gap-4">
           <div>
             <label class="block text-sm font-semibold mb-2">Nombre *</label>
@@ -407,11 +447,18 @@
             <label class="block text-sm font-semibold mb-2">Cargo</label>
             <input id="ctRole" type="text" placeholder="Vendedor Senior" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500" />
           </div>
+          <div>
+            <label class="block text-sm font-semibold mb-2">Estado</label>
+            <select id="ctActive" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm outline-none focus:border-indigo-500">
+              <option value="true">Activo</option>
+              <option value="false">Inactivo</option>
+            </select>
+          </div>
         </div>
 
         <div class="mt-6 flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
           <button class="rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 text-sm font-medium px-3 py-2 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white transition" onclick="closeCtModal()">Cancelar</button>
-          <button class="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition" onclick="addContact()">Agregar</button>
+          <button id="ctSaveBtn" class="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-3 py-2 shadow-soft transition" onclick="saveContact()">Guardar</button>
         </div>
       </div>
     </div>
@@ -442,7 +489,7 @@
       countVisibleEl.textContent = String(visible);
     }
 
-    // === Modales (helpers comunes)
+    // === Helpers modales
     function openFlex(id){ const el = document.getElementById(id); el.classList.remove('hidden'); el.classList.add('flex'); }
     function closeFlex(id){ const el = document.getElementById(id); el.classList.remove('flex'); el.classList.add('hidden'); }
 
@@ -513,29 +560,41 @@
       }
     }
 
-    // === Keywords
-    const kwModal  = 'kw-modal';
-    const kwDeptId = document.getElementById('kwDeptId');
-    const kwText   = document.getElementById('kwText');
-    const kwPrio   = document.getElementById('kwPriority');
+    // === Keyword: NUEVO / EDITAR
+    const kwModal   = 'kw-modal';
+    const kwModalTitle = document.getElementById('kwModalTitle');
+    const kwDeptId  = document.getElementById('kwDeptId');
+    const kwId      = document.getElementById('kwId');
+    const kwText    = document.getElementById('kwText');
+    const kwPrio    = document.getElementById('kwPriority');
 
-    function openKwModal(deptId){ kwDeptId.value = deptId; kwText.value=''; kwPrio.value='1'; openFlex(kwModal); }
+    function openKwNew(deptId){
+      kwModalTitle.textContent = 'Agregar palabra clave';
+      kwDeptId.value = deptId; kwId.value=''; kwText.value=''; kwPrio.value='1';
+      openFlex(kwModal);
+    }
+    function openKwEdit(id, deptId, text, prio){
+      kwModalTitle.textContent = 'Editar palabra clave';
+      kwDeptId.value = deptId; kwId.value=id; kwText.value=text||''; kwPrio.value=prio||1;
+      openFlex(kwModal);
+    }
     function closeKwModal(){ closeFlex(kwModal); }
 
-    async function addKeyword(){
+    async function saveKeyword(){
+      const id = kwId.value;
       const deptId = kwDeptId.value;
       const payload = { keyword: kwText.value.trim(), priority: parseInt(kwPrio.value||'1',10) };
       if (!payload.keyword){ alert('Ingresa una palabra clave'); return; }
       try {
-        const res = await fetch(`/departments/api/${deptId}/keywords`, {
-          method:'POST',
+        const res = await fetch(id ? `/departments/api/keywords/${id}` : `/departments/api/${deptId}/keywords`, {
+          method: id ? 'PUT' : 'POST',
           headers:{ 'Content-Type':'application/json' },
           body: JSON.stringify(payload)
         });
         if (!res.ok) throw new Error();
-        alert('✅ Palabra clave agregada');
+        alert('✅ Palabra clave guardada');
         location.reload();
-      } catch { alert('❌ No se pudo agregar'); }
+      } catch { alert('❌ No se pudo guardar'); }
     }
 
     async function removeKeyword(id){
@@ -548,30 +607,62 @@
       } catch { alert('❌ No se pudo eliminar'); }
     }
 
-    // === Contactos
-    const ctModal  = 'ct-modal';
-    const ctDeptId = document.getElementById('ctDeptId');
-    const ctName   = document.getElementById('ctName');
-    const ctPhone  = document.getElementById('ctPhone');
-    const ctRole   = document.getElementById('ctRole');
+    // === Contacto: NUEVO / EDITAR / TOGGLE
+    const ctModal   = 'ct-modal';
+    const ctModalTitle = document.getElementById('ctModalTitle');
+    const ctDeptId  = document.getElementById('ctDeptId');
+    const ctId      = document.getElementById('ctId');
+    const ctName    = document.getElementById('ctName');
+    const ctPhone   = document.getElementById('ctPhone');
+    const ctRole    = document.getElementById('ctRole');
+    const ctActive  = document.getElementById('ctActive');
 
-    function openCtModal(deptId){ ctDeptId.value=deptId; ctName.value=''; ctPhone.value=''; ctRole.value=''; openFlex(ctModal); }
+    function openCtNew(deptId){
+      ctModalTitle.textContent = 'Agregar contacto';
+      ctDeptId.value=deptId; ctId.value=''; ctName.value=''; ctPhone.value=''; ctRole.value=''; ctActive.value='true';
+      openFlex(ctModal);
+    }
+    function openCtEdit(id, name, phone, role, isActive, deptId){
+      ctModalTitle.textContent = 'Editar contacto';
+      ctDeptId.value=deptId||''; ctId.value=id||''; ctName.value=name||''; ctPhone.value=phone||''; ctRole.value=role||''; ctActive.value = isActive ? 'true' : 'false';
+      openFlex(ctModal);
+    }
     function closeCtModal(){ closeFlex(ctModal); }
 
-    async function addContact(){
+    async function saveContact(){
+      const id = ctId.value;
       const deptId = ctDeptId.value;
-      const payload = { name: ctName.value.trim(), phoneNumber: ctPhone.value.trim(), role: ctRole.value.trim() };
+      const payload = {
+        name: ctName.value.trim(),
+        phoneNumber: ctPhone.value.trim(),
+        role: ctRole.value.trim(),
+        isActive: ctActive.value === 'true'
+      };
       if (!payload.name || !payload.phoneNumber){ alert('Nombre y Teléfono son obligatorios'); return; }
+
       try {
-        const res = await fetch(`/departments/api/${deptId}/contacts`, {
-          method:'POST',
+        const res = await fetch(id ? `/departments/api/contacts/${id}` : `/departments/api/${deptId}/contacts`, {
+          method: id ? 'PUT' : 'POST',
           headers:{ 'Content-Type':'application/json' },
           body: JSON.stringify(payload)
         });
         if (!res.ok) throw new Error();
-        alert('✅ Contacto agregado');
+        alert('✅ Contacto guardado');
         location.reload();
-      } catch { alert('❌ No se pudo agregar'); }
+      } catch { alert('❌ No se pudo guardar'); }
+    }
+
+    async function toggleContact(id, current){
+      try {
+        const res = await fetch(`/departments/api/contacts/${id}`, {
+          method:'PUT',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ isActive: !current })
+        });
+        if (!res.ok) throw new Error();
+        alert(`✅ Contacto ${!current ? 'activado' : 'desactivado'}`);
+        location.reload();
+      } catch { alert('❌ No se pudo cambiar el estado'); }
     }
 
     async function removeContact(id){
@@ -584,7 +675,7 @@
       } catch { alert('❌ No se pudo eliminar'); }
     }
 
-    // Cerrar modales al click fuera
+    // Cerrar modales click fuera
     window.addEventListener('click', (e) => {
       ['dept-modal','kw-modal','ct-modal'].forEach(mid=>{
         const m = document.getElementById(mid);
@@ -593,21 +684,25 @@
     });
 
     // Exponer
-    window.filterRows   = filterRows;
-    window.openDeptModal= openDeptModal;
-    window.closeDeptModal=closeDeptModal;
-    window.saveDept     = saveDept;
-    window.deleteDept   = deleteDept;
+    window.filterRows    = filterRows;
 
-    window.openKwModal  = openKwModal;
-    window.closeKwModal = closeKwModal;
-    window.addKeyword   = addKeyword;
-    window.removeKeyword= removeKeyword;
+    window.openDeptModal = openDeptModal;
+    window.closeDeptModal= closeDeptModal;
+    window.saveDept      = saveDept;
+    window.deleteDept    = deleteDept;
 
-    window.openCtModal  = openCtModal;
-    window.closeCtModal = closeCtModal;
-    window.addContact   = addContact;
-    window.removeContact= removeContact;
+    window.openKwNew     = openKwNew;
+    window.openKwEdit    = openKwEdit;
+    window.closeKwModal  = closeKwModal;
+    window.saveKeyword   = saveKeyword;
+    window.removeKeyword = removeKeyword;
+
+    window.openCtNew     = openCtNew;
+    window.openCtEdit    = openCtEdit;
+    window.closeCtModal  = closeCtModal;
+    window.saveContact   = saveContact;
+    window.removeContact = removeContact;
+    window.toggleContact = toggleContact;
   </script>
 </body>
 </html>

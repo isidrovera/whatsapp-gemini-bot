@@ -98,25 +98,20 @@ export async function getAll() {
       return [];
     }
 
-    // Get all department IDs
     const departmentIds = departments.map((d: any) => d.id);
 
-    // Batch fetch all keywords and contacts
+    // 👇 CAMBIO: ya no filtramos isActive: true (para poder reactivar desde la UI)
     const [allKeywords, allContacts] = await Promise.all([
       prisma.departmentKeyword.findMany({
         where: { departmentId: { in: departmentIds } },
         orderBy: { priority: 'desc' },
       }),
       prisma.departmentContact.findMany({
-        where: {
-          departmentId: { in: departmentIds },
-          isActive: true,
-        },
+        where: { departmentId: { in: departmentIds } },   // <- sin filtro isActive
         orderBy: { sortOrder: 'asc' },
       }),
     ]);
 
-    // Group by departmentId
     const keywordsByDept: Record<string, any[]> = {};
     const contactsByDept: Record<string, any[]> = {};
 
@@ -130,7 +125,6 @@ export async function getAll() {
       contactsByDept[contact.departmentId].push(contact);
     });
 
-    // Attach to departments
     return departments.map((dept: any) => ({
       ...dept,
       keywords: keywordsByDept[dept.id] || [],
