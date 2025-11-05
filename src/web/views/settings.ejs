@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 
-  <!-- Tailwind -->
+  <!-- Tailwind (misma config que el anterior) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -36,18 +36,35 @@
 
   <style>
     @media (prefers-reduced-motion: reduce){
-      *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important;}
+      *{
+        animation-duration:.001ms !important;
+        animation-iteration-count:1 !important;
+        transition-duration:.001ms !important;
+        scroll-behavior:auto !important;
+      }
     }
+
+    /* Gradient text como el anterior */
     .gradient-text{
       background: linear-gradient(135deg,#667eea 0%,#764ba2 100%);
-      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+      -webkit-background-clip:text;
+      -webkit-text-fill-color:transparent;
+      background-clip:text;
     }
+
+    /* Icon sizes */
     .icon{ width:1.25rem; height:1.25rem; }
     .icon-lg{ width:1.75rem; height:1.75rem; }
-    .tab-active{ background-color: rgba(102,126,234,.12); color:#1f2937;}
-    .dark .tab-active{ background-color: rgba(102,126,234,.25); color:#fff;}
-    .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, monospace;background:#f1f5f9;border:1px solid #e2e8f0;border-bottom-width:3px;padding:.125rem .375rem;border-radius:.375rem}
-    textarea.auto{ min-height: 96px; resize: vertical; }
+
+    /* Tabs */
+    .tab-active{
+      background-color: rgba(102,126,234,.12);
+      color: #1f2937;
+    }
+    .dark .tab-active{
+      background-color: rgba(102,126,234,.25);
+      color: #fff;
+    }
   </style>
 </head>
 
@@ -57,40 +74,30 @@
   </a>
 
   <%
-    // Íconos bonitos por categoría (fallback a settings)
-    const categoryMeta: Record<string, {label:string, icon:string}> = {
-      gemini:        {label:'Gemini AI',          icon:'bot'},
-      odoo:          {label:'Odoo ERP',           icon:'building-2'},
-      external_api:  {label:'APIs Externas',      icon:'plug'},
-      company:       {label:'Empresa',            icon:'phone'},
-      system:        {label:'Sistema',            icon:'settings'},
-      templates:     {label:'Plantillas',         icon:'notebook-text'},
-      ai_prompt:     {label:'Prompts del Asistente', icon:'sparkles'},
-      policy:        {label:'Políticas',          icon:'shield'},
-    };
+    // --- Tabs disponibles segun tus datos ---
+    const tabs = [];
+    if (grouped.gemini)        tabs.push({id:'gemini',        label:'Gemini AI',        icon:'bot'});
+    if (grouped.odoo)          tabs.push({id:'odoo',          label:'Odoo ERP',         icon:'building-2'});
+    if (grouped.external_api)  tabs.push({id:'external_api',  label:'APIs Externas',    icon:'plug'});
+    if (grouped.company)       tabs.push({id:'company',       label:'Empresa',          icon:'phone'});
+    if (grouped.system)        tabs.push({id:'system',        label:'Sistema',          icon:'settings'});
 
-    // Construcción dinámica de tabs con todo lo que venga del modelo
-    const tabs = Object.keys(grouped).sort().map(cat => ({
-      id: cat,
-      label: (categoryMeta[cat]?.label)|| (cat.charAt(0).toUpperCase()+cat.slice(1)),
-      icon: (categoryMeta[cat]?.icon)|| 'settings'
-    }));
     // Pestaña de API Keys SIEMPRE visible
     tabs.push({id:'api_keys', label:'API / Tokens', icon:'key-round'});
+
+    // Tab seleccionada por defecto
     const defaultTab = tabs.length ? tabs[0].id : null;
   %>
 
   <main id="main-content" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
-    <!-- Header -->
+    <!-- Volver + breadcrumb (mismo patrón que el anterior) -->
     <div class="flex flex-col gap-3">
       <div class="flex items-center justify-between">
         <a href="/" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">
-          <i data-lucide="arrow-left" class="icon"></i><span>Volver al Dashboard</span>
+          <i data-lucide="arrow-left" class="icon"></i>
+          <span>Volver al Dashboard</span>
         </a>
-        <div class="hidden md:flex items-center gap-3 text-xs text-slate-500">
-          <span class="kbd">Ctrl/⌘ + S</span> para guardar
-        </div>
       </div>
 
       <nav aria-label="Breadcrumb" class="text-xs text-slate-500 dark:text-slate-400">
@@ -109,6 +116,7 @@
       </nav>
     </div>
 
+    <!-- Header translúcido (igual que Empresas/Departamentos) -->
     <header class="bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-2xl shadow-card border border-slate-200/50 dark:border-white/5 px-6 py-5">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -117,33 +125,25 @@
             Configuración del Sistema
           </h1>
           <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Gestiona todas las categorías y claves de configuración del bot.
+            Parámetros del bot, integraciones y claves de acceso.
           </p>
         </div>
 
         <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-end w-full md:w-auto">
-          <div class="flex items-center gap-2">
-            <input id="searchBox" type="search" placeholder="Buscar categoría o clave…" class="w-64 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"/>
-          </div>
-
-          <button id="btnNewConfig"
-                  class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft transition"
-                  type="button">
-            <i data-lucide="plus" class="icon"></i> Nueva Config
-          </button>
-
           <button id="btnResetDirty"
                   title="Descartar cambios no guardados"
                   class="hidden inline-flex items-center justify-center gap-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-white px-4 py-2.5 text-sm font-semibold shadow-soft transition"
                   type="button">
-            <i data-lucide="rotate-ccw" class="icon"></i> Descartar
+            <i data-lucide="rotate-ccw" class="icon"></i>
+            Descartar
           </button>
 
           <button id="btnSaveAll"
                   class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 text-sm font-semibold shadow-soft transition"
                   type="button"
                   onclick="saveAllConfigs()">
-            <i data-lucide="save" class="icon"></i> Guardar Todos
+            <i data-lucide="save" class="icon"></i>
+            Guardar Todos
           </button>
         </div>
       </div>
@@ -172,7 +172,7 @@
       </div>
     </section>
 
-    <!-- Tabs + Panels -->
+    <!-- Tabs + Panels (misma estética de tarjetas) -->
     <section class="rounded-2xl bg-white dark:bg-slate-900 shadow-card border border-slate-200/50 dark:border-white/5 overflow-hidden">
       <!-- Tab buttons -->
       <div class="px-6 py-4 border-b border-slate-100 dark:border-white/5 bg-gradient-to-r from-slate-50 to-transparent dark:from-slate-800/50 flex flex-wrap gap-2 items-center">
@@ -189,142 +189,266 @@
       <!-- Panels -->
       <div class="p-6 space-y-8">
 
-        <% // ====== PANEL DINÁMICO POR CATEGORÍA ====== %>
-        <% Object.keys(grouped).sort().forEach(cat => { %>
-          <section class="tab-panel <%= defaultTab === cat ? '' : 'hidden' %>" data-tab-panel="<%= cat %>">
-            <div class="flex items-start justify-between flex-col md:flex-row gap-4 mb-4">
-              <div>
-                <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <i data-lucide="<%= (categoryMeta[cat]?.icon)||'settings' %>" class="w-5 h-5 text-primary"></i>
-                  <%= (categoryMeta[cat]?.label)|| (cat.charAt(0).toUpperCase()+cat.slice(1)) %>
-                </h2>
-                <p class="text-sm text-slate-500 dark:text-slate-400">
-                  <span class="font-semibold"><%= grouped[cat].length %></span> claves en esta categoría.
-                </p>
-              </div>
-
-              <div class="flex gap-2">
-                <% if (cat === 'gemini') { %>
-                  <button type="button"
-                    class="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-sm font-semibold shadow-soft transition whitespace-nowrap"
-                    onclick="reinitializeService('gemini')">
-                    <i data-lucide="refresh-cw" class="w-4 h-4"></i> Reiniciar Gemini
-                  </button>
-                <% } %>
-
-                <button type="button"
-                  class="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-300 px-3 py-2 text-sm font-semibold shadow-soft transition"
-                  onclick="resetCategory('<%= cat %>')">
-                  <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Reset categoría
-                </button>
-              </div>
+        <% /* GEMINI */ %>
+        <% if (grouped.gemini) { %>
+        <section class="tab-panel <%= defaultTab === 'gemini' ? '' : 'hidden' %>" data-tab-panel="gemini">
+          <div class="flex items-start justify-between flex-col md:flex-row gap-4 mb-4">
+            <div>
+              <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <i data-lucide="bot" class="w-5 h-5 text-primary"></i>
+                Gemini AI
+              </h2>
+              <p class="text-sm text-slate-500 dark:text-slate-400">Configuración de modelo e API Key.</p>
             </div>
 
-            <div class="rounded-xl border border-slate-200/70 dark:border-white/10 bg-white dark:bg-slate-900 shadow-soft max-h-[70vh] overflow-y-auto p-4 space-y-4" data-category-panel="<%= cat %>">
-              <% grouped[cat].forEach(config => { %>
-                <div class="cfg-row flex flex-col md:grid md:grid-cols-[280px,1fr,auto] gap-4 rounded-lg border border-slate-200/70 dark:border-white/10 p-4 hover:border-indigo-400/60 hover:bg-slate-50/50 dark:hover:bg-white/5 transition"
-                     data-category="<%= config.category %>" data-key="<%= config.key %>">
-                  <div class="space-y-2">
-                    <div class="flex items-center gap-2">
-                      <div class="text-sm font-semibold text-slate-900 dark:text-white break-all">
-                        <span class="key-text"><%= config.key %></span>
-                      </div>
-                      <button class="btn-rename text-xs px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700"
-                              type="button" title="Renombrar">
-                        <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
-                      </button>
-                    </div>
-                    <% if (config.description) { %>
-                      <div class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed"><%= config.description %></div>
-                    <% } %>
+            <button type="button"
+              class="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-sm font-semibold shadow-soft transition whitespace-nowrap"
+              onclick="reinitializeService('gemini')">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              Reiniciar Gemini
+            </button>
+          </div>
 
-                    <div class="flex items-center gap-2">
-                      <% if (config.isEncrypted) { %>
-                        <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide">
-                          <i data-lucide="lock" class="w-3.5 h-3.5"></i> Encriptado
-                        </span>
-                      <% } else { %>
-                        <span class="inline-flex items-center gap-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide">
-                          <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Texto plano
-                        </span>
-                      <% } %>
+          <div class="rounded-xl border border-slate-200/70 dark:border-white/10 bg-white dark:bg-slate-900 shadow-soft max-h-[70vh] overflow-y-auto p-4 space-y-4">
+            <% grouped.gemini.forEach(config => { %>
+              <div class="flex flex-col md:grid md:grid-cols-[260px,1fr] gap-4 rounded-lg border border-slate-200/70 dark:border-white/10 p-4 hover:border-indigo-400/60 hover:bg-slate-50/50 dark:hover:bg-white/5 transition">
+                <div class="space-y-2">
+                  <div class="text-sm font-semibold text-slate-900 dark:text-white"><%= config.key.replace(/_/g,' ').toUpperCase() %></div>
+                  <% if (config.description) { %>
+                    <div class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed"><%= config.description %></div>
+                  <% } %>
 
-                      <label class="inline-flex items-center gap-2 text-xs ml-2">
-                        <input type="checkbox" class="toggle-encryption"
-                          <%= config.isEncrypted ? 'checked' : '' %> />
-                        Alternar encriptado
-                      </label>
-                    </div>
-                  </div>
+                  <% if (config.isEncrypted) { %>
+                    <span class="inline-flex items-center gap-2 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-1 text-[11px] font-bold uppercase tracking-wide w-fit">
+                      <i data-lucide="lock" class="w-3.5 h-3.5"></i> Encriptado
+                    </span>
+                  <% } else { %>
+                    <span class="inline-flex items-center gap-2 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 px-2 py-1 text-[11px] font-bold uppercase tracking-wide w-fit">
+                      <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Texto plano
+                    </span>
+                  <% } %>
+                </div>
 
-                  <div class="flex flex-col gap-3 sm:items-start">
-                    <% // Heurística de input:
-                       // - gemini.model -> select
-                       // - booleanos "true/false" -> select
-                       // - templates/ai_prompt -> textarea
-                       // - claves con "message", "prompt", "template" -> textarea
-                       const isBool = (config.value === 'true' || config.value === 'false');
-                       const isTextarea = (config.category === 'templates'
-                                          || config.category === 'ai_prompt'
-                                          || /prompt|template|message/i.test(config.key));
-                    %>
-
-                    <% if (config.category === 'gemini' && config.key === 'model') { %>
-                      <select
-                        class="config-input w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-3 py-2.5"
-                        data-category="<%= config.category %>"
-                        data-key="<%= config.key %>"
-                        data-encrypted="<%= config.isEncrypted %>">
-                        <option value="gemini-2.5-flash" <%= config.value==='gemini-2.5-flash' ? 'selected' : '' %>>gemini-2.5-flash</option>
-                        <option value="gemini-2.0-flash-exp" <%= config.value==='gemini-2.0-flash-exp' ? 'selected' : '' %>>Gemini 2.0 Flash Experimental</option>
-                        <option value="gemini-1.5-pro" <%= config.value==='gemini-1.5-pro' ? 'selected' : '' %>>Gemini 1.5 Pro</option>
-                        <option value="gemini-1.5-flash" <%= config.value==='gemini-1.5-flash' ? 'selected' : '' %>>Gemini 1.5 Flash</option>
-                      </select>
-                    <% } else if (isBool) { %>
-                      <select
-                        class="config-input w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-3 py-2.5"
-                        data-category="<%= config.category %>"
-                        data-key="<%= config.key %>"
-                        data-encrypted="<%= config.isEncrypted %>">
-                        <option value="true"  <%= config.value==='true'  ? 'selected' : '' %>>Habilitado</option>
-                        <option value="false" <%= config.value==='false' ? 'selected' : '' %>>Deshabilitado</option>
-                      </select>
-                    <% } else if (isTextarea) { %>
-                      <textarea
-                        class="config-input auto w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-3 py-2.5"
+                <div class="flex flex-col sm:flex-row gap-3 sm:items-start">
+                  <% if (config.key === 'model') { %>
+                    <select
+                      class="config-input w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-3 py-2.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      data-category="<%= config.category %>"
+                      data-key="<%= config.key %>"
+                      data-encrypted="<%= config.isEncrypted %>">
+                      <option value="gemini-2.5-flash" <%= config.value==='gemini-2.5-flash' ? 'selected' : '' %>>gemini-2.5-flash</option>
+                      <option value="gemini-2.0-flash-exp" <%= config.value==='gemini-2.0-flash-exp' ? 'selected' : '' %>>Gemini 2.0 Flash Experimental</option>
+                      <option value="gemini-1.5-pro" <%= config.value==='gemini-1.5-pro' ? 'selected' : '' %>>Gemini 1.5 Pro</option>
+                      <option value="gemini-1.5-flash" <%= config.value==='gemini-1.5-flash' ? 'selected' : '' %>>Gemini 1.5 Flash</option>
+                    </select>
+                  <% } else { %>
+                    <div class="flex w-full gap-2">
+                      <input
+                        type="<%= config.isEncrypted ? 'password' : 'text' %>"
+                        class="config-input flex-1 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-3 py-2.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 <%= config.isEncrypted ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-600' : '' %>"
+                        value="<%= config.value || '' %>"
                         data-category="<%= config.category %>"
                         data-key="<%= config.key %>"
                         data-encrypted="<%= config.isEncrypted %>"
-                        placeholder="<%= config.description || 'Ingrese valor… (soporta múltiples líneas)' %>"><%= config.value || '' %></textarea>
-                    <% } else { %>
-                      <div class="flex w-full gap-2">
-                        <input
-                          type="<%= config.isEncrypted ? 'password' : 'text' %>"
-                          class="config-input flex-1 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-3 py-2.5 <%= config.isEncrypted ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-600' : '' %>"
-                          value="<%= config.value || '' %>"
-                          data-category="<%= config.category %>"
-                          data-key="<%= config.key %>"
-                          data-encrypted="<%= config.isEncrypted %>"
-                          placeholder="<%= config.description || 'Ingrese valor…' %>"/>
-                        <% if (config.isEncrypted) { %>
-                          <button class="toggle-eye inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-2.5 py-2 text-xs font-medium shadow" type="button" aria-label="Mostrar/Ocultar">👁️</button>
-                        <% } %>
-                      </div>
+                        placeholder="<%= config.description || 'Ingrese valor...' %>"/>
+                      <% if (config.isEncrypted) { %>
+                        <button class="toggle-eye inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-2.5 py-2 text-xs font-medium shadow" type="button" aria-label="Mostrar/Ocultar">👁️</button>
+                      <% } %>
+                    </div>
+                  <% } %>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        </section>
+        <% } %>
+
+        <% /* ODOO */ %>
+        <% if (grouped.odoo) { %>
+        <section class="tab-panel <%= defaultTab === 'odoo' ? '' : 'hidden' %>" data-tab-panel="odoo">
+          <div class="mb-4">
+            <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <i data-lucide="building-2" class="w-5 h-5 text-primary"></i> Odoo ERP
+            </h2>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Conexión con ERP / credenciales.</p>
+          </div>
+
+          <div class="rounded-xl border border-slate-200/70 dark:border-white/10 bg-white dark:bg-slate-900 shadow-soft max-h-[70vh] overflow-y-auto p-4 space-y-4">
+            <% grouped.odoo.forEach(config => { %>
+              <div class="flex flex-col md:grid md:grid-cols-[260px,1fr] gap-4 rounded-lg border border-slate-200/70 dark:border-white/10 p-4 hover:border-indigo-400/60 hover:bg-slate-50/50 dark:hover:bg-white/5 transition">
+                <div class="space-y-2">
+                  <div class="text-sm font-semibold text-slate-900 dark:text-white"><%= config.key.replace(/_/g,' ').toUpperCase() %></div>
+                  <% if (config.description) { %><div class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed"><%= config.description %></div><% } %>
+                  <% if (config.isEncrypted) { %>
+                    <span class="inline-flex items-center gap-2 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-1 text-[11px] font-bold uppercase tracking-wide w-fit">
+                      <i data-lucide="lock" class="w-3.5 h-3.5"></i> Encriptado
+                    </span>
+                  <% } else { %>
+                    <span class="inline-flex items-center gap-2 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 px-2 py-1 text-[11px] font-bold uppercase tracking-wide w-fit">
+                      <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Texto plano
+                    </span>
+                  <% } %>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3 sm:items-start">
+                  <div class="flex w-full gap-2">
+                    <input
+                      type="<%= config.isEncrypted ? 'password' : 'text' %>"
+                      class="config-input flex-1 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-3 py-2.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 <%= config.isEncrypted ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-600' : '' %>"
+                      value="<%= config.value || '' %>"
+                      data-category="<%= config.category %>"
+                      data-key="<%= config.key %>"
+                      data-encrypted="<%= config.isEncrypted %>"
+                      placeholder="<%= config.description || 'Ingrese valor...' %>"/>
+                    <% if (config.isEncrypted) { %>
+                      <button class="toggle-eye inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-2.5 py-2 text-xs font-medium shadow" type="button" aria-label="Mostrar/Ocultar">👁️</button>
                     <% } %>
                   </div>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        </section>
+        <% } %>
 
-                  <div class="flex flex-col gap-2 items-end">
-                    <button class="btn-delete inline-flex items-center justify-center rounded-md px-2 py-1 bg-slate-200 text-slate-700 hover:bg-red-600 hover:text-white dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-red-600 text-xs font-semibold shadow-soft" type="button" title="Eliminar">
-                      <i data-lucide="trash-2" class="w-4 h-4"></i>
-                    </button>
+        <% /* EXTERNAL API */ %>
+        <% if (grouped.external_api) { %>
+        <section class="tab-panel <%= defaultTab === 'external_api' ? '' : 'hidden' %>" data-tab-panel="external_api">
+          <div class="mb-4">
+            <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <i data-lucide="plug" class="w-5 h-5 text-primary"></i> APIs Externas
+            </h2>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Tokens y llaves para integraciones de terceros.</p>
+          </div>
+
+          <div class="rounded-xl border border-slate-200/70 dark:border-white/10 bg-white dark:bg-slate-900 shadow-soft max-h-[70vh] overflow-y-auto p-4 space-y-4">
+            <% grouped.external_api.forEach(config => { %>
+              <div class="flex flex-col md:grid md:grid-cols-[260px,1fr] gap-4 rounded-lg border border-slate-200/70 dark:border-white/10 p-4 hover:border-indigo-400/60 hover:bg-slate-50/50 dark:hover:bg-white/5 transition">
+                <div class="space-y-2">
+                  <div class="text-sm font-semibold text-slate-900 dark:text-white"><%= config.key.replace(/_/g,' ').toUpperCase() %></div>
+                  <% if (config.description) { %><div class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed"><%= config.description %></div><% } %>
+                  <% if (config.isEncrypted) { %>
+                    <span class="inline-flex items-center gap-2 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-1 text-[11px] font-bold uppercase tracking-wide w-fit">
+                      <i data-lucide="lock" class="w-3.5 h-3.5"></i> Encriptado
+                    </span>
+                  <% } else { %>
+                    <span class="inline-flex items-center gap-2 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 px-2 py-1 text-[11px] font-bold uppercase tracking-wide w-fit">
+                      <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Texto plano
+                    </span>
+                  <% } %>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3 sm:items-start">
+                  <div class="flex w-full gap-2">
+                    <input
+                      type="<%= config.isEncrypted ? 'password' : 'text' %>"
+                      class="config-input flex-1 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-3 py-2.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 <%= config.isEncrypted ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-600' : '' %>"
+                      value="<%= config.value || '' %>"
+                      data-category="<%= config.category %>"
+                      data-key="<%= config.key %>"
+                      data-encrypted="<%= config.isEncrypted %>"
+                      placeholder="<%= config.description || 'Ingrese valor...' %>"/>
+                    <% if (config.isEncrypted) { %>
+                      <button class="toggle-eye inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-2.5 py-2 text-xs font-medium shadow" type="button" aria-label="Mostrar/Ocultar">👁️</button>
+                    <% } %>
                   </div>
                 </div>
-              <% }) %>
-            </div>
-          </section>
-        <% }) %>
+              </div>
+            <% }) %>
+          </div>
+        </section>
+        <% } %>
 
-        <!-- API KEYS -->
+        <% /* COMPANY */ %>
+        <% if (grouped.company) { %>
+        <section class="tab-panel <%= defaultTab === 'company' ? '' : 'hidden' %>" data-tab-panel="company">
+          <div class="mb-4">
+            <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <i data-lucide="phone" class="w-5 h-5 text-primary"></i> Información de la Empresa
+            </h2>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Datos visibles al cliente (teléfono, correo, etc.).</p>
+          </div>
+
+          <div class="rounded-xl border border-slate-200/70 dark:border-white/10 bg-white dark:bg-slate-900 shadow-soft max-h-[70vh] overflow-y-auto p-4 space-y-4">
+            <% grouped.company.forEach(config => { %>
+              <div class="flex flex-col md:grid md:grid-cols-[260px,1fr] gap-4 rounded-lg border border-slate-200/70 dark:border-white/10 p-4 hover:border-indigo-400/60 hover:bg-slate-50/50 dark:hover:bg-white/5 transition">
+                <div class="space-y-2">
+                  <div class="text-sm font-semibold text-slate-900 dark:text-white"><%= config.key.replace(/_/g,' ').toUpperCase() %></div>
+                  <% if (config.description) { %><div class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed"><%= config.description %></div><% } %>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3 sm:items-start">
+                  <input
+                    type="text"
+                    class="config-input w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-3 py-2.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    value="<%= config.value || '' %>"
+                    data-category="<%= config.category %>"
+                    data-key="<%= config.key %>"
+                    data-encrypted="false"
+                    placeholder="<%= config.description || 'Ingrese valor...' %>"/>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        </section>
+        <% } %>
+
+        <% /* SYSTEM */ %>
+        <% if (grouped.system) { %>
+        <section class="tab-panel <%= defaultTab === 'system' ? '' : 'hidden' %>" data-tab-panel="system">
+          <div class="mb-4">
+            <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <i data-lucide="settings" class="w-5 h-5 text-primary"></i> Sistema
+            </h2>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Flags internos y comportamientos del bot.</p>
+          </div>
+
+          <div class="rounded-xl border border-slate-200/70 dark:border-white/10 bg-white dark:bg-slate-900 shadow-soft max-h-[70vh] overflow-y-auto p-4 space-y-4">
+            <% grouped.system.forEach(config => { %>
+              <div class="flex flex-col md:grid md:grid-cols-[260px,1fr] gap-4 rounded-lg border border-slate-200/70 dark:border-white/10 p-4 hover:border-indigo-400/60 hover:bg-slate-50/50 dark:hover:bg-white/5 transition">
+                <div class="space-y-2">
+                  <div class="text-sm font-semibold text-slate-900 dark:text-white"><%= config.key.replace(/_/g,' ').toUpperCase() %></div>
+                  <% if (config.description) { %><div class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed"><%= config.description %></div><% } %>
+                  <% if (config.isEncrypted) { %>
+                    <span class="inline-flex items-center gap-2 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-1 text-[11px] font-bold uppercase tracking-wide w-fit">
+                      <i data-lucide="lock" class="w-3.5 h-3.5"></i> Encriptado
+                    </span>
+                  <% } %>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3 sm:items-start">
+                  <% if (config.key === 'auto_response_enabled' || config.key === 'department_routing_enabled') { %>
+                    <select
+                      class="config-input w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-3 py-2.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      data-category="<%= config.category %>"
+                      data-key="<%= config.key %>"
+                      data-encrypted="false">
+                      <option value="true"  <%= config.value==='true'  ? 'selected' : '' %>>Habilitado</option>
+                      <option value="false" <%= config.value==='false' ? 'selected' : '' %>>Deshabilitado</option>
+                    </select>
+                  <% } else { %>
+                    <div class="flex w-full gap-2">
+                      <input
+                        type="<%= config.isEncrypted ? 'password' : 'text' %>"
+                        class="config-input flex-1 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-3 py-2.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 <%= config.isEncrypted ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-600' : '' %>"
+                        value="<%= config.value || '' %>"
+                        data-category="<%= config.category %>"
+                        data-key="<%= config.key %>"
+                        data-encrypted="<%= config.isEncrypted %>"
+                        placeholder="<%= config.description || 'Ingrese valor...' %>"/>
+                      <% if (config.isEncrypted) { %>
+                        <button class="toggle-eye inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-2.5 py-2 text-xs font-medium shadow" type="button" aria-label="Mostrar/Ocultar">👁️</button>
+                      <% } %>
+                    </div>
+                  <% } %>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        </section>
+        <% } %>
+
+        <% /* API KEYS (siempre) */ %>
         <section class="tab-panel <%= defaultTab === 'api_keys' ? '' : 'hidden' %>" data-tab-panel="api_keys">
           <div class="flex items-start justify-between flex-col md:flex-row gap-4 mb-4">
             <div>
@@ -332,19 +456,17 @@
                 <i data-lucide="key-round" class="w-5 h-5 text-primary"></i> API / Tokens
               </h2>
               <p class="text-sm text-slate-500 dark:text-slate-400">
-                Cada request a
+                Estas llaves controlan acceso externo al bot. Cada request a
                 <code class="px-1 py-0.5 rounded bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200 text-[11px] font-mono">/api/send-message</code>
                 debe incluir
                 <code class="px-1 py-0.5 rounded bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-200 text-[11px] font-mono">x-api-key</code>.
               </p>
             </div>
 
-            <div class="flex gap-2">
-              <button id="btnNewApiKey" type="button"
-                class="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-sm font-semibold shadow-soft transition">
-                <i data-lucide="plus" class="w-4 h-4"></i> Nueva API Key
-              </button>
-            </div>
+            <button id="btnNewApiKey" type="button"
+              class="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-sm font-semibold shadow-soft transition whitespace-nowrap">
+              <i data-lucide="plus" class="w-4 h-4"></i> Nueva API Key
+            </button>
           </div>
 
           <div class="rounded-xl border border-slate-200/70 dark:border-white/10 bg-white dark:bg-slate-900 shadow-soft p-0 overflow-hidden">
@@ -361,16 +483,20 @@
               </thead>
               <tbody id="apiKeysTableBody" class="divide-y divide-slate-200/70 dark:divide-white/5 text-slate-700 dark:text-slate-200">
                 <tr id="apiKeysErrorRow" class="hidden">
-                  <td colspan="6" class="px-4 py-4 text-red-600 dark:text-red-400 text-center text-sm font-medium">Error al cargar llaves</td>
+                  <td colspan="6" class="px-4 py-4 text-red-600 dark:text-red-400 text-center text-sm font-medium">
+                    Error al cargar llaves
+                  </td>
                 </tr>
                 <tr id="apiKeysEmptyRow" class="hidden">
-                  <td colspan="6" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500 text-sm">No hay llaves creadas todavía.</td>
+                  <td colspan="6" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500 text-sm">
+                    No hay llaves creadas todavía.
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
 
-          <!-- Modal key completa -->
+          <!-- Modal que muestra la key completa una sola vez -->
           <div id="apiKeyModal" class="fixed inset-0 z-[9999] bg-black/50 hidden items-center justify-center p-4">
             <div class="bg-white dark:bg-slate-900 rounded-xl shadow-xl max-w-lg w-full p-6 text-slate-800 dark:text-slate-100">
               <h3 class="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-white mb-2">
@@ -379,7 +505,7 @@
               <p class="text-sm text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
                 Copia esta clave ahora. Por seguridad, no se volverá a mostrar completa.
               </p>
-              <div class="bg-slate-100 dark:bg-slate-8 00 rounded-lg p-3 mb-4 font-mono text-[13px] break-all" id="apiKeyFullValue"></div>
+              <div class="bg-slate-100 dark:bg-slate-800 rounded-lg p-3 mb-4 font-mono text-[13px] break-all" id="apiKeyFullValue"></div>
               <div class="flex items-center justify-end gap-3">
                 <button type="button" id="btnCloseApiKeyModal"
                   class="inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-sm font-semibold shadow-soft">
@@ -401,46 +527,6 @@
     <span>✅</span><span>Configuración guardada</span>
   </div>
 
-  <!-- Modal: Nueva Config -->
-  <div id="newConfigModal" class="fixed inset-0 z-[9998] bg-black/50 hidden items-center justify-center p-4">
-    <div class="bg-white dark:bg-slate-900 rounded-xl shadow-xl max-w-xl w-full p-6 text-slate-800 dark:text-slate-100 space-y-4">
-      <h3 class="text-lg font-bold flex items-center gap-2">
-        <i data-lucide="plus" class="w-5 h-5 text-primary"></i> Nueva Configuración
-      </h3>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div class="col-span-1">
-          <label class="text-xs font-semibold">Categoría</label>
-          <input id="ncCategory" type="text" list="catList"
-                 class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"/>
-          <datalist id="catList"></datalist>
-        </div>
-        <div class="col-span-1">
-          <label class="text-xs font-semibold">Key</label>
-          <input id="ncKey" type="text"
-                 class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"/>
-        </div>
-        <div class="col-span-2">
-          <label class="text-xs font-semibold">Descripción (opcional)</label>
-          <input id="ncDesc" type="text"
-                 class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"/>
-        </div>
-        <div class="col-span-2">
-          <label class="inline-flex items-center gap-2 text-xs">
-            <input id="ncEncrypted" type="checkbox"/> Encriptado
-          </label>
-        </div>
-        <div class="col-span-2">
-          <label class="text-xs font-semibold">Valor</label>
-          <textarea id="ncValue" class="w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm auto" placeholder="Valor inicial (opcional)"></textarea>
-        </div>
-      </div>
-      <div class="flex justify-end gap-2">
-        <button id="btnCancelNewConfig" class="px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800">Cancelar</button>
-        <button id="btnCreateNewConfig" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold">Crear</button>
-      </div>
-    </div>
-  </div>
-
   <script>
     // Iconos
     document.addEventListener('DOMContentLoaded', () => {
@@ -451,20 +537,16 @@
     const tabBtns   = document.querySelectorAll('.tab-btn');
     const tabPanels = document.querySelectorAll('.tab-panel');
     function activateTab(id){
-      tabBtns.forEach(btn=>btn.classList.toggle('tab-active', btn.dataset.tab === id));
-      tabPanels.forEach(p=>p.classList.toggle('hidden', p.dataset.tabPanel !== id));
-    }
-    tabBtns.forEach(btn=> btn.addEventListener('click', ()=> activateTab(btn.dataset.tab)));
-
-    // ===== Buscar/filtrar
-    const searchBox = document.getElementById('searchBox');
-    searchBox?.addEventListener('input', ()=>{
-      const q = searchBox.value.trim().toLowerCase();
-      document.querySelectorAll('.cfg-row').forEach(row=>{
-        const cat = row.dataset.category.toLowerCase();
-        const key = row.dataset.key.toLowerCase();
-        row.classList.toggle('hidden', !(cat.includes(q) || key.includes(q)));
+      tabBtns.forEach(btn=>{
+        const active = btn.dataset.tab === id;
+        btn.classList.toggle('tab-active', active);
       });
+      tabPanels.forEach(p=>{
+        p.classList.toggle('hidden', p.dataset.tabPanel !== id);
+      });
+    }
+    tabBtns.forEach(btn=>{
+      btn.addEventListener('click', ()=> activateTab(btn.dataset.tab));
     });
 
     // ===== Guardado / cambios
@@ -481,6 +563,7 @@
       }
     }
 
+    // Toggle 👁️ para secretos
     function bindEyeButtons(ctx=document){
       ctx.querySelectorAll('.toggle-eye').forEach(btn=>{
         btn.addEventListener('click', ()=>{
@@ -508,6 +591,7 @@
       e.returnValue = '';
     });
 
+    // Toast simple de guardado
     function showSaveIndicator(){
       saveIndicator.classList.remove('hidden');
       saveIndicator.classList.add('flex');
@@ -600,107 +684,6 @@
       }
     }
 
-    // Reset categoría
-    async function resetCategory(cat){
-      if(!confirm(`¿Resetear la categoría "${cat}" a valores por defecto?`)) return;
-      try{
-        const res = await fetch(`/settings/api/reset/${cat}`, { method:'POST' });
-        const json = await res.json();
-        if(!json.success) return alert('❌ ' + (json.error || 'No se pudo resetear'));
-        location.reload();
-      }catch(e){ alert('❌ Error'); console.error(e); }
-    }
-
-    // Alternar encriptado
-    document.querySelectorAll('.toggle-encryption').forEach(chk=>{
-      chk.addEventListener('change', async function(){
-        const row = this.closest('.cfg-row');
-        const category = row.dataset.category;
-        const key = row.dataset.key;
-        const enable = this.checked;
-        try{
-          const resp = await fetch('/settings/api/toggle-encryption', {
-            method:'PATCH',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ category, key, enable })
-          });
-          const json = await resp.json();
-          if(!json.success) {
-            alert('❌ ' + (json.error || 'No se pudo alternar encriptado'));
-            this.checked = !enable;
-            return;
-          }
-          // Ajustar input type y data-encrypted
-          const input = row.querySelector('.config-input');
-          if (input) {
-            input.dataset.encrypted = enable ? 'true' : 'false';
-            if (input.tagName === 'INPUT') input.type = enable ? 'password' : 'text';
-          }
-          // Mostrar/ocultar botón ojo
-          const eye = row.querySelector('.toggle-eye');
-          if (enable && !eye) {
-            const btn = document.createElement('button');
-            btn.className = 'toggle-eye inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-2.5 py-2 text-xs font-medium shadow';
-            btn.type = 'button';
-            btn.ariaLabel = 'Mostrar/Ocultar';
-            btn.textContent = '👁️';
-            row.querySelector('.config-input')?.parentElement?.appendChild(btn);
-            bindEyeButtons(row);
-          } else if (!enable && eye) {
-            eye.remove();
-          }
-        }catch(e){
-          alert('❌ Error alternando encriptado');
-          console.error(e);
-          this.checked = !enable;
-        }
-      });
-    });
-
-    // Borrar config
-    document.querySelectorAll('.btn-delete').forEach(btn=>{
-      btn.addEventListener('click', async function(){
-        const row = this.closest('.cfg-row');
-        const category = row.dataset.category;
-        const key = row.dataset.key;
-        if(!confirm(`¿Eliminar "${category}.${key}"?`)) return;
-        try{
-          const resp = await fetch(`/settings/api/${encodeURIComponent(category)}/${encodeURIComponent(key)}`, { method:'DELETE' });
-          const json = await resp.json();
-          if(!json.success) return alert('❌ ' + (json.error || 'No se pudo eliminar'));
-          row.remove();
-        }catch(e){
-          alert('❌ Error al eliminar');
-          console.error(e);
-        }
-      });
-    });
-
-    // Renombrar (categoría y/o key)
-    document.querySelectorAll('.btn-rename').forEach(btn=>{
-      btn.addEventListener('click', async function(){
-        const row = this.closest('.cfg-row');
-        const oldCat = row.dataset.category;
-        const oldKey = row.dataset.key;
-        const newCat = prompt('Nueva categoría (dejar vacío para mantener):', oldCat) || oldCat;
-        const newKey = prompt('Nueva key (dejar vacío para mantener):', oldKey) || oldKey;
-        if (newCat === oldCat && newKey === oldKey) return;
-        try{
-          const resp = await fetch('/settings/api/rename', {
-            method:'PATCH',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ category: oldCat, key: oldKey, newCategory: newCat, newKey })
-          });
-          const json = await resp.json();
-          if(!json.success) return alert('❌ ' + (json.error || 'No se pudo renombrar'));
-          location.reload();
-        }catch(e){
-          alert('❌ Error al renombrar');
-          console.error(e);
-        }
-      });
-    });
-
     // ======================
     //  API KEYS
     // ======================
@@ -719,6 +702,7 @@
         const res  = await fetch('/settings/api-keys');
         const data = await res.json();
 
+        // limpiar previas
         [...apiKeysTableBody.querySelectorAll('tr.apiKeyRow')].forEach(tr => tr.remove());
 
         if (!data.success) {
@@ -833,7 +817,7 @@
     }
 
     // Crear nueva key
-    document.getElementById('btnNewApiKey')?.addEventListener('click', async ()=>{
+    btnNewApiKey && btnNewApiKey.addEventListener('click', async ()=>{
       const name = prompt('Nombre para esta API Key (ej. "Odoo Producción"):');
       if(!name) return;
       const description = prompt('Descripción (opcional):') || '';
@@ -852,84 +836,27 @@
           return;
         }
         // Mostrar modal con la key completa (solo una vez)
-        document.getElementById('apiKeyFullValue').textContent = json.data.key;
-        const modal = document.getElementById('apiKeyModal');
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
+        apiKeyFullValueEl.textContent = json.data.key;
+        apiKeyModal.classList.remove('hidden');
+        apiKeyModal.classList.add('flex');
         loadApiKeys();
       }catch(err){
         alert('❌ Error creando API key');
         console.error(err);
       }
     });
-    document.getElementById('btnCloseApiKeyModal')?.addEventListener('click', ()=>{
-      const modal = document.getElementById('apiKeyModal');
-      modal.classList.add('hidden');
-      modal.classList.remove('flex');
+
+    btnCloseApiKeyModal && btnCloseApiKeyModal.addEventListener('click', ()=>{
+      apiKeyModal.classList.add('hidden');
+      apiKeyModal.classList.remove('flex');
     });
 
     // Cargar llaves al entrar
     loadApiKeys();
 
-    // ===== Nueva Config (Modal)
-    const newConfigModal = document.getElementById('newConfigModal');
-    const btnNewConfig = document.getElementById('btnNewConfig');
-    const btnCancelNewConfig = document.getElementById('btnCancelNewConfig');
-    const btnCreateNewConfig = document.getElementById('btnCreateNewConfig');
-
-    btnNewConfig?.addEventListener('click', async ()=>{
-      // Poblar datalist de categorías
-      try{
-        const res = await fetch('/settings/api/categories');
-        const json = await res.json();
-        const list = json?.categories || [];
-        const dl = document.getElementById('catList');
-        dl.innerHTML = '';
-        list.forEach(c=>{
-          const o = document.createElement('option');
-          o.value = c;
-          dl.appendChild(o);
-        });
-      }catch(e){ console.warn('No se pudieron cargar categorías'); }
-      newConfigModal.classList.remove('hidden');
-      newConfigModal.classList.add('flex');
-    });
-    btnCancelNewConfig?.addEventListener('click', ()=>{
-      newConfigModal.classList.add('hidden'); newConfigModal.classList.remove('flex');
-    });
-
-    btnCreateNewConfig?.addEventListener('click', async ()=>{
-      const category = (document.getElementById('ncCategory') as HTMLInputElement).value.trim();
-      const key = (document.getElementById('ncKey') as HTMLInputElement).value.trim();
-      const description = (document.getElementById('ncDesc') as HTMLInputElement).value.trim();
-      const isEncrypted = (document.getElementById('ncEncrypted') as HTMLInputElement).checked;
-      const value = (document.getElementById('ncValue') as HTMLTextAreaElement).value;
-
-      if(!category || !key){
-        alert('Completa categoría y key'); return;
-      }
-      try{
-        const resp = await fetch('/settings/api/create', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ category, key, description, isEncrypted, value })
-        });
-        const json = await resp.json();
-        if(!json.success){
-          alert('❌ ' + (json.error||'No se pudo crear'));
-          return;
-        }
-        location.reload();
-      }catch(e){
-        alert('❌ Error creando config');
-        console.error(e);
-      }
-    });
-
-    // Exponer globales necesarias
+    // Exponer globales
     window.saveAllConfigs      = saveAllConfigs;
     window.reinitializeService = reinitializeService;
-    window.resetCategory       = resetCategory;
   </script>
 </body>
 </html>
