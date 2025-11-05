@@ -4,7 +4,6 @@ import { logger } from '../utils/logger.js'
 
 import * as conversationModel from '../models/conversation.js'
 import * as contactModel from '../models/contact.js'
-import * as configurationModel from '../models/configuration.js'
 import * as departmentModel from '../models/department.js'
 import * as productModel from '../models/product.js'
 import * as workingHoursModel from '../models/workingHours.js'
@@ -14,7 +13,6 @@ import * as calendarModel from '../models/calendar.js'
 import * as systemVarModel from '../models/systemVar.js'
 
 import * as odooService from './odoo.js'
-
 import { replaceVariables } from '../utils/formatters.js'
 
 type ContactLike = {
@@ -72,9 +70,15 @@ function trackLinkSent (phoneNumber: string, url: string) {
 const DEFAULT_MENU_HINT = '\n\nSi quieres ver el *menú de opciones*, escribe *menu*.'
 
 async function getMenuHintText (): Promise<string> {
-  // Permite personalizar desde configuration (se mantiene por compat)
-  const custom = await configurationModel.get('templates', 'menu_hint')
-  return (custom && custom.trim()) || DEFAULT_MENU_HINT
+  // Buscar plantilla en MessageTemplate: category=templates, name=menu_hint
+  try {
+    const list = await templateModel.getByCategory('templates')
+    const tpl = list.find(t => (t.name || '').toLowerCase() === 'menu_hint')
+    const content = tpl?.content?.trim()
+    return content && content.length > 0 ? content : DEFAULT_MENU_HINT
+  } catch {
+    return DEFAULT_MENU_HINT
+  }
 }
 
 function looksLikeMenuFull (text: string): boolean {
@@ -203,10 +207,20 @@ async function getSystemPrompt (
   scheduleContext: string,
   futureScheduleContext: string
 ) {
-  const systemVars = await configurationModel.getForSystemVariables?.() || {}
+  // Variables de empresa/flags unificadas en systemVarModel
+  const systemVars = await systemVarModel.getVariablesForPrompt?.() || {}
 
-  let tpl = await configurationModel.get('ai_prompt', 'system_prompt')
-  if (!tpl || !tpl.trim()) {
+  // Intentamos leer plantilla en MessageTemplate (category=templates, name=system_prompt)
+  let tpl: string | null = null
+  try {
+    const list = await templateModel.getByCategory('templates')
+    const found = list.find(t => (t.name || '').toLowerCase() === 'system_prompt')
+    tpl = found?.content?.trim() || null
+  } catch {
+    tpl = null
+  }
+
+  if (!tpl) {
     tpl = `
 Eres un asistente virtual profesional de {{company_name}}. RESPONDES SIEMPRE en español.
 
@@ -298,7 +312,7 @@ async function renderTemplateByCategoryName (
 /*  POLÍTICA FUERA DE HORARIO (NO HUMANO)                                      */
 /* ========================================================================== */
 async function buildOutOfHoursNotice () {
-  // Calcula variables como en WhatsApp
+  // Variables/plantillas desde systemVar + templates
   const status = await workingHoursModel.getStatusInfo(new Date())
   const [nextOpen, tz] = await Promise.all([
     workingHoursModel.getNextOpenDateTime(new Date()),
@@ -326,7 +340,6 @@ async function buildOutOfHoursNotice () {
   const event_type = status?.reason || ''
   const event_title = status?.todayEvent?.title || ''
 
-  // Preferir plantilla en MessageTemplate
   const rendered =
     await renderTemplateByCategoryName('templates', 'after_hours', {
       reason, open, close, break_start, break_end, break_hint, next_open_line, event_type, event_title
@@ -582,7 +595,7 @@ Si el usuario pide humano en horario de atención, puedes sugerir que un técnic
       )
 
       if (serviceUrl && shouldSendNewLink(phoneNumber, serviceUrl)) {
-        // plantilla por intención
+        // plantilla por intención (category=LINK)
         let linkTplName: 'LINK_SERVICE' | 'LINK_REMOTE' | 'LINK_TONER' = 'LINK_SERVICE'
         if (signalRemote) linkTplName = 'LINK_REMOTE'
         else if (signalToner) linkTplName = 'LINK_TONER'
@@ -595,10 +608,10 @@ Si el usuario pide humano en horario de atención, puedes sugerir que un técnic
             equipmentModel: eq.model || '',
             equipmentSerial: eq.serial || '',
             equipmentCount: String(customerInfo?.equipment?.length || 0),
-            policy_link_label: systemVars.policy_link_label || 'enlace del sistema',
-            policy_remote_tool_name: systemVars.policy_remote_tool_name || 'AnyDesk'
+            policy_link_label: (systemVars as any).policy_link_label || 'enlace del sistema',
+            policy_remote_tool_name: (systemVars as any).policy_remote_tool_name || 'AnyDesk'
           })) ||
-          `Abre este ${systemVars.policy_link_label || 'enlace'} para registrar tu solicitud:\n${serviceUrl}`
+          `Abre este ${(systemVars as any).policy_link_label || 'enlace'} para registrar tu solicitud:\n${serviceUrl}`
 
         response += `\n\n${linkMsg}`
         trackLinkSent(phoneNumber, serviceUrl)
@@ -613,7 +626,7 @@ Si el usuario pide humano en horario de atención, puedes sugerir que un técnic
 
     // 11) Cierre “gracias” → despedida + hint
     const hint = await getMenuHintText()
-    if (looksLikeThanks(txt)) {
+    if (isThanks) {
       const bye = await buildFarewell(systemVars)
       let finalBye = bye
       if (!alreadyHasHint(finalBye, hint)) finalBye += hint

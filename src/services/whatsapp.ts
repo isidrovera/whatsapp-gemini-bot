@@ -35,13 +35,11 @@ import {
   extractPhoneFromJid,
 } from '../utils/validators.js';
 
-// Dinámicos (horarios / plantillas / configuración / autorespuestas)
+// Dinámicos (horarios / plantillas / autorespuestas)
 import * as workingHoursModel from '../models/workingHours.js';
 import * as systemVarModel from '../models/systemVar.js';
-import * as configurationModel from '../models/configuration.js';
 import * as messageTemplateModel from '../models/template.js';
 import * as autoResponseModel from '../models/autoResponse.js';
-import { replaceVariables } from '../utils/formatters.js';
 
 // Odoo
 import {
@@ -133,21 +131,23 @@ function esUrgente(text: string): boolean {
 }
 
 // ==================================================
-// MENÚ PRINCIPAL (dinámico por plantilla/config)
+// MENÚ PRINCIPAL (dinámico por plantilla)
 // ==================================================
 async function buildMainMenu(contact: any): Promise<string> {
   const { companyName } = contactModel.resolvePrimaryCompany(contact) || {};
 
-  // Prioridad: configuration('templates','main_menu') → template.category('menu').name('main_menu')
+  // Prioridad: plantilla MessageTemplate -> 'menu'/'main_menu', si no existe usar 'MAIN_MENU__DEFAULT'
   let dynamicMenu: string | null = null;
 
-  const configMainMenu = await configurationModel.get('templates', 'main_menu');
-  if (configMainMenu && configMainMenu.trim().length > 0) {
-    dynamicMenu = configMainMenu;
-  } else {
+  try {
     const tplList = await messageTemplateModel.getByCategory('menu');
-    const tpl = tplList.find((t) => t.name === 'main_menu');
+    let tpl = tplList.find((t) => (t.name || '').toLowerCase() === 'main_menu');
+    if (!tpl) {
+      tpl = tplList.find((t) => (t.name || '').toUpperCase() === 'MAIN_MENU__DEFAULT');
+    }
     if (tpl?.content) dynamicMenu = tpl.content;
+  } catch {
+    dynamicMenu = null;
   }
 
   const varsBase = {
@@ -657,8 +657,7 @@ async function handleIncomingMessage(
       if (esUrgente(finalMessageText)) {
         await marcarUrgenteSinTakeover(normalizedPhone);
       }
-      // OJO: NO retornamos. Continuamos con auto-respuestas / intents / Gemini,
-      // pero bloqueamos derivación humana (opción 5) más abajo.
+      // Continuamos con flujo (links/AI), pero se bloquea derivación humana más abajo.
     }
 
     // ==========================================================
@@ -740,9 +739,7 @@ async function handleIncomingMessage(
           `[AUTO-RESPONSE] Sent auto-response for ${normalizedPhone}`
         );
         await sendMessage(senderJid, autoResp);
-        // No return: dejamos que el flujo siga si hace falta (pero típicamente basta).
-        // Si quieres cortar aquí, descomenta:
-        // return;
+        // Si quisieras cortar aquí, podrías return; (dejamos fluir por si necesita AI).
       }
     }
 
