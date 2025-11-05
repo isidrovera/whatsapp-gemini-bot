@@ -10,8 +10,7 @@
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio",
-    "init:data": "tsx --env-file=.env scripts/initData.ts"
+    "prisma:studio": "prisma studio"
   },
   "dependencies": {
     "@google/genai": "^1.25.0",

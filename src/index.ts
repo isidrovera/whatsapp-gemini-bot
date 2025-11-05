@@ -20,6 +20,10 @@ import * as departmentModel from './models/department.js'
 import { initializeGemini } from './config/gemini.js'
 import { initializeOdoo } from './services/odoo.js'
 
+// 👇 NUEVO: siembras directas desde los modelos
+import { ensureDefaults as ensureTemplateDefaults } from './models/template.js'
+import { ensureDefaults as ensureAutoResponseDefaults } from './models/autoResponse.js'
+
 // ==============================
 // Protección contra hot-reload
 // ==============================
@@ -107,6 +111,15 @@ async function main() {
     } catch (e) {
       logger.warn({ err: e }, '⚠️  Holiday sync failed (non-blocking)')
     }
+
+    // 7.1) 👇 NUEVO: Seeds idempotentes desde los modelos (sin initData.ts)
+    logger.info('📝 Seeding message templates (idempotent)...')
+    await ensureTemplateDefaults()
+    logger.info('✅ Templates ensured')
+
+    logger.info('🤖 Seeding auto-responses (idempotent)...')
+    await ensureAutoResponseDefaults()
+    logger.info('✅ Auto-responses ensured')
 
     // 8) Gemini
     logger.info('🤖 Initializing Gemini AI...')

@@ -1,13 +1,17 @@
 // src/models/template.ts
 import { getPrismaClient } from '../config/database.js';
 import { logger } from '../utils/logger.js';
-import type { Prisma, MessageTemplate } from '@prisma/client';
+import type { MessageTemplate } from '@prisma/client';
 
 const prisma = getPrismaClient();
 
-/* ============================================================================
- * CONSULTAS BÁSICAS
- * ==========================================================================*/
+/* ==================== HELPERS ==================== */
+function serializeVars(vars?: string[] | null): string | null {
+  if (!vars) return null;
+  try { return JSON.stringify(vars); } catch { return null; }
+}
+
+/* ==================== QUERIES ==================== */
 export async function getAll(): Promise<MessageTemplate[]> {
   try {
     return await prisma.messageTemplate.findMany({
@@ -66,11 +70,8 @@ export async function findById(id: string): Promise<MessageTemplate | null> {
   }
 }
 
-/* ============================================================================
- * MUTACIONES
- * ==========================================================================*/
-type CreateTemplateInput =
-  Pick<MessageTemplate, 'name' | 'content' | 'category'> &
+/* ==================== MUTATIONS ==================== */
+type CreateTemplateInput = Pick<MessageTemplate, 'name' | 'content' | 'category'> &
   Partial<Pick<MessageTemplate, 'variables' | 'isActive'>>;
 
 type UpdateTemplateInput = Partial<
@@ -79,7 +80,13 @@ type UpdateTemplateInput = Partial<
 
 export async function create(data: CreateTemplateInput): Promise<MessageTemplate> {
   try {
-    return await prisma.messageTemplate.create({ data });
+    return await prisma.messageTemplate.create({
+      data: {
+        ...data,
+        variables: data.variables ?? null,
+        isActive: data.isActive !== false,
+      },
+    });
   } catch (error) {
     logger.error({ err: error }, 'Error creating template:');
     throw error;
@@ -88,7 +95,10 @@ export async function create(data: CreateTemplateInput): Promise<MessageTemplate
 
 export async function update(id: string, data: UpdateTemplateInput): Promise<MessageTemplate> {
   try {
-    return await prisma.messageTemplate.update({ where: { id }, data });
+    return await prisma.messageTemplate.update({
+      where: { id },
+      data,
+    });
   } catch (error) {
     logger.error({ err: error }, 'Error updating template:');
     throw error;
@@ -104,46 +114,50 @@ export async function remove(id: string): Promise<MessageTemplate> {
   }
 }
 
-/** Upsert por (category, name) — útil para seeds/config sin duplicar. */
+/** Upsert seguro por `name` (tu schema tiene name @unique) */
 export async function upsert(
   category: string,
   name: string,
   content: string,
   options?: { variables?: string[]; isActive?: boolean }
 ): Promise<MessageTemplate> {
-  try {
-    const existing = await prisma.messageTemplate.findFirst({ where: { category, name } });
-    if (existing) {
-      return await prisma.messageTemplate.update({
-        where: { id: existing.id },
+  const vars = serializeVars(options?.variables);
+  return prisma.$transaction(
+    async (tx) => {
+      const updated = await tx.messageTemplate.updateMany({
+        where: { name },
         data: {
           content,
+          category,
           isActive: options?.isActive ?? true,
-          variables: options?.variables ? JSON.stringify(options.variables) : existing.variables,
+          ...(vars !== null ? { variables: vars } : {}),
         },
       });
-    }
-    return await prisma.messageTemplate.create({
-      data: {
-        category,
-        name,
-        content,
-        isActive: options?.isActive ?? true,
-        variables: options?.variables ? JSON.stringify(options.variables) : null,
-      },
-    });
-  } catch (error) {
-    logger.error({ err: error, category, name }, 'Error upserting template:');
-    throw error;
-  }
+      if (updated.count > 0) {
+        return tx.messageTemplate.findFirstOrThrow({ where: { name } });
+      }
+      return tx.messageTemplate.create({
+        data: {
+          category,
+          name,
+          content,
+          isActive: options?.isActive ?? true,
+          variables: vars,
+        },
+      });
+    },
+    { isolationLevel: 'Serializable' }
+  );
 }
 
-/* ============================================================================
- * RENDER / UTILIDADES
- * ==========================================================================*/
-/** Renderiza reemplazando {{clave}} por su valor (case-sensitive en clave). */
+/* ==================== RENDER / UTILS ==================== */
 export function render(content: string, variables: Record<string, string>): string {
   let result = content || '';
+  // default: {{key|fallback}}
+  result = result.replace(/{{\s*([a-zA-Z0-9_]+)\|([^}]+)\s*}}/g, (_, key, fallback) => {
+    const val = variables?.[key];
+    return (val ?? '').toString() || fallback;
+  });
   for (const [key, value] of Object.entries(variables || {})) {
     const regex = new RegExp(`{{${key}}}`, 'g');
     result = result.replace(regex, value ?? '');
@@ -151,9 +165,8 @@ export function render(content: string, variables: Record<string, string>): stri
   return result;
 }
 
-/** Extrae variables: "Hola {{nombre}}, tu RUC es {{ruc}}" -> ['nombre','ruc'] */
 export function extractVariables(content: string): string[] {
-  const regex = /{{(\w+)}}/g;
+  const regex = /{{\s*([a-zA-Z0-9_]+)(?:\|[^}]*)?\s*}}/g;
   const vars: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = regex.exec(content || '')) !== null) {
@@ -163,12 +176,10 @@ export function extractVariables(content: string): string[] {
   return vars;
 }
 
-/** Vista previa rápida con variables (ignorando faltantes). */
 export function preview(content: string, sample: Record<string, string>): string {
   return render(content, sample);
 }
 
-/** Listado de categorías distintas (para UI). */
 export async function listCategories(): Promise<string[]> {
   try {
     const rows = await prisma.messageTemplate.findMany({
@@ -183,142 +194,147 @@ export async function listCategories(): Promise<string[]> {
   }
 }
 
-/* ============================================================================
- * SEED SUGERIDO DE PLANTILLAS
- * ==========================================================================*/
-/**
- * ensureDefaults(): crea/actualiza un conjunto de plantillas recomendadas
- * para tu flujo (menú, fuera de horario, guías de intent, links, despedida).
- *
- * Llama a esta función desde un script de bootstrap o desde tu init.
- */
+/* ==================== SEED DEFAULTS (idempotente) ==================== */
 export async function ensureDefaults() {
   try {
     const templates: Array<{
       category: string;
-      name: string;
+      name: string; // debe ser único global (tu schema así lo exige)
       content: string;
       variables?: string[];
     }> = [
-      // ===== Menú principal (dinámico) =====
       {
         category: 'menu',
-        name: 'main_menu',
-        content:
-          '👋 Hola {{customer_name}}{{company_suffix}}\n\n' +
-          'Por favor elige una opción:\n' +
-          '1️⃣ *Servicio técnico en sitio*\n' +
-          '2️⃣ *Tóner / suministros*\n' +
-          '3️⃣ *Asistencia remota* ({{policy_remote_tool_name}})\n' +
-          '4️⃣ *Cambiar empresa activa*\n' +
-          '5️⃣ *Hablar con un técnico*\n',
-        variables: ['customer_name', 'company_suffix', 'policy_remote_tool_name'],
-      },
-
-      // ===== Avisos fuera de horario / feriados / break (ya los tienes también en configuration) =====
-      {
-        category: 'templates',
-        name: 'after_hours',
-        content:
-          '⏰ {{reason}}.\n🕒 Hoy: {{open}}–{{close}}{{break_hint}}\n{{next_open_line}}\n\n' +
-          'Si tu caso es *URGENTE*, responde *URGENTE* y te derivamos a soporte.',
-        variables: ['reason', 'open', 'close', 'break_hint', 'next_open_line'],
+        name: 'MAIN_MENU__DEFAULT',
+        content: [
+          '🙌 *¿En qué puedo ayudarte?*',
+          '',
+          'Elige una opción o escribe tu consulta:',
+          '1️⃣ Servicio técnico',
+          '2️⃣ Tóner / Insumos',
+          '3️⃣ Asistencia remota',
+          '4️⃣ Cambiar empresa',
+        ].join('\n'),
       },
       {
         category: 'templates',
-        name: 'holiday',
-        content:
-          '⛱️ Hoy es {{event_type}}: {{event_title}}. Por ello, no tenemos atención hoy.\n{{next_open_line}}',
-        variables: ['event_type', 'event_title', 'next_open_line'],
+        name: 'OUT_OF_HOURS__DEFAULT',
+        content: [
+          '⏰ En este momento estamos *fuera de horario*.',
+          '{{schedule_context}}',
+          '',
+          'Si tu caso es *URGENTE* podemos tomar nota, pero la atención humana se realizará en horario laboral.',
+        ].join('\n'),
+        variables: ['schedule_context'],
       },
       {
         category: 'templates',
-        name: 'break',
-        content:
-          '⏰ Estamos en horario de refrigerio ({{break_start}}–{{break_end}}). Retomamos a las {{break_end}}.\n{{next_open_line}}',
-        variables: ['break_start', 'break_end', 'next_open_line'],
-      },
-
-      // ===== Guías por intención (usadas por gemini.ts para enriquecer) =====
-      {
-        category: 'INTENT',
-        name: 'INTENT_SERVICE_GUIDE',
-        content:
-          'Guía: El usuario reporta una falla física. Pide detalles claros (modelo/serie, síntomas, códigos en pantalla). Ofrece registrar servicio técnico y menciona tiempos aproximados sin prometer hora exacta.',
-      },
-      {
-        category: 'INTENT',
-        name: 'INTENT_TONER_GUIDE',
-        content:
-          'Guía: El usuario solicita tóner/insumos. Pide *modelo o serie* y *color*. Si hay foto de etiqueta, úsala. Ofrece generar pedido con el enlace del sistema.',
-      },
-      {
-        category: 'INTENT',
-        name: 'INTENT_REMOTE_GUIDE',
-        content:
-          'Guía: El usuario requiere asistencia remota. Pide el *ID de {{policy_remote_tool_name}} (9 dígitos)* si no lo ha dado. No repitas la solicitud si ya lo entregó.',
-        variables: ['policy_remote_tool_name'],
-      },
-
-      // ===== Mensajes con LINK (se anexan al final si corresponde) =====
-      {
-        category: 'LINK',
-        name: 'LINK_SERVICE',
-        content:
-          '🛠️ Para avanzar, completa este formulario: {{link}}\n' +
-          '{{equipmentCount|0}} equipo(s) registrados{{equipment_tail}}',
-        // Nota: variables con sufijo opcional lo puedes pre-renderizar antes de llamar a render()
-      },
-      {
-        category: 'LINK',
-        name: 'LINK_TONER',
-        content:
-          '🖨️ Pedido de tóner / insumos aquí: {{link}}\n' +
-          'Incluye *modelo/serie* y *color* en el formulario.',
-      },
-      {
-        category: 'LINK',
-        name: 'LINK_REMOTE',
-        content:
-          '💻 Conexión remota: {{link}}\n' +
-          'Comparte tu ID de {{policy_remote_tool_name}} si aún no lo enviaste.',
-        variables: ['link', 'policy_remote_tool_name'],
-      },
-
-      // ===== Escalada a humano =====
-      {
-        category: 'templates',
-        name: 'ESCALATE_HUMAN',
-        content:
-          '⚠ Entendido. Derivaré tu caso a soporte humano ahora mismo. Un técnico te responderá en breve.\n' +
-          'Si necesitas contactarnos por teléfono: {{company_phone}}',
+        name: 'ESCALATE_HUMAN__DEFAULT',
+        content: [
+          '⚠ Entendido. Voy a derivar tu caso a soporte humano.',
+          'Por favor cuéntame brevemente el problema para priorizarlo 🙏.',
+          '',
+          '☎ {{company_phone}}',
+        ].join('\n'),
         variables: ['company_phone'],
       },
-
-      // ===== Estado de registro pendiente (cuando aún está en NEW/WAITING_*) =====
+      {
+        category: 'LINK',
+        name: 'LINK_SERVICE__DEFAULT',
+        content: [
+          '🧾 He generado tu {{policy_link_label}} para registrar servicio técnico:',
+          '{{link}}',
+          '',
+          'Equipos vinculados: {{equipmentCount}}',
+          'Si corresponde: {{equipmentBrand}} {{equipmentModel}} (SN: {{equipmentSerial}})',
+        ].join('\n'),
+        variables: ['policy_link_label', 'link', 'equipmentCount', 'equipmentBrand', 'equipmentModel', 'equipmentSerial'],
+      },
+      {
+        category: 'LINK',
+        name: 'LINK_REMOTE__DEFAULT',
+        content: [
+          '🖥️ Para soporte remoto usa *{{policy_remote_tool_name}}*:',
+          '👉 {{link}}',
+          '',
+          'Un técnico humano se conectará en el horario de atención.',
+        ].join('\n'),
+        variables: ['policy_remote_tool_name', 'link'],
+      },
+      {
+        category: 'LINK',
+        name: 'LINK_TONER__DEFAULT',
+        content: [
+          '🛒 Solicitud de tóner/insumos registrada:',
+          '👉 {{link}}',
+          '',
+          'Equipos vinculados: {{equipmentCount}}',
+          'Si corresponde: {{equipmentBrand}} {{equipmentModel}} (SN: {{equipmentSerial}})',
+        ].join('\n'),
+        variables: ['link', 'equipmentCount', 'equipmentBrand', 'equipmentModel', 'equipmentSerial'],
+      },
       {
         category: 'templates',
-        name: 'REGISTRATION_PENDING',
-        content:
-          'Estoy validando tus datos, {{nombre}}. Ya casi terminamos el registro 👍.',
+        name: 'REGISTRATION_PENDING__DEFAULT',
+        content: 'Estoy validando tus datos, {{nombre}}. Ya casi terminamos el registro 👍.',
         variables: ['nombre'],
       },
-
-      // ===== Despedida / “hint de menú” =====
       {
-        category: 'templates',
-        name: 'farewell',
-        content:
-          'Gracias por escribirnos. Si quieres ver el *menú de opciones*, escribe *menu*.',
+        category: 'INTENT',
+        name: 'INTENT_REMOTE_GUIDE__DEFAULT',
+        content: [
+          'Para *asistencia remota* usaremos {{policy_remote_tool_name}}.',
+          'Si ya tienes tu ID, compártelo (9 dígitos). ',
+          'Si no, ingresa al enlace y sigue las instrucciones.',
+          'Si tienes capturas de pantalla del error, envíalas 📷.',
+        ].join('\n'),
+        variables: ['policy_remote_tool_name'],
+      },
+      {
+        category: 'INTENT',
+        name: 'INTENT_SERVICE_GUIDE__DEFAULT',
+        content: [
+          'Parece un *caso de servicio técnico*. ',
+          '¿Puedes detallar el problema (mensaje de error, atasco, modelo/serie)? ',
+          'Te generaré un enlace para registrar el ticket.',
+        ].join('\n'),
+      },
+      {
+        category: 'INTENT',
+        name: 'INTENT_TONER_GUIDE__DEFAULT',
+        content: [
+          'Perfecto, para *tóner/insumos* necesito *modelo o serie* y *color*. ',
+          'Con eso genero el {{policy_link_label}}.',
+        ].join('\n'),
+        variables: ['policy_link_label'],
       },
     ];
 
-    for (const t of templates) {
-      await upsert(t.category, t.name, t.content, {
-        variables: t.variables,
-        isActive: true,
-      });
-    }
+    await prisma.$transaction(async (tx) => {
+      for (const t of templates) {
+        const vars = serializeVars(t.variables);
+        const updated = await tx.messageTemplate.updateMany({
+          where: { name: t.name }, // name es único global
+          data: {
+            category: t.category,
+            content: t.content,
+            isActive: true,
+            ...(vars !== null ? { variables: vars } : {}),
+          },
+        });
+        if (updated.count === 0) {
+          await tx.messageTemplate.create({
+            data: {
+              category: t.category,
+              name: t.name,
+              content: t.content,
+              isActive: true,
+              variables: vars,
+            },
+          });
+        }
+      }
+    });
 
     logger.info('✅ Template defaults ensured');
   } catch (error) {
