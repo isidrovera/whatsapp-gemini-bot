@@ -4,21 +4,23 @@ import * as configModel from '../../models/configuration.js';
 import * as apiKeyModel from '../../models/apiKeys.js';
 import { logger } from '../../utils/logger.js';
 import { reinitializeGemini } from '../../config/gemini.js';
+import { getPrismaClient } from '../../config/database.js';
 
+const prisma = getPrismaClient();
 const router = express.Router();
 
 // =======================================
 // VISTA PRINCIPAL (EJS)
 // =======================================
-router.get('/', async (req, res) => {
+router.get('/', async (_req, res) => {
   try {
     const configs = await configModel.getAll();
 
-    // Agrupar por categoría para las tabs
+    // Agrupar por categoría (dinámico)
     const grouped: { [category: string]: any[] } = {};
-    for (const config of configs) {
-      if (!grouped[config.category]) grouped[config.category] = [];
-      grouped[config.category].push(config);
+    for (const c of configs) {
+      if (!grouped[c.category]) grouped[c.category] = [];
+      grouped[c.category].push(c);
     }
 
     res.render('settings', {
@@ -32,9 +34,13 @@ router.get('/', async (req, res) => {
 });
 
 // =======================================
-// CONFIG (ya existentes)
+// CONFIG (API REST para UI dinámica)
 // =======================================
 
+// Sentinel visual para secretos
+const SECRET_SENTINEL = '********';
+
+// Todas
 router.get('/api', async (_req, res) => {
   try {
     const configs = await configModel.getAll();
@@ -45,6 +51,19 @@ router.get('/api', async (_req, res) => {
   }
 });
 
+// Solo categorías
+router.get('/api/categories', async (_req, res) => {
+  try {
+    const configs = await configModel.getAll();
+    const categories = Array.from(new Set(configs.map(c => c.category))).sort();
+    res.json({ success: true, categories });
+  } catch (error) {
+    logger.error({ err: error }, 'Error getting categories:');
+    res.status(500).json({ success: false, error: 'Error getting categories' });
+  }
+});
+
+// Por categoría
 router.get('/api/:category', async (req, res) => {
   try {
     const configs = await configModel.getByCategory(req.params.category);
@@ -55,6 +74,7 @@ router.get('/api/:category', async (req, res) => {
   }
 });
 
+// Single
 router.get('/api/:category/:key', async (req, res) => {
   try {
     const value = await configModel.get(req.params.category, req.params.key);
@@ -65,9 +85,41 @@ router.get('/api/:category/:key', async (req, res) => {
   }
 });
 
-// este sentinel se usa solo visualmente para campos encriptados
-const SECRET_SENTINEL = '********';
+// Crear nueva config
+router.post('/api/create', async (req, res) => {
+  try {
+    const { category, key, value, isEncrypted, description } = req.body || {};
+    if (!category || !key) {
+      return res.status(400).json({ success: false, error: 'category y key son requeridos' });
+    }
 
+    const exists = await prisma.configuration.findUnique({
+      where: { category_key: { category, key } },
+      select: { id: true },
+    });
+    if (exists) {
+      return res.status(409).json({ success: false, error: 'La combinación category/key ya existe' });
+    }
+
+    // Usar set() para respetar cifrado
+    await configModel.set(category, key, value || '', isEncrypted === true);
+
+    // Guardar/actualizar descripción si vino
+    if (typeof description === 'string' && description.trim()) {
+      await prisma.configuration.update({
+        where: { category_key: { category, key } },
+        data: { description: description.trim() },
+      });
+    }
+
+    res.json({ success: true, message: 'Configuración creada' });
+  } catch (error) {
+    logger.error({ err: error }, 'Error creating config:');
+    res.status(500).json({ success: false, error: 'Error creando config' });
+  }
+});
+
+// Upsert unitario (auto-save on blur)
 router.post('/api', async (req, res) => {
   try {
     const { category, key, value, isEncrypted } = req.body;
@@ -75,7 +127,6 @@ router.post('/api', async (req, res) => {
     if (!category || !key) {
       return res.status(400).json({ error: 'category and key are required' });
     }
-
     if (isEncrypted === true && (!value || value === SECRET_SENTINEL)) {
       return res.json({ success: true, skipped: true });
     }
@@ -88,6 +139,7 @@ router.post('/api', async (req, res) => {
   }
 });
 
+// Bulk
 router.post('/api/bulk', async (req, res) => {
   try {
     const { configs } = req.body; // Array de { category, key, value, isEncrypted }
@@ -98,10 +150,7 @@ router.post('/api/bulk', async (req, res) => {
 
     for (const c of configs) {
       if (!c?.category || !c?.key) continue;
-
-      if (c.isEncrypted === true && (!c.value || c.value === SECRET_SENTINEL)) {
-        continue;
-      }
+      if (c.isEncrypted === true && (!c.value || c.value === SECRET_SENTINEL)) continue;
 
       await configModel.set(
         c.category,
@@ -118,6 +167,77 @@ router.post('/api/bulk', async (req, res) => {
   }
 });
 
+// Borrar una config
+router.delete('/api/:category/:key', async (req, res) => {
+  try {
+    const { category, key } = req.params;
+    await prisma.configuration.delete({
+      where: { category_key: { category, key } },
+    });
+    res.json({ success: true, message: 'Config eliminada' });
+  } catch (error: any) {
+    if (error?.code === 'P2025') {
+      return res.status(404).json({ success: false, error: 'No existe' });
+    }
+    logger.error({ err: error }, 'Error deleting config:');
+    res.status(500).json({ success: false, error: 'Error al eliminar' });
+  }
+});
+
+// Alternar encriptado manteniendo valor (re-encrypt/decrypt)
+router.patch('/api/toggle-encryption', async (req, res) => {
+  try {
+    const { category, key, enable } = req.body || {};
+    if (!category || !key || typeof enable !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'Parámetros inválidos' });
+    }
+
+    const plain = await configModel.get(category, key); // ya viene desencriptado si estaba encrypted
+    await configModel.set(category, key, plain || '', enable);
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error({ err: error }, 'Error toggling encryption:');
+    res.status(500).json({ success: false, error: 'Error alternando encriptado' });
+  }
+});
+
+// Renombrar (cambiar category y/o key)
+router.patch('/api/rename', async (req, res) => {
+  try {
+    const { category, key, newCategory, newKey } = req.body || {};
+    if (!category || !key || (!newCategory && !newKey)) {
+      return res.status(400).json({ success: false, error: 'Parámetros inválidos' });
+    }
+
+    const targetCategory = newCategory || category;
+    const targetKey = newKey || key;
+
+    // Colisión
+    const exists = await prisma.configuration.findUnique({
+      where: { category_key: { category: targetCategory, key: targetKey } },
+      select: { id: true },
+    });
+    if (exists) {
+      return res.status(409).json({ success: false, error: 'Ya existe una entry con el nuevo category/key' });
+    }
+
+    await prisma.configuration.update({
+      where: { category_key: { category, key } },
+      data: { category: targetCategory, key: targetKey },
+    });
+
+    res.json({ success: true, message: 'Renombrado correctamente' });
+  } catch (error: any) {
+    if (error?.code === 'P2025') {
+      return res.status(404).json({ success: false, error: 'No existe' });
+    }
+    logger.error({ err: error }, 'Error renaming config:');
+    res.status(500).json({ success: false, error: 'Error al renombrar' });
+  }
+});
+
+// Validaciones, stats
 router.get('/api/validate', async (_req, res) => {
   try {
     const validation = await configModel.validateCritical();
@@ -138,6 +258,7 @@ router.get('/api/stats', async (_req, res) => {
   }
 });
 
+// Export / Import
 router.get('/api/export', async (_req, res) => {
   try {
     const backup = await configModel.exportAll();
@@ -173,6 +294,7 @@ router.post('/api/import', async (req, res) => {
   }
 });
 
+// Reset por categoría
 router.post('/api/reset/:category', async (req, res) => {
   try {
     const success = await configModel.resetCategory(req.params.category);
@@ -190,12 +312,10 @@ router.post('/api/reset/:category', async (req, res) => {
   }
 });
 
+// Check existencia
 router.get('/api/check/:category/:key', async (req, res) => {
   try {
-    const isConfigured = await configModel.isConfigured(
-      req.params.category,
-      req.params.key
-    );
+    const isConfigured = await configModel.isConfigured(req.params.category, req.params.key);
     res.json({ isConfigured });
   } catch (error) {
     logger.error({ err: error }, 'Error checking config:');
@@ -203,6 +323,7 @@ router.get('/api/check/:category/:key', async (req, res) => {
   }
 });
 
+// Reinicios de servicios
 router.post('/api/reinitialize/:service', async (req, res) => {
   const { service } = req.params;
 
@@ -214,7 +335,6 @@ router.post('/api/reinitialize/:service', async (req, res) => {
           success: true,
           message: 'Gemini restarted successfully',
         });
-
       default:
         return res.status(400).json({
           success: false,
@@ -235,7 +355,6 @@ router.post('/api/reinitialize/:service', async (req, res) => {
 // API KEYS (panel API / Tokens)
 // =======================================
 
-// Listar todas las API keys
 router.get('/api-keys', async (_req, res) => {
   try {
     const keys = await apiKeyModel.list();
@@ -265,8 +384,6 @@ router.get('/api-keys', async (_req, res) => {
   }
 });
 
-// Crear nueva API key
-// Devuelve la key COMPLETA una sola vez
 router.post('/api-keys', async (req, res) => {
   try {
     const { name, description, expiresAt } = req.body;
@@ -290,7 +407,7 @@ router.post('/api-keys', async (req, res) => {
       data: {
         id: apiKey.id,
         name: apiKey.name,
-        key: apiKey.key, // <-- mostrar COMPLETA solo aquí
+        key: apiKey.key, // COMPLETA una sola vez
         description: apiKey.description,
         isActive: apiKey.isActive,
         lastUsedAt: apiKey.lastUsedAt,
@@ -307,18 +424,14 @@ router.post('/api-keys', async (req, res) => {
   }
 });
 
-// Activar/desactivar
 router.patch('/api-keys/:id/toggle', async (req, res) => {
   try {
     const { id } = req.params;
     const { enable } = req.body; // true/false
 
     let ok = false;
-    if (enable === true) {
-      ok = await apiKeyModel.activate(id);
-    } else {
-      ok = await apiKeyModel.deactivate(id);
-    }
+    if (enable === true) ok = await apiKeyModel.activate(id);
+    else ok = await apiKeyModel.deactivate(id);
 
     if (!ok) {
       return res.status(500).json({
@@ -340,7 +453,6 @@ router.patch('/api-keys/:id/toggle', async (req, res) => {
   }
 });
 
-// Eliminar
 router.delete('/api-keys/:id', async (req, res) => {
   try {
     const { id } = req.params;
