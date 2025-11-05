@@ -18,7 +18,7 @@ import * as blockedModel from '../models/blocked.js';
 import * as contactModel from '../models/contact.js';
 import * as geminiService from './gemini.js';
 
-// ⬇️ NUEVO: importamos tipos y helpers estructurados
+// Media helpers
 import {
   getMediaType,
   processImage,
@@ -35,11 +35,13 @@ import {
   extractPhoneFromJid,
 } from '../utils/validators.js';
 
-// Horarios / Plantillas / Config Dinámica
+// Dinámicos (horarios / plantillas / configuración / autorespuestas)
 import * as workingHoursModel from '../models/workingHours.js';
 import * as systemVarModel from '../models/systemVar.js';
 import * as configurationModel from '../models/configuration.js';
 import * as messageTemplateModel from '../models/template.js';
+import * as autoResponseModel from '../models/autoResponse.js';
+import { replaceVariables } from '../utils/formatters.js';
 
 // Odoo
 import {
@@ -48,17 +50,10 @@ import {
   getOdooServiceLink,
 } from './odoo.js';
 
-// Auto-respuestas
-import * as autoResponseModel from '../models/autoResponse.js';
-import { replaceVariables } from '../utils/formatters.js';
-
-// DNI/RUC externo
-import * as external from './external.js';
-
 // Tags (HUMANO / URGENTE / etc)
 import * as tagModel from '../models/tag.js';
 
-// Prisma directo (para guardar RUC provisional)
+// Prisma directo (para guardar RUC provisional legacy)
 import { getPrismaClient } from '../config/database.js';
 const prisma = getPrismaClient();
 
@@ -80,7 +75,7 @@ const botSentMessageIds = new Map<string, number>();
 const BOT_ID_TTL_MS = 5 * 60 * 1000;
 
 // ==================================================
-// AUTH FOLDER HELPERS (NUEVO)
+// AUTH FOLDER HELPERS
 // ==================================================
 const AUTH_FOLDER = path.resolve('./baileys_auth');
 
@@ -124,7 +119,7 @@ function normalizeJidToPhone(remoteJid: string): string {
 }
 
 // ==================================================
-// HELPER: detectar mensaje urgente
+// URGENCIA
 // ==================================================
 function esUrgente(text: string): boolean {
   const lower = (text || '').toLowerCase();
@@ -138,27 +133,21 @@ function esUrgente(text: string): boolean {
 }
 
 // ==================================================
-// MENSAJE / MENÚ PRINCIPAL (DINÁMICO SI EXISTE PLANTILLA)
+// MENÚ PRINCIPAL (dinámico por plantilla/config)
 // ==================================================
 async function buildMainMenu(contact: any): Promise<string> {
-  // intentamos información de empresa activa
   const { companyName } = contactModel.resolvePrimaryCompany(contact) || {};
 
-  // Intentar plantilla dinámica desde configuration/messageTemplate.
-  // Priorizamos configuration.templates.main_menu
+  // Prioridad: configuration('templates','main_menu') → template.category('menu').name('main_menu')
   let dynamicMenu: string | null = null;
 
-  // 1) configuration: category 'templates', key 'main_menu'
   const configMainMenu = await configurationModel.get('templates', 'main_menu');
   if (configMainMenu && configMainMenu.trim().length > 0) {
     dynamicMenu = configMainMenu;
   } else {
-    // 2) messageTemplate: category='menu', name='main_menu'
     const tplList = await messageTemplateModel.getByCategory('menu');
     const tpl = tplList.find((t) => t.name === 'main_menu');
-    if (tpl?.content) {
-      dynamicMenu = tpl.content;
-    }
+    if (tpl?.content) dynamicMenu = tpl.content;
   }
 
   const varsBase = {
@@ -170,7 +159,7 @@ async function buildMainMenu(contact: any): Promise<string> {
     return messageTemplateModel.render(dynamicMenu, varsBase);
   }
 
-  // Fallback HARDCODEADO
+  // Fallback
   return (
     `👋 Hola ${varsBase.customer_name || ''}` +
     `${varsBase.company_name ? ` (${varsBase.company_name})` : ''}\n\n` +
@@ -184,7 +173,7 @@ async function buildMainMenu(contact: any): Promise<string> {
 }
 
 // ==================================================
-// MENÚ PARA ELEGIR EMPRESA
+// MENÚ SELECCIÓN EMPRESA
 // ==================================================
 function buildCompanySelectionMenu(contact: any): string {
   if (!contact.companies || contact.companies.length === 0) {
@@ -194,7 +183,9 @@ function buildCompanySelectionMenu(contact: any): string {
   let msg =
     'Tienes más de una empresa asociada.\n¿Con cuál quieres continuar?\n\n';
   contact.companies.forEach((cc: any, idx: number) => {
-    msg += `${idx + 1}️⃣ ${cc.company.name} (${cc.company.ruc})\n`;
+    const name = cc.company?.name || cc.company?.razonSocial || '—';
+    const ruc = cc.company?.ruc || cc.company?.numeroDoc || '—';
+    msg += `${idx + 1}️⃣ ${name} (${ruc})\n`;
   });
   msg += `\nEscribe el número de la empresa.`;
 
@@ -202,7 +193,7 @@ function buildCompanySelectionMenu(contact: any): string {
 }
 
 // ==================================================
-// PLANTILLA FUERA DE HORARIO
+// MENSAJE FUERA DE HORARIO
 // ==================================================
 async function replyOutOfHours(jid: string) {
   const status = await workingHoursModel.getStatusInfo(new Date());
@@ -261,26 +252,21 @@ async function replyOutOfHours(jid: string) {
 }
 
 // ==================================================
-// ESCALAMIENTO HUMANO URGENTE (FUERA DE HORARIO)
+// POLÍTICA: URGENTE FUERA DE HORARIO (sin humano)
 // ==================================================
-async function escalarUrgenteFueraDeHorario(
-  jid: string,
-  phoneE164: string
-) {
-  // 1. Crear / asegurar tag HUMANO
+async function marcarUrgenteSinTakeover(phoneE164: string) {
+  // Aseguramos tag HUMANO (para priorizar), pero NO ponemos takeover.
   let allTags = await tagModel.getAll();
   let humanTag = allTags.find(
     (t: any) => (t.name || '').toUpperCase() === 'HUMANO'
   );
-
   if (!humanTag) {
     humanTag = await tagModel.create({
       name: 'HUMANO',
       color: '#ff0000',
-      description: 'Escalado a soporte humano urgente',
+      description: 'Casos a priorizar',
     });
   }
-
   const existingTags = await tagModel.getByConversation(phoneE164);
   const alreadyTagged = existingTags.some(
     (t: any) => (t.name || '').toUpperCase() === 'HUMANO'
@@ -288,38 +274,10 @@ async function escalarUrgenteFueraDeHorario(
   if (!alreadyTagged) {
     await tagModel.assignToConversation(phoneE164, humanTag.id);
   }
-
-  // 2. takeover humano en el contacto
-  await contactModel.setHumanTakeover(phoneE164);
-
-  // 3. Mensaje dinámico de escalada
-  let escaladaTpl =
-    (await configurationModel.get('templates', 'urgent_human_message')) || '';
-
-  if (!escaladaTpl) {
-    const tplList = await messageTemplateModel.getByCategory('templates');
-    const found = tplList.find((t) => t.name === 'urgent_human_message');
-    if (found?.content) {
-      escaladaTpl = found.content;
-    }
-  }
-
-  if (!escaladaTpl) {
-    escaladaTpl =
-      '⚠ Entendido. Estoy derivando tu caso a soporte humano ahora mismo. Un técnico te responderá en breve.';
-  }
-
-  const sysVars = await configurationModel.getForSystemVariables();
-  const rendered = messageTemplateModel.render(escaladaTpl, {
-    company_name: sysVars.company_name || '',
-    company_phone: sysVars.company_phone || '',
-  });
-
-  await sendMessage(jid, rendered);
 }
 
 // ==================================================
-// EXTRACCIÓN CONTENIDO MENSAJE
+// EXTRAER TEXTO
 // ==================================================
 function extractMessageText(message: proto.IWebMessageInfo): string {
   const messageContent = message.message;
@@ -348,7 +306,7 @@ async function generateOdooLinkForContact(contact: any, phone: string) {
   return await getOdooServiceLink(companyName, userName, phone);
 }
 
-// guarda RUC provisional en contacto
+// Guarda RUC provisional legacy (si lo usas en WAITING_COMPANY_NAME)
 async function saveProvisionalRUC(phoneE164: string, ruc: string) {
   try {
     await prisma.contact.update({
@@ -361,7 +319,7 @@ async function saveProvisionalRUC(phoneE164: string, ruc: string) {
 }
 
 // ==================================================
-// INICIALIZACIÓN WHATSAPP (BAILEYS)
+// INICIALIZACIÓN (BAILEYS)
 // ==================================================
 export async function initializeWhatsApp(forceNew: boolean = false) {
   try {
@@ -369,7 +327,6 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
       `Initializing WhatsApp client (Baileys v7)... forceNew=${forceNew}`
     );
 
-    // si queremos forzar nueva sesión, limpiamos carpeta
     if (forceNew) {
       await ensureCleanAuthFolder();
     }
@@ -389,7 +346,6 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
-      // QR recibido
       if (qr) {
         logger.info('QR Code received, scan to authenticate:');
         qrcode.generate(qr, { small: true });
@@ -407,36 +363,28 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
         botPhoneNumber = null;
       }
 
-      // conexión cerrada
       if (connection === 'close') {
         const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
 
-        // caso: cerraste sesión desde el teléfono / escaneaste en otro lado
         if (statusCode === DisconnectReason.loggedOut) {
           logger.warn(
-            '⚠️ WhatsApp dijo: loggedOut (device_removed). Limpiando auth y reiniciando para QR nuevo...'
+            '⚠️ loggedOut (device_removed). Limpiando auth y reiniciando para QR nuevo...'
           );
 
-          // limpiar estado actual
           sock = null;
           isReady = false;
           botPhoneNumber = null;
           currentQR = null;
           qrDataURL = null;
 
-          // reiniciar en modo forzado → mostrará QR
           setTimeout(() => {
             initializeWhatsApp(true).catch((err) =>
-              logger.error({ err }, 
-                'Error reinitializing WhatsApp after loggedOut:'
-              )
+              logger.error({ err }, 'Error reinitializing after loggedOut:')
             );
           }, 1000);
-
           return;
         }
 
-        // otros errores → reconectar normal
         logger.warn({ statusCode }, 'Connection closed. Reconnecting...');
 
         isReady = false;
@@ -451,7 +399,6 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
         }, 3000);
       }
 
-      // conexión abierta
       if (connection === 'open') {
         logger.info('✅ WhatsApp connected successfully!');
         isReady = true;
@@ -479,7 +426,7 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
 }
 
 // ==================================================
-// MENSAJES DESDE EL MISMO NÚMERO DEL BOT (HUMANO)
+// MENSAJES DEL MISMO NÚMERO (AGENTE HUMANO)
 // ==================================================
 async function handleAgentMessageFromMe(
   senderJid: string,
@@ -491,7 +438,6 @@ async function handleAgentMessageFromMe(
   const phoneNumber = normalizeJidToPhone(senderJid);
   const normalizedPhone = normalizePhone(phoneNumber);
 
-  // takeover manual
   if (textLower === HUMAN_TAKEOVER_COMMAND) {
     await contactModel.setHumanTakeover(normalizedPhone);
     logger.info(`[HUMAN-TAKEOVER] ✋ Manually activated for ${normalizedPhone}`);
@@ -506,7 +452,7 @@ async function handleAgentMessageFromMe(
     return;
   }
 
-  // cualquier mensaje del humano renueva takeover
+  // Cualquier mensaje del agente renueva takeover
   if (messageText && messageText.trim().length > 0) {
     const contact = await contactModel.findByPhone(normalizedPhone);
     const now = new Date();
@@ -535,17 +481,15 @@ async function handleAgentMessageFromMe(
 }
 
 // ==================================================
-// HANDLER PRINCIPAL DE MENSAJES ENTRANTES (CLIENTE)
+// HANDLER PRINCIPAL
 // ==================================================
 async function handleIncomingMessage(
   message: proto.IWebMessageInfo,
   upsertType?: UpsertType
 ) {
   try {
-    // ignorar mensajes viejos
     if ((message.messageTimestamp as number) * 1000 < startTime) return;
 
-    // ✅ FIX: key puede venir null/undefined
     const key = message.key;
     const senderJid = key?.remoteJid ?? key?.participant ?? null;
     if (!senderJid) {
@@ -553,18 +497,14 @@ async function handleIncomingMessage(
       return;
     }
 
-    // ignorar eco propio
     if (upsertType === 'append') {
       logger.debug('Ignoring local append upsert (likely our own send)');
       return;
     }
-    
-    // Null check para message.key
     if (!message.key || !message.key.id) {
       logger.debug('Ignoring message without valid key');
       return;
     }
-
     if (isFromBotById(message.key.id)) {
       logger.debug(
         `Ignoring message id=${message.key.id} (sent by bot recently)`
@@ -572,13 +512,11 @@ async function handleIncomingMessage(
       return;
     }
 
-    // mensaje del mismo número del bot => humano contestando
     if (message.key.fromMe) {
       await handleAgentMessageFromMe(senderJid, message);
       return;
     }
 
-    // ignorar / bloquear grupos
     if (isGroupJid(senderJid)) {
       logger.info(`Message from group ${senderJid} - ignoring`);
       const isBlockedGroup = await blockedModel.isBlocked(senderJid);
@@ -593,10 +531,8 @@ async function handleIncomingMessage(
       return;
     }
 
-    // normalizamos número
     const phoneNumberRaw = normalizeJidToPhone(senderJid);
     const normalizedPhone = normalizePhone(phoneNumberRaw);
-
     if (!normalizedPhone) {
       logger.error(
         `[PARSER] Could not normalize phone from JID "${senderJid}" -> "${phoneNumberRaw}"`
@@ -604,31 +540,18 @@ async function handleIncomingMessage(
       return;
     }
 
-    // ========================================
-    // VERIFICACIÓN DE PERMISOS GRANULARES
-    // ========================================
-    
-    // 1. Verificar si está bloqueado completamente
+    // 1) Bloqueos / permisos
     const isBlockedNum = await blockedModel.isBlocked(normalizedPhone);
     if (isBlockedNum) {
-      logger.info(`[BLOCKED] Message from ${normalizedPhone} - completely blocked`);
+      logger.info(
+        `[BLOCKED] Message from ${normalizedPhone} - completely blocked`
+      );
       return;
     }
 
-    // 2. Obtener permisos del usuario
     const permissions = await blockedModel.getPermissions(normalizedPhone);
-    
-    logger.debug({
-      phoneNumber: normalizedPhone,
-      accessLevel: permissions.accessLevel,
-      odoo: permissions.permissions.odoo,
-      tickets: permissions.permissions.tickets,
-      ai: permissions.permissions.ai,
-      human: permissions.permissions.human,
-      autoresponse: permissions.permissions.autoresponse
-    }, `[PERMISSIONS] ${normalizedPhone} - Access control check`);
 
-    // takeover humano?
+    // 2) Human takeover vigente (en horario hábil)
     const shouldRespond = await contactModel.shouldBotRespond(normalizedPhone);
     if (!shouldRespond) {
       logger.info(
@@ -637,9 +560,7 @@ async function handleIncomingMessage(
       return;
     }
 
-    // ==========================================================
-    // EXTRAER TEXTO Y ANALIZAR MEDIA CON GEMINI MULTIMODAL
-    // ==========================================================
+    // 3) Texto y media
     const rawText = extractMessageText(message);
     const mediaType = getMediaType(message);
 
@@ -665,34 +586,36 @@ async function handleIncomingMessage(
 
         if (mediaAnalysisResult) {
           anydeskCode = extractAnydeskCodeFromAnalysis(mediaAnalysisResult);
-          if (anydeskCode) {
-            logger.info(`[ANYDESK] Code extracted: ${anydeskCode}`);
-          }
+          if (anydeskCode) logger.info(`[ANYDESK] Code extracted: ${anydeskCode}`);
 
           finalMessageTextFromMedia =
             mediaAnalysisResult.ocrText ||
             mediaAnalysisResult.rawSummary ||
             null;
 
-          logger.info({
-            summary: mediaAnalysisResult.rawSummary,
-            serial: mediaAnalysisResult.detectedSerial,
-            errorCode: mediaAnalysisResult.detectedErrorCode,
-            anydesk: mediaAnalysisResult.detectedAnydesk,
-            class: mediaAnalysisResult.mediaTypeClass,
-          }, '[WHATSAPP] Media analysis summary:');
+          logger.info(
+            {
+              summary: mediaAnalysisResult.rawSummary,
+              serial: mediaAnalysisResult.detectedSerial,
+              errorCode: mediaAnalysisResult.detectedErrorCode,
+              anydesk: mediaAnalysisResult.detectedAnydesk,
+              class: mediaAnalysisResult.mediaTypeClass,
+            },
+            '[WHATSAPP] Media analysis summary:'
+          );
         }
       } catch (err: any) {
-        logger.error({
-          message: err?.message,
-          stack: err?.stack,
-        }, '[WHATSAPP] Media processing error:');
+        logger.error(
+          {
+            message: err?.message,
+            stack: err?.stack,
+          },
+          '[WHATSAPP] Media processing error:'
+        );
       }
     }
 
-    // mensaje final para el flujo
     let finalMessageText = (rawText || '').trim();
-
     if (!finalMessageText) {
       if (finalMessageTextFromMedia) {
         finalMessageText = finalMessageTextFromMedia.trim();
@@ -711,45 +634,43 @@ async function handleIncomingMessage(
       )}... ${mediaType ? `[+${mediaType.toUpperCase()}]` : ''}`
     );
 
-    // asegurar contacto
+    // 4) Contacto y estado
     await contactModel.getOrCreate(normalizedPhone);
     let contact = await contactModel.findByPhone(normalizedPhone);
-    
-    // Null check para contact
     if (!contact) {
-      logger.error(`[CONTACT] Failed to create or retrieve contact for ${normalizedPhone}`);
+      logger.error(
+        `[CONTACT] Failed to create or retrieve contact for ${normalizedPhone}`
+      );
       return;
     }
-    
     let state = contact.state || 'NEW';
 
-    // ==========================================================
-    // 0. HORARIO / URGENCIA
-    // ==========================================================
+    // 5) Horario
     const status = await workingHoursModel.getStatusInfo(new Date());
     const negocioCerrado = !status?.isOpen;
 
+    // Si está cerrado, informamos SIEMPRE una vez:
     if (negocioCerrado) {
-      // fuera de horario:
-      if (esUrgente(finalMessageText)) {
-        // escalar a humano y NO mandar "Aún no abrimos"
-        await escalarUrgenteFueraDeHorario(senderJid, normalizedPhone);
-        return;
-      }
-
-      // no urgente => respuesta fuera de horario
       await replyOutOfHours(senderJid);
-      return;
+
+      // Si dice "urgente", SOLO tag; NO takeover
+      if (esUrgente(finalMessageText)) {
+        await marcarUrgenteSinTakeover(normalizedPhone);
+      }
+      // OJO: NO retornamos. Continuamos con auto-respuestas / intents / Gemini,
+      // pero bloqueamos derivación humana (opción 5) más abajo.
     }
 
     // ==========================================================
-    // 1. VERIFICAR NIVEL DE ACCESO RESTRINGIDO
+    // 6) NIVEL DE ACCESO RESTRINGIDO
     // ==========================================================
     if (permissions.accessLevel === 'RESTRICTED') {
-      logger.info(`[RESTRICTED] ${normalizedPhone} - Only auto-responses allowed`);
-      
+      logger.info(
+        `[RESTRICTED] ${normalizedPhone} - Only auto-responses allowed`
+      );
+
       const canUseAutoResponse = permissions.permissions.autoresponse ?? false;
-      
+
       if (canUseAutoResponse) {
         const autoResp = await autoResponseModel.findAndProcessResponse(
           finalMessageText,
@@ -789,7 +710,7 @@ async function handleIncomingMessage(
     }
 
     // ==========================================================
-    // 2. AUTO-RESPUESTAS DINÁMICAS (si tiene permiso)
+    // 7) AUTO-RESPUESTAS (si tiene permiso)
     // ==========================================================
     const canUseAutoResponse = permissions.permissions.autoresponse ?? true;
 
@@ -819,12 +740,14 @@ async function handleIncomingMessage(
           `[AUTO-RESPONSE] Sent auto-response for ${normalizedPhone}`
         );
         await sendMessage(senderJid, autoResp);
-        return;
+        // No return: dejamos que el flujo siga si hace falta (pero típicamente basta).
+        // Si quieres cortar aquí, descomenta:
+        // return;
       }
     }
 
     // ==========================================================
-    // 3. FLUJO DE REGISTRO (DNI / RUC / EMPRESA / MENU)
+    // 8) REGISTRO (DNI / RUC / EMPRESA)
     // ==========================================================
     if (state === 'NEW') {
       await contactModel.updateState(normalizedPhone, 'WAITING_DNI');
@@ -847,7 +770,9 @@ async function handleIncomingMessage(
         return;
       }
 
-      const persona = await external.validateDNI(dniCandidate);
+      const persona = await (await import('./external.js')).validateDNI(
+        dniCandidate
+      );
 
       if (!persona) {
         await sendMessage(
@@ -892,19 +817,15 @@ async function handleIncomingMessage(
 
       if (linkRes.ok === true) {
         contact = await contactModel.findByPhone(normalizedPhone);
-        
-        // Null check
         if (!contact) {
-          logger.error(`[CONTACT] Contact disappeared after linking company for ${normalizedPhone}`);
+          logger.error(
+            `[CONTACT] Contact disappeared after linking company for ${normalizedPhone}`
+          );
           return;
         }
 
         if (contact.companies && contact.companies.length > 1) {
-          await contactModel.updateState(
-            normalizedPhone,
-            'SELECTING_COMPANY'
-          );
-
+          await contactModel.updateState(normalizedPhone, 'SELECTING_COMPANY');
           await sendMessage(
             senderJid,
             `He verificado tu empresa con RUC ${rucCandidate} ✅`
@@ -915,10 +836,10 @@ async function handleIncomingMessage(
 
         await contactModel.updateState(normalizedPhone, 'MENU');
         contact = await contactModel.findByPhone(normalizedPhone);
-        
-        // Null check
         if (!contact) {
-          logger.error(`[CONTACT] Contact disappeared after state update for ${normalizedPhone}`);
+          logger.error(
+            `[CONTACT] Contact disappeared after state update for ${normalizedPhone}`
+          );
           return;
         }
 
@@ -930,13 +851,12 @@ async function handleIncomingMessage(
         return;
       }
 
-      const infoRuc = await external.validateRUC(rucCandidate);
+      const infoRuc = await (await import('./external.js')).validateRUC(
+        rucCandidate
+      );
 
       if (!infoRuc) {
-        await contactModel.updateState(
-          normalizedPhone,
-          'WAITING_COMPANY_NAME'
-        );
+        await contactModel.updateState(normalizedPhone, 'WAITING_COMPANY_NAME');
         await saveProvisionalRUC(normalizedPhone, rucCandidate);
 
         await sendMessage(
@@ -949,25 +869,18 @@ async function handleIncomingMessage(
       const razonSocial =
         infoRuc.razonSocial || `Empresa ${rucCandidate}`.trim();
 
-      await contactModel.updateRUC(
-        normalizedPhone,
-        rucCandidate,
-        razonSocial
-      );
+      await contactModel.updateRUC(normalizedPhone, rucCandidate, razonSocial);
 
       contact = await contactModel.findByPhone(normalizedPhone);
-      
-      // Null check
       if (!contact) {
-        logger.error(`[CONTACT] Contact disappeared after RUC update for ${normalizedPhone}`);
+        logger.error(
+          `[CONTACT] Contact disappeared after RUC update for ${normalizedPhone}`
+        );
         return;
       }
 
       if (contact.companies && contact.companies.length > 1) {
-        await contactModel.updateState(
-          normalizedPhone,
-          'SELECTING_COMPANY'
-        );
+        await contactModel.updateState(normalizedPhone, 'SELECTING_COMPANY');
 
         await sendMessage(
           senderJid,
@@ -979,8 +892,6 @@ async function handleIncomingMessage(
 
       await contactModel.updateState(normalizedPhone, 'MENU');
       contact = await contactModel.findByPhone(normalizedPhone);
-      
-      // Null check
       if (!contact) {
         logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
         return;
@@ -998,13 +909,11 @@ async function handleIncomingMessage(
       const razonSocialManual = finalMessageText.trim();
 
       contact = await contactModel.findByPhone(normalizedPhone);
-      
-      // Null check
       if (!contact) {
         logger.error(`[CONTACT] Contact not found for ${normalizedPhone}`);
         return;
       }
-      
+
       const provisionalRuc = contact.ruc || '';
 
       if (!provisionalRuc || provisionalRuc.length !== 11) {
@@ -1023,18 +932,13 @@ async function handleIncomingMessage(
       );
 
       contact = await contactModel.findByPhone(normalizedPhone);
-      
-      // Null check
       if (!contact) {
         logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
         return;
       }
 
       if (contact.companies && contact.companies.length > 1) {
-        await contactModel.updateState(
-          normalizedPhone,
-          'SELECTING_COMPANY'
-        );
+        await contactModel.updateState(normalizedPhone, 'SELECTING_COMPANY');
 
         await sendMessage(
           senderJid,
@@ -1046,8 +950,6 @@ async function handleIncomingMessage(
 
       await contactModel.updateState(normalizedPhone, 'MENU');
       contact = await contactModel.findByPhone(normalizedPhone);
-      
-      // Null check
       if (!contact) {
         logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
         return;
@@ -1079,16 +981,10 @@ async function handleIncomingMessage(
 
       const chosenPivot = empresas[idxChosen];
 
-      await contactModel.setPrimaryCompany(
-        contact.id,
-        chosenPivot.companyId
-      );
-
+      await contactModel.setPrimaryCompany(contact.id, chosenPivot.companyId);
       await contactModel.updateState(normalizedPhone, 'MENU');
 
       contact = await contactModel.findByPhone(normalizedPhone);
-      
-      // Null check
       if (!contact) {
         logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
         return;
@@ -1098,13 +994,12 @@ async function handleIncomingMessage(
         senderJid,
         `Perfecto 👍 Ahora usaré *${contact.companyName}* como tu empresa activa.`
       );
-
       await sendMessage(senderJid, await buildMainMenu(contact));
       return;
     }
 
     // ==========================================================
-    // 4. ESTADOS OPERATIVOS (MENU / REGISTERED) - CON PERMISOS
+    // 9) OPERACIÓN (MENU / REGISTERED)
     // ==========================================================
     if (state === 'MENU' || state === 'REGISTERED') {
       const trimmed = finalMessageText.trim();
@@ -1114,30 +1009,28 @@ async function handleIncomingMessage(
         return;
       }
 
-      // 1️⃣ Servicio técnico en sitio - VERIFICAR PERMISO ODOO
+      // 1️⃣ Servicio técnico en sitio (permitido off-hours → crea link)
       if (trimmed === '1') {
         const canUseOdoo = permissions.permissions.odoo ?? true;
 
         if (!canUseOdoo) {
-          logger.warn(`[PERMISSION-DENIED] ${normalizedPhone} - odoo access denied`);
+          logger.warn(
+            `[PERMISSION-DENIED] ${normalizedPhone} - odoo access denied`
+          );
           await sendMessage(
             senderJid,
-            '⚠️ No tienes permiso para consultar información de servicio técnico. ' +
-            'Contacta a tu administrador para más información.'
+            '⚠️ No tienes permiso para consultar información de servicio técnico.'
           );
           return;
         }
 
-        const link = await generateOdooLinkForContact(
-          contact,
-          normalizedPhone
-        );
+        const link = await generateOdooLinkForContact(contact, normalizedPhone);
         if (link) {
           await sendMessage(
             senderJid,
             `🛠️ *Solicitud de servicio técnico en sitio*\n` +
               `Completa este formulario:\n${link}\n\n` +
-              `Indica el modelo o serie del equipo y cuál es el problema (por ejemplo "no imprime", "atasco de papel").`
+              `Indica el modelo o serie del equipo y cuál es el problema.`
           );
         } else {
           await sendMessage(
@@ -1149,24 +1042,22 @@ async function handleIncomingMessage(
         return;
       }
 
-      // 2️⃣ Tóner / insumos - VERIFICAR PERMISO TICKETS
+      // 2️⃣ Tóner / insumos (permitido off-hours)
       if (trimmed === '2') {
         const canCreateTickets = permissions.permissions.tickets ?? true;
 
         if (!canCreateTickets) {
-          logger.warn(`[PERMISSION-DENIED] ${normalizedPhone} - tickets access denied`);
+          logger.warn(
+            `[PERMISSION-DENIED] ${normalizedPhone} - tickets access denied`
+          );
           await sendMessage(
             senderJid,
-            '⚠️ No tienes permiso para crear solicitudes de tóner. ' +
-            'Contacta a soporte para más información.'
+            '⚠️ No tienes permiso para crear solicitudes de tóner.'
           );
           return;
         }
 
-        const link = await generateOdooLinkForContact(
-          contact,
-          normalizedPhone
-        );
+        const link = await generateOdooLinkForContact(contact, normalizedPhone);
         if (link) {
           await sendMessage(
             senderJid,
@@ -1184,17 +1075,14 @@ async function handleIncomingMessage(
         return;
       }
 
-      // 3️⃣ Asistencia remota / AnyDesk
+      // 3️⃣ Asistencia remota (permitido off-hours: solo guía/ID, sin humano)
       if (trimmed === '3') {
-        await contactModel.updateState(
-          normalizedPhone,
-          'WAITING_REMOTE_INFO'
-        );
+        await contactModel.updateState(normalizedPhone, 'WAITING_REMOTE_INFO');
         await sendMessage(
           senderJid,
           '💻 *Asistencia remota*\n' +
-            'Envíame el *ID de AnyDesk* (los 9 dígitos) o una *foto clara de tu pantalla donde se vea el ID*.\n' +
-            'Un técnico se puede conectar para ayudarte 👨‍💻.'
+            'Envíame el *ID de AnyDesk* (9 dígitos) o una *foto clara de tu pantalla donde se vea el ID*.\n' +
+            'Un técnico podrá conectarse cuando estemos en horario de atención 👨‍💻.'
         );
         return;
       }
@@ -1208,25 +1096,33 @@ async function handleIncomingMessage(
             'Actualmente solo tienes una empresa asociada.'
           );
         } else {
-          await contactModel.updateState(
-            normalizedPhone,
-            'SELECTING_COMPANY'
-          );
+          await contactModel.updateState(normalizedPhone, 'SELECTING_COMPANY');
           await sendMessage(senderJid, buildCompanySelectionMenu(contact));
         }
         return;
       }
 
-      // 5️⃣ Hablar con técnico - VERIFICAR PERMISO HUMAN
+      // 5️⃣ Hablar con técnico
       if (trimmed === '5') {
-        const canTalkToHuman = permissions.permissions.human ?? true;
+        if (negocioCerrado) {
+          await sendMessage(
+            senderJid,
+            '⏰ En este momento no contamos con atención humana. ' +
+              'Puedes usar el *menú* para solicitar servicio, tóner o asistencia remota. ' +
+              'Un técnico te responderá cuando estemos en horario.'
+          );
+          return;
+        }
 
+        const canTalkToHuman = permissions.permissions.human ?? true;
         if (!canTalkToHuman) {
-          logger.warn(`[PERMISSION-DENIED] ${normalizedPhone} - human access denied`);
+          logger.warn(
+            `[PERMISSION-DENIED] ${normalizedPhone} - human access denied`
+          );
           await sendMessage(
             senderJid,
             '⚠️ No puedes solicitar atención humana en este momento. ' +
-            'Por favor utiliza las opciones del menú automatizado o contacta a soporte por otro medio.'
+              'Por favor utiliza las opciones del menú automatizado.'
           );
           return;
         }
@@ -1239,25 +1135,18 @@ async function handleIncomingMessage(
         return;
       }
 
-      // mensaje libre cercano a servicio técnico - VERIFICAR PERMISO ODOO
+      // Intents libres (servicio / tóner) — permitidos off-hours (vía link)
       if (detectServiceIntent(finalMessageText)) {
         const canUseOdoo = permissions.permissions.odoo ?? true;
-
         if (!canUseOdoo) {
-          logger.warn(`[PERMISSION-DENIED] ${normalizedPhone} - odoo intent denied`);
           await sendMessage(
             senderJid,
-            '⚠️ No tienes acceso a solicitudes de servicio técnico. ' +
-            'Contacta a tu administrador.'
+            '⚠️ No tienes acceso a solicitudes de servicio técnico.'
           );
           return;
         }
 
-        const link = await generateOdooLinkForContact(
-          contact,
-          normalizedPhone
-        );
-
+        const link = await generateOdooLinkForContact(contact, normalizedPhone);
         if (link) {
           await sendMessage(
             senderJid,
@@ -1274,24 +1163,17 @@ async function handleIncomingMessage(
         return;
       }
 
-      // mensaje libre cercano a tóner - VERIFICAR PERMISO TICKETS
       if (detectTonerIntent(finalMessageText)) {
         const canCreateTickets = permissions.permissions.tickets ?? true;
-
         if (!canCreateTickets) {
-          logger.warn(`[PERMISSION-DENIED] ${normalizedPhone} - toner intent denied`);
           await sendMessage(
             senderJid,
-            '⚠️ No tienes permiso para crear solicitudes de tóner. ' +
-            'Contacta a soporte.'
+            '⚠️ No tienes permiso para crear solicitudes de tóner.'
           );
           return;
         }
 
-        const link = await generateOdooLinkForContact(
-          contact,
-          normalizedPhone
-        );
+        const link = await generateOdooLinkForContact(contact, normalizedPhone);
         if (link) {
           await sendMessage(
             senderJid,
@@ -1308,9 +1190,8 @@ async function handleIncomingMessage(
         return;
       }
 
-      // Gemini como fallback - VERIFICAR PERMISO AI
+      // Fallback Gemini (permitido off-hours)
       const canUseAI = permissions.permissions.ai ?? true;
-
       if (canUseAI) {
         const responseFromGemini = await geminiService.processMessage(
           normalizedPhone,
@@ -1319,32 +1200,34 @@ async function handleIncomingMessage(
           mediaAnalysisResult
             ? JSON.stringify(mediaAnalysisResult, null, 2)
             : null,
-          anydeskCode || null
+          anydeskCode || null,
+          mediaAnalysisResult?.mediaTypeClass || null,
+          mediaAnalysisResult?.detectedErrorCode || null,
+          mediaAnalysisResult?.detectedSerial || null
         );
 
         await sendMessage(senderJid, responseFromGemini);
       } else {
-        logger.warn(`[PERMISSION-DENIED] ${normalizedPhone} - AI access denied`);
+        logger.warn(
+          `[PERMISSION-DENIED] ${normalizedPhone} - AI access denied`
+        );
         await sendMessage(
           senderJid,
           'Lo siento, no puedo procesar tu mensaje en este momento. ' +
-          'Por favor usa las opciones del menú: envía "menu" para ver las opciones disponibles.'
+            'Por favor usa las opciones del menú: envía "menu" para ver las opciones disponibles.'
         );
       }
       return;
     }
 
     // ==========================================================
-    // 5. ESPERANDO INFO REMOTA
+    // 10) ESPERANDO INFO REMOTA
     // ==========================================================
     if (state === 'WAITING_REMOTE_INFO') {
-      await contactModel.setHumanTakeover(normalizedPhone);
-
+      // No activamos humano automáticamente.
       await contactModel.updateState(normalizedPhone, 'MENU');
 
       contact = await contactModel.findByPhone(normalizedPhone);
-      
-      // Null check
       if (!contact) {
         logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
         return;
@@ -1353,26 +1236,23 @@ async function handleIncomingMessage(
       await sendMessage(
         senderJid,
         '✅ Gracias. Ya tengo la información para soporte remoto.\n' +
-          'Un técnico se conectará contigo o te escribirá en breve 👨‍💻'
+          'Un técnico se conectará contigo o te escribirá en cuanto estemos en horario 👨‍💻'
       );
       return;
     }
 
     // ==========================================================
-    // 6. Estado raro → forzamos MENU
+    // 11) Estado desconocido → MENU
     // ==========================================================
     logger.warn(
       `[BOT] Estado desconocido "${state}" para ${normalizedPhone}, forzando MENU`
     );
     await contactModel.updateState(normalizedPhone, 'MENU');
     contact = await contactModel.findByPhone(normalizedPhone);
-    
-    // Null check
     if (!contact) {
       logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
       return;
     }
-    
     await sendMessage(senderJid, await buildMainMenu(contact));
     return;
   } catch (error: any) {
@@ -1424,17 +1304,12 @@ export async function sendDirectMessage(phoneE164: string, text: string) {
 
   try {
     const resp = await sock.sendMessage(jid, { text });
-
     const sentId = resp?.key?.id;
     if (sentId) {
       markBotMessageId(sentId);
       logger.debug(`Marked bot message id=${sentId} (API direct)`);
     }
-
-    logger.info(
-      `(API) Message sent to ${jid}: ${text.substring(0, 80)}...`
-    );
-
+    logger.info(`(API) Message sent to ${jid}: ${text.substring(0, 80)}...`);
     return resp;
   } catch (error) {
     logger.error({ err: error }, 'Error sending direct message:');
@@ -1467,20 +1342,11 @@ export async function sendMedia(jid: string, payload: SendMediaPayload) {
     let resp: any;
 
     if (kind === 'image') {
-      resp = await sock.sendMessage(jid, {
-        image: buffer,
-        caption,
-      });
+      resp = await sock.sendMessage(jid, { image: buffer, caption });
     } else if (kind === 'video') {
-      resp = await sock.sendMessage(jid, {
-        video: buffer,
-        caption,
-      });
+      resp = await sock.sendMessage(jid, { video: buffer, caption });
     } else if (kind === 'audio') {
-      resp = await sock.sendMessage(jid, {
-        audio: buffer,
-        mimetype: mime,
-      });
+      resp = await sock.sendMessage(jid, { audio: buffer, mimetype: mime });
     } else {
       resp = await sock.sendMessage(jid, {
         document: buffer,
@@ -1497,21 +1363,24 @@ export async function sendMedia(jid: string, payload: SendMediaPayload) {
     }
 
     logger.info(
-      `Media sent to ${jid}: ${kind} ${
-        fileName ? `(${fileName})` : ''
-      } ${caption ? `| ${caption.substring(0, 50)}…` : ''}`
+      `Media sent to ${jid}: ${kind} ${fileName ? `(${fileName})` : ''} ${
+        caption ? `| ${caption.substring(0, 50)}…` : ''
+      }`
     );
 
     return resp;
   } catch (error: any) {
     const boom = error?.output;
-    logger.error({
-      err: error,
-      msg: error?.message,
-      code: error?.code || boom?.statusCode,
-      data: error?.data || boom?.payload,
-      stack: error?.stack,
-    }, 'Error sending media:');
+    logger.error(
+      {
+        err: error,
+        msg: error?.message,
+        code: error?.code || boom?.statusCode,
+        data: error?.data || boom?.payload,
+        stack: error?.stack,
+      },
+      'Error sending media:'
+    );
     throw error;
   }
 }
@@ -1527,16 +1396,13 @@ export async function sendMediaToPhone(
 
   const clean = phoneE164.replace(/\D/g, '');
   const jid = `${clean}@s.whatsapp.net`;
-
   return sendMedia(jid, payload);
 }
 
 // ==================================================
 // ESTADO / QR / CONEXIÓN
 // ==================================================
-export async function onWhatsAppExists(
-  e164: string
-): Promise<boolean> {
+export async function onWhatsAppExists(e164: string): Promise<boolean> {
   if (!sock) return false;
   try {
     const res = await sock.onWhatsApp(e164);
@@ -1593,21 +1459,15 @@ export async function disconnectSession(): Promise<void> {
 
 export async function forceNewQRState(): Promise<void> {
   try {
-    await initializeWhatsApp(true); // 👈 forzado
+    await initializeWhatsApp(true);
     logger.info(
       'forceNewQRState(): WhatsApp client reinitialized, waiting for QR scan'
     );
   } catch (err) {
-    logger.error({ err },
-      'forceNewQRState() failed to reinitialize WhatsApp:'
-    );
+    logger.error({ err }, 'forceNewQRState() failed to reinitialize WhatsApp:');
   }
 }
 
 export async function disconnect(): Promise<void> {
   await disconnectSession();
 }
-
-// ==================================================
-// FIN DEL ARCHIVO
-// ==================================================
