@@ -9,8 +9,7 @@ const prisma = getPrismaClient()
 // Encriptación
 // ==============================
 
-const ENCRYPTION_KEY =
-  process.env.ENCRYPTION_KEY || 'default-encryption-key-change-me-32ch'
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'default-encryption-key-change-me-32ch'
 const ALGORITHM = 'aes-256-cbc'
 
 function toKey32(key: string): Buffer {
@@ -65,7 +64,7 @@ export async function initDefaults(): Promise<void> {
       { category: 'odoo', key: 'password', value: '', isEncrypted: true, description: 'Contraseña Odoo' },
       { category: 'odoo', key: 'enabled', value: 'false', isEncrypted: false, description: 'Habilitar integración Odoo' },
 
-      // APIs EXTERNAS (DNI/RUC)
+      // APIs EXTERNAS
       { category: 'external_api', key: 'apis_token', value: '', isEncrypted: true, description: 'Token APIs.net.pe (DNI/RUC)' },
       { category: 'external_api', key: 'enabled', value: 'false', isEncrypted: false, description: 'Habilitar validación DNI/RUC' },
 
@@ -75,9 +74,8 @@ export async function initDefaults(): Promise<void> {
       { category: 'system', key: 'bot_name', value: 'Asistente Virtual', isEncrypted: false, description: 'Nombre del bot' },
       { category: 'system', key: 'auto_response_enabled', value: 'true', isEncrypted: false, description: 'Habilitar respuestas automáticas' },
       { category: 'system', key: 'department_routing_enabled', value: 'true', isEncrypted: false, description: 'Habilitar enrutamiento por departamentos' },
-      { category: 'system', key: 'timezone', value: 'America/Lima', isEncrypted: false, description: 'Zona horaria del negocio' },
 
-      // EMPRESA (identidad pública)
+      // EMPRESA (identidad pública de quien atiende)
       { category: 'company', key: 'name', value: 'Mi Empresa', isEncrypted: false, description: 'Nombre de la empresa' },
       { category: 'company', key: 'description', value: 'Empresa de servicios', isEncrypted: false, description: 'Descripción de la empresa' },
       { category: 'company', key: 'address', value: '', isEncrypted: false, description: 'Dirección' },
@@ -94,55 +92,6 @@ export async function initDefaults(): Promise<void> {
 
       // PROMPT BASE DEL ASISTENTE
       { category: 'ai_prompt', key: 'system_prompt', value: '', isEncrypted: false, description: 'System prompt base' },
-
-      // TEMPLATES (OFICIALES)
-      {
-        category: 'templates',
-        key: 'main_menu',
-        value:
-`👋 Hola {{customer_name}}{{company_name ? (' (' + company_name + ')') : ''}}
-
-Por favor elige una opción:
-1️⃣ Solicitud de *servicio técnico en sitio*
-2️⃣ Solicitud de *tóner / suministros*
-3️⃣ *Asistencia remota* ({{policy_remote_tool_name}})
-4️⃣ *Cambiar empresa activa* (si trabajas con más de una)
-5️⃣ Hablar con un *Técnico*
-`,
-        isEncrypted: false,
-        description: 'Menú principal del bot'
-      },
-      {
-        category: 'templates',
-        key: 'after_hours_message',
-        value:
-`⏰ {{reason}}.
-🕒 Hoy: {{open}}–{{close}}{{break_hint}}
-{{next_open_line}}
-
-Si tu caso es *URGENTE*, responde *URGENTE* y te derivamos a soporte.`,
-        isEncrypted: false,
-        description: 'Plantilla para mensajes fuera de horario'
-      },
-      {
-        category: 'templates',
-        key: 'break_message',
-        value:
-`⏰ Estamos en horario de refrigerio ({{break_start}}–{{break_end}}).
-Retomamos a las {{break_end}}.
-{{next_open_line}}`,
-        isEncrypted: false,
-        description: 'Plantilla para horario de refrigerio'
-      },
-      {
-        category: 'templates',
-        key: 'holiday_message',
-        value:
-`⛱️ Hoy es {{event_type}}: {{event_title}}. Por ello, no tenemos atención hoy.
-{{next_open_line}}`,
-        isEncrypted: false,
-        description: 'Plantilla para feriados'
-      },
     ] as const
 
     for (const cfg of defaults) {
@@ -179,7 +128,12 @@ Retomamos a las {{break_end}}.
 export async function get(category: string, key: string): Promise<string | null> {
   try {
     const config = await prisma.configuration.findUnique({
-      where: { category_key: { category, key } },
+      where: {
+        category_key: {
+          category,
+          key,
+        },
+      },
     })
 
     if (!config) {
@@ -317,7 +271,7 @@ export async function isCategoryConfigured(category: string): Promise<boolean> {
 }
 
 // ==============================
-// Variables agregadas para IA (identidad & políticas)
+// Variables agregadas para inyectar en IA
 // ==============================
 
 export async function getForSystemVariables(): Promise<{ [key: string]: string }> {

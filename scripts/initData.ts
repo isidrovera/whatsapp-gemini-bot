@@ -1,247 +1,242 @@
-// scripts/initData.ts
-import 'dotenv/config'
-import { logger } from '../src/utils/logger.js'
+// src/scripts/initData.ts
+import { getPrismaClient } from '../config/database.js'
+import { logger } from '../utils/logger.js'
 
-import * as configuration from '../src/models/configuration.js'
-import * as autoResponseModel from '../src/models/autoResponse.js'
-import * as templateModel from '../src/models/template.js'
-import * as tagModel from '../src/models/tag.js'
+import * as templateModel from '../models/template.js'
+import * as autoResponseModel from '../models/autoResponse.js'
 
-async function ensureTemplatesInConfiguration() {
-  logger.info('Seeding: templates en configuration (main_menu / after_hours / break / holiday)...')
+const prisma = getPrismaClient()
 
-  // MAIN MENU (dinámico, se puede editar desde panel)
-  const existingMain = await configuration.get('templates', 'main_menu')
-  if (!existingMain) {
-    const value =
-`👋 Hola {{customer_name}}{{#company_name}} ({{company_name}}){{/company_name}}
-
-Por favor elige una opción:
-1️⃣ Solicitud de *servicio técnico en sitio*
-2️⃣ Solicitud de *tóner / suministros*
-3️⃣ *Asistencia remota* ({{policy_remote_tool_name}})
-4️⃣ *Cambiar empresa activa*
-5️⃣ Hablar con un *Técnico*
-
-📝 Escribe el número de la opción, o escribe *menu* para volver aquí.`
-      .replace('{{policy_remote_tool_name}}', '{{policy_remote_tool_name}}') // mantener variable
-    await configuration.set('templates', 'main_menu', value, false)
-    logger.info('✔ templates.main_menu creado')
-  } else {
-    logger.info('↪ templates.main_menu ya existe (OK)')
+async function ensureTemplate(category: string, name: string, content: string, variables?: string[]) {
+  const existing = await templateModel.getByCategory(category)
+  const found = existing.find(t => (t.name || '').toLowerCase() === name.toLowerCase())
+  if (found) {
+    logger.info({ category, name }, '[SEED] Template exists — skipping')
+    return found
   }
 
-  // AFTER HOURS
-  const existingAfter = await configuration.get('templates', 'after_hours_message')
-  if (!existingAfter) {
-    await configuration.set(
-      'templates',
-      'after_hours_message',
-      '⏰ {{reason}}.\n🕒 Hoy: {{open}}–{{close}}{{break_hint}}\n{{next_open_line}}\n\nSi tu caso es *URGENTE*, responde *URGENTE* y te derivamos a soporte.',
-      false
-    )
-    logger.info('✔ templates.after_hours_message creado')
-  } else {
-    logger.info('↪ templates.after_hours_message ya existe (OK)')
-  }
-
-  // BREAK
-  const existingBreak = await configuration.get('templates', 'break_message')
-  if (!existingBreak) {
-    await configuration.set(
-      'templates',
-      'break_message',
-      '⏰ Estamos en horario de refrigerio ({{break_start}}–{{break_end}}). Retomamos a las {{break_end}}.\n{{next_open_line}}',
-      false
-    )
-    logger.info('✔ templates.break_message creado')
-  } else {
-    logger.info('↪ templates.break_message ya existe (OK)')
-  }
-
-  // HOLIDAY
-  const existingHoliday = await configuration.get('templates', 'holiday_message')
-  if (!existingHoliday) {
-    await configuration.set(
-      'templates',
-      'holiday_message',
-      '⛱️ Hoy es {{event_type}}: {{event_title}}. Por ello, no tenemos atención hoy.\n{{next_open_line}}',
-      false
-    )
-    logger.info('✔ templates.holiday_message creado')
-  } else {
-    logger.info('↪ templates.holiday_message ya existe (OK)')
-  }
+  const created = await templateModel.create({
+    category,
+    name,
+    content,
+    variables: variables ?? null,
+    isActive: true,
+  })
+  logger.info({ category, name }, '[SEED] Template created')
+  return created
 }
 
-async function ensureSystemPrompt() {
-  logger.info('Seeding: ai_prompt.system_prompt (si falta)...')
-  const existing = await configuration.get('ai_prompt', 'system_prompt')
-  if (!existing) {
-    const prompt =
-`Eres un asistente virtual profesional de {{company_name}}. Respondes SIEMPRE en español.
-Usa la información de configuración, políticas y contexto de usuario.
-No inventes datos. Sé breve y útil. Ofrece escribir "menu" para ver opciones cuando corresponda.`
-    await configuration.set('ai_prompt', 'system_prompt', prompt, false)
-    logger.info('✔ ai_prompt.system_prompt creado')
-  } else {
-    logger.info('↪ ai_prompt.system_prompt ya existe (OK)')
-  }
-}
-
-async function ensurePolicyDefaults() {
-  logger.info('Seeding: policy defaults (si faltan)...')
-
-  const ensure = async (key: string, value: string) => {
-    const v = await configuration.get('policy', key)
-    if (!v) {
-      await configuration.set('policy', key, value, false)
-      logger.info(`✔ policy.${key} creado`)
-    } else {
-      logger.info(`↪ policy.${key} ya existe (OK)`)
-    }
+async function ensureAutoResponse(
+  trigger: string,
+  response: string,
+  priority = 1,
+  category: string | null = null,
+  isActive = true
+) {
+  const all = await autoResponseModel.getAll()
+  const found = all.find(r => (r.trigger || '').trim().toLowerCase() === trigger.trim().toLowerCase())
+  if (found) {
+    logger.info({ trigger }, '[SEED] AutoResponse exists — skipping')
+    return found
   }
 
-  await ensure('link_label', 'enlace del sistema')
-  await ensure('remote_tool_name', 'AnyDesk')
-  await ensure('tone_style', 'profesional_cercano_con_emojis')
-  await ensure('allow_direct_phone_share', 'true')
-  await ensure('allow_field_visit_commitment', 'false')
-}
-
-async function ensureHumanTag() {
-  logger.info('Seeding: tag HUMANO (si falta)...')
-  const all = await tagModel.getAll()
-  const exists = all.some((t: any) => (t.name || '').toUpperCase() === 'HUMANO')
-  if (!exists) {
-    await tagModel.create({
-      name: 'HUMANO',
-      color: '#ff0000',
-      description: 'Escalado a soporte humano urgente',
-    })
-    logger.info('✔ Tag HUMANO creado')
-  } else {
-    logger.info('↪ Tag HUMANO ya existe (OK)')
-  }
-}
-
-async function ensureAutoResponses() {
-  logger.info('Seeding: auto-responses básicas (si faltan)...')
-  const existing = await autoResponseModel.getAll()
-  const hasTrigger = (t: string) =>
-    existing.some(r => (r.trigger || '').trim().toLowerCase() === t.trim().toLowerCase())
-
-  const candidates = [
-    {
-      trigger: 'menu',
-      response:
-        'Aquí tienes el menú principal 👇\n\n{{templates.main_menu || "Escribe *1*, *2*, *3*, *4* o *5*"}}',
-      priority: 1,
-      category: 'core',
-    },
-    {
-      trigger: 'hola,buenas,hi,buenos días,buenas tardes,buenas noches',
-      response:
-        '¡Hola! 👋 ¿En qué puedo ayudarte hoy?\n\nSi quieres ver las opciones disponibles, escribe *menu*.',
-      priority: 2,
-      category: 'saludo',
-    },
-    {
-      trigger: 'gracias,muchas gracias,grac',
-      response:
-        '¡Con gusto! 🙌 Si necesitas algo más, escribe *menu* para ver opciones.',
-      priority: 3,
-      category: 'cortesia',
-    },
-    {
-      trigger: 'ayuda,opciones,que puedo hacer',
-      response:
-        'Puedo ayudarte con soporte, tóner y asistencia remota. Escribe *menu* para ver el listado.',
-      priority: 4,
-      category: 'ayuda',
-    },
-  ]
-
-  for (const c of candidates) {
-    if (!hasTrigger(c.trigger)) {
-      await autoResponseModel.create({
-        trigger: c.trigger,
-        response: c.response,
-        priority: c.priority,
-        category: c.category,
-        isActive: true,
-      })
-      logger.info(`✔ Auto-response creada: "${c.trigger}"`)
-    } else {
-      logger.info(`↪ Auto-response ya existe: "${c.trigger}" (OK)`)
-    }
-  }
-}
-
-async function ensureMessageTemplatesTableHasExamples() {
-  // Opcional: ejemplos en tabla messageTemplate (por si la usas además del configuration)
-  logger.info('Seeding: ejemplos mínimos en messageTemplate (opcional)...')
-
-  const ensureTemplate = async (category: string, name: string, content: string) => {
-    const list = await templateModel.getByCategory(category)
-    const found = list.find(t => t.name === name)
-    if (!found) {
-      await templateModel.create({ category, name, content, isActive: true })
-      logger.info(`✔ messageTemplate: ${category}/${name} creado`)
-    } else {
-      logger.info(`↪ messageTemplate: ${category}/${name} ya existe (OK)`)
-    }
-  }
-
-  await ensureTemplate(
-    'templates',
-    'urgent_human_message',
-    '⚠ Entendido. Estoy derivando tu caso a soporte humano ahora mismo. Un técnico te responderá en breve.'
-  )
-
-  await ensureTemplate(
-    'menu',
-    'main_menu',
-    'Este es un ejemplo alternativo de menú en messageTemplate (edítalo si decides usar esta fuente).'
-  )
+  const created = await autoResponseModel.create({
+    trigger,
+    response,
+    priority,
+    category,
+    isActive,
+  })
+  logger.info({ trigger }, '[SEED] AutoResponse created')
+  return created
 }
 
 async function main() {
-  logger.info('==== initData.ts: bootstrap inicial ====')
+  logger.info('[SEED] Initializing templates & auto-responses…')
 
-  // 1) Defaults de configuration (incluye categorias clave, pero no fuerza valores encriptados)
-  await configuration.initDefaults()
+  // =========================
+  // TEMPLATES
+  // =========================
+  await ensureTemplate(
+    'MAIN_MENU',
+    'DEFAULT',
+    [
+      '🙌 *¿En qué puedo ayudarte?*',
+      '',
+      'Elige una opción o escribe tu consulta:',
+      '1️⃣ Servicio técnico',
+      '2️⃣ Tóner / Insumos',
+      '3️⃣ Asistencia remota',
+      '4️⃣ Cambiar empresa',
+    ].join('\n')
+  )
 
-  // 2) Plantillas base en configuration (main_menu/after_hours/break/holiday)
-  await ensureTemplatesInConfiguration()
+  await ensureTemplate(
+    'OUT_OF_HOURS',
+    'DEFAULT',
+    [
+      '⏰ En este momento estamos *fuera de horario*.',
+      '{{schedule_context}}',
+      '',
+      'Si tu caso es *URGENTE* podemos tomar nota, pero la atención humana se realizará en horario laboral.',
+    ].join('\n'),
+    ['schedule_context']
+  )
 
-  // 3) System prompt base
-  await ensureSystemPrompt()
+  await ensureTemplate(
+    'ESCALATE_HUMAN',
+    'DEFAULT',
+    [
+      '⚠ Entendido. Voy a derivar tu caso a soporte humano. ',
+      'Por favor cuéntame brevemente el problema para priorizarlo 🙏.',
+      '',
+      '☎ {{company_name}} {{company_phone}}',
+    ].join('\n'),
+    ['company_name', 'company_phone']
+  )
 
-  // 4) Políticas por defecto (si faltan)
-  await ensurePolicyDefaults()
+  await ensureTemplate(
+    'LINK_SERVICE',
+    'DEFAULT',
+    [
+      '🧾 He generado tu {{policy_link_label}} para registrar servicio técnico:',
+      '{{link}}',
+      '',
+      'Equipos vinculados: {{equipmentCount}}',
+      '{{equipmentBrand}}{{equipmentModel}}{{equipmentSerial}}'
+        ? 'Si corresponde: {{equipmentBrand}} {{equipmentModel}} (SN: {{equipmentSerial}})'
+        : '',
+    ].join('\n'),
+    ['policy_link_label', 'link', 'equipmentCount', 'equipmentBrand', 'equipmentModel', 'equipmentSerial']
+  )
 
-  // 5) Tag HUMANO
-  await ensureHumanTag()
+  await ensureTemplate(
+    'LINK_REMOTE',
+    'DEFAULT',
+    [
+      '🖥️ Para soporte remoto usa *{{policy_remote_tool_name}}*:',
+      '👉 {{link}}',
+      '',
+      'Un técnico humano se conectará en el horario de atención.',
+    ].join('\n'),
+    ['policy_remote_tool_name', 'link']
+  )
 
-  // 6) Auto-respuestas básicas
-  await ensureAutoResponses()
+  await ensureTemplate(
+    'LINK_TONER',
+    'DEFAULT',
+    [
+      '🛒 Solicitud de tóner/insumos registrada:',
+      '👉 {{link}}',
+      '',
+      'Equipos vinculados: {{equipmentCount}}',
+      '{{equipmentBrand}}{{equipmentModel}}{{equipmentSerial}}'
+        ? 'Si corresponde: {{equipmentBrand}} {{equipmentModel}} (SN: {{equipmentSerial}})'
+        : '',
+    ].join('\n'),
+    ['link', 'equipmentCount', 'equipmentBrand', 'equipmentModel', 'equipmentSerial']
+  )
 
-  // 7) Ejemplos en messageTemplate (opcional)
-  await ensureMessageTemplatesTableHasExamples()
+  await ensureTemplate(
+    'REGISTRATION_PENDING',
+    'DEFAULT',
+    'Estoy validando tus datos, {{nombre}}. Ya casi terminamos el registro 👍.',
+    ['nombre']
+  )
 
-  // 8) Validación crítica (por ejemplo, Gemini API Key)
-  const critical = await configuration.validateCritical()
-  if (!critical.isValid) {
-    logger.warn({ missing: critical.missing }, '⚠ Faltan configuraciones críticas')
-  } else {
-    logger.info('✔ Configuraciones críticas OK')
-  }
+  await ensureTemplate(
+    'INTENT_REMOTE_GUIDE',
+    'DEFAULT',
+    [
+      'Para *asistencia remota* usaremos {{policy_remote_tool_name}}.',
+      'Si ya tienes tu ID, compártelo (9 dígitos). ',
+      'Si no, ingresa al enlace y sigue las instrucciones.',
+      'Si tienes capturas de pantalla del error, envíalas 📷.',
+    ].join('\n'),
+    ['policy_remote_tool_name']
+  )
 
-  logger.info('✅ initData.ts finalizado')
+  await ensureTemplate(
+    'INTENT_SERVICE_GUIDE',
+    'DEFAULT',
+    [
+      'Parece un *caso de servicio técnico*. ',
+      '¿Puedes detallar el problema (mensaje de error, atasco, modelo/serie)? ',
+      'Te generaré un enlace para registrar el ticket.',
+    ].join('\n')
+  )
+
+  await ensureTemplate(
+    'INTENT_TONER_GUIDE',
+    'DEFAULT',
+    [
+      'Perfecto, para *tóner/insumos* necesito *modelo o serie* y *color*. ',
+      'Con eso genero el {{policy_link_label}}.',
+    ].join('\n'),
+    ['policy_link_label']
+  )
+
+  // =========================
+  // AUTO-RESPUESTAS
+  // =========================
+  await ensureAutoResponse(
+    'menu',
+    [
+      '📋 *Menú rápido*',
+      '1️⃣ Servicio técnico',
+      '2️⃣ Tóner / Insumos',
+      '3️⃣ Asistencia remota',
+      '4️⃣ Cambiar empresa',
+      '',
+      'También puedes escribir tu consulta libremente.',
+    ].join('\n'),
+    1,
+    'MENU'
+  )
+
+  await ensureAutoResponse(
+    '/^(hola|buenas\\s*(tardes|noches|dias?)|buen\\s*d[ií]a)/i',
+    '¡Hola {{nombre}}! ¿En qué puedo ayudarte hoy? Si quieres ver opciones, escribe *menu*.',
+    2,
+    'SALUDO'
+  )
+
+  await ensureAutoResponse(
+    'tóner,toner,cartucho,insumo',
+    '¿Para qué equipo necesitas tóner/insumos? Dime *modelo o serie* y *color*. También puedo generar un enlace de pedido.',
+    3,
+    'TONER'
+  )
+
+  await ensureAutoResponse(
+    'soporte,fallo,error,atasco,mantenimiento,no imprime,no jala,atascada',
+    'Entendido. Cuéntame el *problema*, y si tienes *serie/modelo* mejor. Puedo crear el enlace para servicio técnico.',
+    4,
+    'SERVICIO'
+  )
+
+  await ensureAutoResponse(
+    'remoto,asistencia remota,control remoto,conéctate,conectarse,conexión remota,anydesk',
+    'Para soporte remoto, comparte tu *ID (9 dígitos)* o dime si necesitas el enlace de descarga.',
+    5,
+    'REMOTO'
+  )
+
+  await ensureAutoResponse(
+    '/gracias|muchas gracias|listo|ok,? gracias/i',
+    '¡Con gusto, {{nombre}}! Si luego necesitas algo más, escribe *menu* para ver opciones. 😊',
+    10,
+    'CIERRE'
+  )
+
+  logger.info('✅ Seed completed.')
 }
 
-main().catch(err => {
-  logger.error({ err }, 'initData.ts failed')
-  process.exit(1)
-})
+main()
+  .catch(err => {
+    logger.error({ err }, '[SEED] Failed')
+    process.exitCode = 1
+  })
+  .finally(async () => {
+    try { await prisma.$disconnect() } catch {}
+  })
