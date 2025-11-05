@@ -114,7 +114,12 @@ export async function remove(id: string): Promise<MessageTemplate> {
   }
 }
 
-/** Upsert seguro por `name` (tu schema tiene name @unique) */
+/**
+ * Upsert seguro por `name` (tu schema define name @unique global).
+ * Si ya existe `name`, actualiza el registro (sin importar categoría previa).
+ * Esto evita colisiones sutiles y mantiene coherencia con servicios que
+ * buscan por nombre conocido (p.ej. *_DEFAULT, after_hours, etc.).
+ */
 export async function upsert(
   category: string,
   name: string,
@@ -151,17 +156,29 @@ export async function upsert(
 }
 
 /* ==================== RENDER / UTILS ==================== */
+/**
+ * Render soporta {{key}} y {{key|fallback}}.
+ * Para prevenir reemplazos parciales, hace una primera pasada de fallbacks
+ * y luego sustituye claves exactas. No modifica placeholders desconocidos.
+ */
 export function render(content: string, variables: Record<string, string>): string {
   let result = content || '';
-  // default: {{key|fallback}}
-  result = result.replace(/{{\s*([a-zA-Z0-9_]+)\|([^}]+)\s*}}/g, (_, key, fallback) => {
+
+  // Primero, llaves con fallback: {{ key | fallback }}
+  result = result.replace(/{{\s*([a-zA-Z0-9_]+)\s*\|\s*([^}]+)\s*}}/g, (_, key, fallback) => {
     const val = variables?.[key];
-    return (val ?? '').toString() || fallback;
+    const s = (val ?? '').toString().trim();
+    return s.length ? s : String(fallback);
   });
+
+  // Luego, llaves simples: {{ key }}
+  // (usamos RegExp escapando el key para evitar efectos colaterales)
   for (const [key, value] of Object.entries(variables || {})) {
-    const regex = new RegExp(`{{${key}}}`, 'g');
-    result = result.replace(regex, value ?? '');
+    const esc = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`{{\\s*${esc}\\s*}}`, 'g');
+    result = result.replace(re, (value ?? '').toString());
   }
+
   return result;
 }
 
@@ -195,11 +212,18 @@ export async function listCategories(): Promise<string[]> {
 }
 
 /* ==================== SEED DEFAULTS (idempotente) ==================== */
+/**
+ * NOTA IMPORTANTE:
+ * - Usamos sufijo __DEFAULT para no colisionar con nombres “canónicos” como
+ *   'after_hours', 'break', 'holiday' que puede consumir systemVarModel.
+ * - Como `name` es único global, estos seeds no pisan tus plantillas
+ *   personalizadas si eliges otros nombres.
+ */
 export async function ensureDefaults() {
   try {
     const templates: Array<{
       category: string;
-      name: string; // debe ser único global (tu schema así lo exige)
+      name: string; // debe ser único global
       content: string;
       variables?: string[];
     }> = [
@@ -284,7 +308,7 @@ export async function ensureDefaults() {
         name: 'INTENT_REMOTE_GUIDE__DEFAULT',
         content: [
           'Para *asistencia remota* usaremos {{policy_remote_tool_name}}.',
-          'Si ya tienes tu ID, compártelo (9 dígitos). ',
+          'Si ya tienes tu ID, compártelo (9 dígitos).',
           'Si no, ingresa al enlace y sigue las instrucciones.',
           'Si tienes capturas de pantalla del error, envíalas 📷.',
         ].join('\n'),
@@ -294,8 +318,8 @@ export async function ensureDefaults() {
         category: 'INTENT',
         name: 'INTENT_SERVICE_GUIDE__DEFAULT',
         content: [
-          'Parece un *caso de servicio técnico*. ',
-          '¿Puedes detallar el problema (mensaje de error, atasco, modelo/serie)? ',
+          'Parece un *caso de servicio técnico*.',
+          '¿Puedes detallar el problema (mensaje de error, atasco, modelo/serie)?',
           'Te generaré un enlace para registrar el ticket.',
         ].join('\n'),
       },
@@ -303,7 +327,7 @@ export async function ensureDefaults() {
         category: 'INTENT',
         name: 'INTENT_TONER_GUIDE__DEFAULT',
         content: [
-          'Perfecto, para *tóner/insumos* necesito *modelo o serie* y *color*. ',
+          'Perfecto, para *tóner/insumos* necesito *modelo o serie* y *color*.',
           'Con eso genero el {{policy_link_label}}.',
         ].join('\n'),
         variables: ['policy_link_label'],
