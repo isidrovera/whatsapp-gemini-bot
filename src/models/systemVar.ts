@@ -13,16 +13,7 @@ const prisma = getPrismaClient();
 
 /**
  * systemVar.ts - AGREGADOR DINÁMICO
- *
- * No persiste datos propios; reúne y normaliza información de:
- * - configuration.ts
- * - department.ts
- * - workingHours.ts
- * - calendar.ts
- * - product.ts
- * - template.ts
- *
- * Objetivo: entregar “paquetes” de contexto listos para prompts y plantillas.
+ * Reúne datos de varios modelos y ofrece helpers de contexto.
  */
 
 /* =================================================================================
@@ -30,10 +21,10 @@ const prisma = getPrismaClient();
  * ================================================================================= */
 export async function getVariablesForPrompt(): Promise<Record<string, string>> {
   try {
-    // 1) Datos de empresa
+    // 1) Datos de empresa (desde configuration)
     const company = await configModel.getByCategory('company');
 
-    // 2) Departamentos + contactos
+    // 2) Departamentos + contactos (desde BD)
     const departments = await departmentModel.getActive();
 
     // 3) Buscar algunos deptos clave por nombre
@@ -88,7 +79,6 @@ export async function getVariablesForPrompt(): Promise<Record<string, string>> {
     };
   } catch (error) {
     logger.error({ err: error }, 'Error getting variables for prompt:');
-
     // Fallback seguro
     return {
       company_name: 'Mi Empresa',
@@ -158,28 +148,36 @@ export async function getAIModeFlags() {
 }
 
 /* =================================================================================
- * 3) PLANTILLAS DE MENSAJES (horarios)
+ * 3) PLANTILLAS DE MENSAJES (horarios) — ahora primero desde MessageTemplate
  * ================================================================================= */
+async function getTemplateFromStore(name: string, fallback: string): Promise<string> {
+  try {
+    const list = await messageTemplateModel.getByCategory('templates');
+    const tpl = list.find(t => (t.name || '').toLowerCase() === name.toLowerCase());
+    return tpl?.content || fallback;
+  } catch (err) {
+    logger.warn({ err }, `[systemVar] template "${name}" not found, using fallback`);
+    return fallback;
+  }
+}
+
 export async function getAfterHoursTemplate(): Promise<string> {
-  const template = await configModel.get('templates', 'after_hours_message');
-  return (
-    template ||
-    `⏰ {{reason}}.\n🕒 Hoy: {{open}}–{{close}}{{break_hint}}\n{{next_open_line}}\n\nSi tu caso es *URGENTE*, responde *URGENTE* y te derivamos a soporte.`
+  return getTemplateFromStore(
+    'after_hours',
+    `⏰ {{reason}}.\n🕒 Hoy: {{open}}–{{close}}{{break_hint}}\n{{next_open_line}}`
   );
 }
 
 export async function getBreakTemplate(): Promise<string> {
-  const template = await configModel.get('templates', 'break_message');
-  return (
-    template ||
+  return getTemplateFromStore(
+    'break',
     `⏰ Estamos en horario de refrigerio ({{break_start}}–{{break_end}}). Retomamos a las {{break_end}}.\n{{next_open_line}}`
   );
 }
 
 export async function getHolidayTemplate(): Promise<string> {
-  const template = await configModel.get('templates', 'holiday_message');
-  return (
-    template ||
+  return getTemplateFromStore(
+    'holiday',
     `⛱️ Hoy es {{event_type}}: {{event_title}}. Por ello, no tenemos atención hoy.\n{{next_open_line}}`
   );
 }
@@ -212,7 +210,7 @@ export async function getScheduleContext(): Promise<string> {
       }
       if (todayEvent.type === 'holiday' || todayEvent.type === 'closure') {
         scheduleInfo += `\n🔒 **ESTAMOS CERRADOS HOY**\n`;
-        scheduleInfo += `IMPORTANTE: No hay atención hoy por este motivo. Indica cuándo abriremos nuevamente.\n\n`;
+        scheduleInfo += `IMPORTANTE: No hay atención hoy por este motivo.\n\n`;
       }
     }
 
@@ -225,17 +223,10 @@ export async function getScheduleContext(): Promise<string> {
       }
       scheduleInfo += `\n**Estado actual:** ${isWorkingNow ? '✅ ABIERTO' : '🔒 CERRADO'}\n\n`;
 
+      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       if (!isWorkingNow) {
-        const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(
-          now.getMinutes()
-        ).padStart(2, '0')}`;
-
-        if (
-          todayHours.breakStart &&
-          todayHours.breakEnd &&
-          currentTime >= todayHours.breakStart &&
-          currentTime <= todayHours.breakEnd
-        ) {
+        if (todayHours.breakStart && todayHours.breakEnd &&
+            currentTime >= todayHours.breakStart && currentTime <= todayHours.breakEnd) {
           scheduleInfo += `⏰ **ESTAMOS EN REFRIGERIO** — retomamos a las ${todayHours.breakEnd}\n\n`;
         } else if (currentTime < (todayHours.openTime || '00:00')) {
           scheduleInfo += `⏰ **AÚN NO ABRIMOS** — abrimos a las ${todayHours.openTime}\n\n`;
@@ -265,10 +256,7 @@ export async function getScheduleContext(): Promise<string> {
       scheduleInfo += `\n**Próximos feriados/eventos:**\n`;
       for (const event of upcoming.slice(0, 3)) {
         const eventDate = new Date(event.date);
-        const dateStr = eventDate.toLocaleDateString('es-PE', {
-          day: 'numeric',
-          month: 'long',
-        });
+        const dateStr = eventDate.toLocaleDateString('es-PE', { day: 'numeric', month: 'long' });
         scheduleInfo += `- ${event.title} (${dateStr})${
           event.type === 'holiday' || event.type === 'closure' ? ' - Cerrado' : ''
         }\n`;
@@ -298,9 +286,7 @@ export async function getDepartmentsContext(): Promise<string> {
       if (dept.contacts && dept.contacts.length > 0) {
         context += `Contactos:\n`;
         for (const c of dept.contacts.slice(0, 2)) {
-          context += `- ${c.name}${c.role ? ` (${c.role})` : ''}${
-            c.phoneNumber ? `: ${c.phoneNumber}` : ''
-          }\n`;
+          context += `- ${c.name}${c.role ? ` (${c.role})` : ''}${c.phoneNumber ? `: ${c.phoneNumber}` : ''}\n`;
         }
       }
       context += `\n`;
@@ -331,13 +317,12 @@ export async function getProductsContext(category?: string): Promise<string> {
       if (!acc[key]) acc[key] = [];
       acc[key].push(prod);
       return acc;
-    }, {});
+    }, {} as Record<string, any[]>);
 
     for (const [cat, prods] of Object.entries(grouped)) {
       context += `**${cat}**\n`;
       for (const p of (prods as any[]).slice(0, 5)) {
-        const price =
-          typeof p.price === 'number' ? ` - S/ ${Number(p.price).toFixed(2)}` : '';
+        const price = typeof p.price === 'number' ? ` - S/ ${Number(p.price).toFixed(2)}` : '';
         context += `- ${p.name}${price}${p.description ? `\n  ${p.description}` : ''}\n`;
       }
       context += `\n`;
@@ -413,57 +398,11 @@ export async function getDynamicContextForAI() {
 }
 
 /* =================================================================================
- * 9) INIT DEFAULTS (migración de valores por defecto a configuration)
+ * 9) INIT DEFAULTS (solo configs del sistema; sin plantillas aquí)
  * ================================================================================= */
 export async function initDefaults() {
   try {
-    logger.info('SystemVar: Ensuring default configurations exist...');
-
-    // Plantillas base (edita desde panel sin tocar código)
-    const templates = [
-      {
-        category: 'templates',
-        key: 'after_hours_message',
-        value:
-          '⏰ {{reason}}.\n🕒 Hoy: {{open}}–{{close}}{{break_hint}}\n{{next_open_line}}\n\nSi tu caso es *URGENTE*, responde *URGENTE* y te derivamos a soporte.',
-        isEncrypted: false,
-        description: 'Plantilla para mensajes fuera de horario',
-      },
-      {
-        category: 'templates',
-        key: 'break_message',
-        value:
-          '⏰ Estamos en horario de refrigerio ({{break_start}}–{{break_end}}). Retomamos a las {{break_end}}.\n{{next_open_line}}',
-        isEncrypted: false,
-        description: 'Plantilla para horario de refrigerio',
-      },
-      {
-        category: 'templates',
-        key: 'holiday_message',
-        value:
-          '⛱️ Hoy es {{event_type}}: {{event_title}}. Por ello, no tenemos atención hoy.\n{{next_open_line}}',
-        isEncrypted: false,
-        description: 'Plantilla para feriados',
-      },
-      {
-        category: 'templates',
-        key: 'menu_hint',
-        value: 'Si quieres ver el *menú de opciones*, escribe *menu*.',
-        isEncrypted: false,
-        description: 'Hint corto que se agrega al final de muchas respuestas',
-      },
-      // Sugeridas para Gemini (si decides crearlas):
-      // OUT_OF_HOURS, REGISTRATION_PENDING, INTENT_SERVICE_GUIDE, INTENT_TONER_GUIDE,
-      // INTENT_REMOTE_GUIDE, LINK_SERVICE, LINK_TONER, LINK_REMOTE, farewell
-    ];
-
-    for (const tpl of templates) {
-      const exists = await configModel.get(tpl.category, tpl.key);
-      if (!exists) {
-        await configModel.set(tpl.category, tpl.key, tpl.value, tpl.isEncrypted);
-        logger.info(`Created template: ${tpl.key}`);
-      }
-    }
+    logger.info('SystemVar: Ensuring default system configs exist...');
 
     // Configuraciones de sistema útiles para AI
     const systemConfigs = [
@@ -491,7 +430,7 @@ export async function initDefaults() {
 }
 
 /* =================================================================================
- * 10) COMPAT (funciones legacy para no romper otros módulos)
+ * 10) COMPAT (legacy)
  * ================================================================================= */
 export async function get(key: string): Promise<string | null> {
   logger.warn(`systemVar.get("${key}") is deprecated. Use configuration.get() or specific helpers instead.`);
@@ -510,8 +449,8 @@ export async function get(key: string): Promise<string | null> {
   return null;
 }
 
-export async function set(key: string, value: string, _description?: string) {
-  logger.warn(`systemVar.set("${key}") is deprecated. Use configuration.set() instead.`);
+export async function set(_key: string, _value: string, _description?: string) {
+  logger.warn(`systemVar.set() is deprecated. Use configuration.set() directly.`);
   throw new Error('systemVar.set() is deprecated. Use configuration.set() directly.');
 }
 
@@ -521,9 +460,8 @@ export async function getAll() {
 }
 
 /* =================================================================================
- * 11) (Opcional) API amigable para Gemini: contexto “todo-en-uno”
+ * 11) Aliases legibles para AI
  * ================================================================================= */
-/** Alias legible */
 export async function getScheduleContextForAI() {
   return getScheduleContext();
 }

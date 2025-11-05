@@ -11,14 +11,12 @@ import * as workingHoursModel from '../models/workingHours.js'
 import * as templateModel from '../models/template.js'
 import * as autoResponseModel from '../models/autoResponse.js'
 import * as calendarModel from '../models/calendar.js'
+import * as systemVarModel from '../models/systemVar.js'
 
 import * as odooService from './odoo.js'
 
 import { replaceVariables } from '../utils/formatters.js'
 
-/* ========================================================================== */
-/*  TIPOS BÁSICOS                                                             */
-/* ========================================================================== */
 type ContactLike = {
   id: string
   name: string | null
@@ -74,7 +72,7 @@ function trackLinkSent (phoneNumber: string, url: string) {
 const DEFAULT_MENU_HINT = '\n\nSi quieres ver el *menú de opciones*, escribe *menu*.'
 
 async function getMenuHintText (): Promise<string> {
-  // Permite personalizar desde configuration
+  // Permite personalizar desde configuration (se mantiene por compat)
   const custom = await configurationModel.get('templates', 'menu_hint')
   return (custom && custom.trim()) || DEFAULT_MENU_HINT
 }
@@ -146,7 +144,7 @@ ${equipmentContext}
 async function buildScheduleContext () {
   return workingHoursModel.getScheduleContextForAI?.() ||
          (await (await import('../models/systemVar.js')).getScheduleContext?.()) ||
-         '' // fallback si no existe helper
+         ''
 }
 
 async function buildDepartmentsContext () {
@@ -299,12 +297,42 @@ async function renderTemplateByCategoryName (
 /* ========================================================================== */
 /*  POLÍTICA FUERA DE HORARIO (NO HUMANO)                                      */
 /* ========================================================================== */
-async function buildOutOfHoursNotice (scheduleContext: string) {
-  // Si existe plantilla OUT_OF_HOURS la usamos, si no fallback corto:
-  const rendered = await renderTemplateByCategoryName('templates', 'OUT_OF_HOURS', {
-    schedule_context: scheduleContext
-  })
-  return rendered || `⏰ En este momento estamos fuera de horario.\n${scheduleContext}\nPuedes registrar tu solicitud y la atenderemos al abrir.`
+async function buildOutOfHoursNotice () {
+  // Calcula variables como en WhatsApp
+  const status = await workingHoursModel.getStatusInfo(new Date())
+  const [nextOpen, tz] = await Promise.all([
+    workingHoursModel.getNextOpenDateTime(new Date()),
+    systemVarModel.getBusinessTimezone()
+  ])
+
+  const open = status?.todayHours?.openTime || '--:--'
+  const close = status?.todayHours?.closeTime || '--:--'
+  const break_start = status?.todayHours?.breakStart || ''
+  const break_end = status?.todayHours?.breakEnd || ''
+  const break_hint = (status?.reason === 'break' && break_end) ? ` (volvemos ${break_end})` : ''
+  const next_open_line = nextOpen
+    ? `Volvemos a estar disponibles: ${workingHoursModel.formatDateTime(nextOpen, tz)}.`
+    : 'Te responderemos apenas volvamos a estar disponibles.'
+
+  const reasonMap: Record<string, string> = {
+    holiday: 'Hoy es día no laborable',
+    closure: 'Hoy nuestro local está cerrado',
+    non_workday: 'Hoy no tenemos atención',
+    before_open: 'Aún no abrimos',
+    after_close: 'Ya cerramos por hoy',
+    break: 'Estamos en horario de refrigerio',
+  }
+  const reason = reasonMap[status?.reason || 'closure'] || 'Estamos fuera de horario'
+  const event_type = status?.reason || ''
+  const event_title = status?.todayEvent?.title || ''
+
+  // Preferir plantilla en MessageTemplate
+  const rendered =
+    await renderTemplateByCategoryName('templates', 'after_hours', {
+      reason, open, close, break_start, break_end, break_hint, next_open_line, event_type, event_title
+    })
+
+  return rendered || `⏰ ${reason}.\n🕒 Hoy: ${open}–${close}${break_hint}\n${next_open_line}`
 }
 
 /* ========================================================================== */
@@ -354,14 +382,13 @@ export async function processMessage (
     if (anydeskCode) contentToSave += ` [ANYDESK: ${anydeskCode}]`
     await conversationModel.save(phoneNumber, 'USER', contentToSave)
 
-    // 2) Si el contacto está en flujo FIJO (registro), Gemini NO decide
+    // 2) flujo fijo de registro
     if (
       contact.state === 'NEW' ||
       contact.state === 'WAITING_DNI' ||
       contact.state === 'WAITING_RUC' ||
       contact.state === 'SELECTING_COMPANY'
     ) {
-      // Plantilla breve de “registro en curso”
       const pending =
         (await renderTemplateByCategoryName('templates', 'REGISTRATION_PENDING', {
           nombre: contact.name || 'Cliente'
@@ -391,19 +418,18 @@ export async function processMessage (
       futureScheduleContext
     )
 
-    // 4) estado de negocio (NUNCA humano fuera de horario)
+    // 4) estado de negocio
     const statusInfo = await workingHoursModel.getStatusInfo(new Date())
     const isOpen = !!statusInfo?.isOpen
 
-    // 5) señales de intención rápidas
+    // 5) señales
     const txt = (messageText || '').trim()
     const isThanks = looksLikeThanks(txt)
     const signalToner = wantsToner(txt)
     const signalService = wantsService(txt)
     const signalRemote = wantsRemote(txt)
 
-    // 6) auto-respuesta predefinida (alias “menu”, saludos simples, etc.)
-    //    — sigue existiendo como atajo opcional; si no hay, cae a Gemini
+    // 6) auto-respuesta predefinida
     const autoResp = await autoResponseModel.findAndProcessResponse(
       messageText,
       {
@@ -424,14 +450,13 @@ export async function processMessage (
       }
     )
     if (autoResp) {
-      // No añadir hint si ya lo trae el template
       const hint = await getMenuHintText()
       const withHint = alreadyHasHint(autoResp, hint) ? autoResp : (autoResp + hint)
       await conversationModel.save(phoneNumber, 'ASSISTANT', withHint)
       return withHint
     }
 
-    // 7) construir mensaje enriquecido para Gemini
+    // 7) construir prompt enriquecido
     let finalToModel = txt
 
     if (hasMedia && mediaAnalysisJson) {
@@ -464,10 +489,10 @@ Si está fuera de horario, indica que se atenderá al abrir.
 `
     }
 
-    // Guías suaves según señales
+    // Guías suaves
     if (signalRemote) {
       const remoteGuide =
-        (await renderTemplateByCategoryName('templates', 'INTENT_REMOTE_GUIDE', {
+        (await renderTemplateByCategoryName('INTENT', 'INTENT_REMOTE_GUIDE', {
           policy_remote_tool_name: systemVars.policy_remote_tool_name || 'AnyDesk',
           policy_link_label: systemVars.policy_link_label || 'enlace del sistema'
         })) ||
@@ -481,7 +506,7 @@ ${remoteGuide}
     }
     if (signalService) {
       const serviceGuide =
-        (await renderTemplateByCategoryName('templates', 'INTENT_SERVICE_GUIDE', {
+        (await renderTemplateByCategoryName('INTENT', 'INTENT_SERVICE_GUIDE', {
           policy_link_label: systemVars.policy_link_label || 'enlace del sistema'
         })) ||
         `El usuario reporta falla. Pídele detalles y ofrece registrar servicio técnico en sitio.`
@@ -493,7 +518,7 @@ ${serviceGuide}
     }
     if (signalToner) {
       const tonerGuide =
-        (await renderTemplateByCategoryName('templates', 'INTENT_TONER_GUIDE', {
+        (await renderTemplateByCategoryName('INTENT', 'INTENT_TONER_GUIDE', {
           policy_link_label: systemVars.policy_link_label || 'enlace del sistema'
         })) ||
         `El usuario solicita tóner/insumos. Pídele modelo/serie y color.`
@@ -522,7 +547,7 @@ Si el usuario pide humano en horario de atención, puedes sugerir que un técnic
 `
     }
 
-    // 8) Modelo + historial reciente
+    // 8) Modelo + historial
     const recent = await conversationModel.getHistory(phoneNumber, 10)
     const history: any[] = []
     for (const m of recent) {
@@ -543,7 +568,7 @@ Si el usuario pide humano en horario de atención, puedes sugerir que un técnic
 
     logger.info({ preview: response.substring(0, 160) }, '[GEMINI] Raw response')
 
-    // 9) Acciones: enlaces Odoo (sin humano fuera de horario)
+    // 9) Acciones: enlaces Odoo
     const needsLink = signalRemote || signalService || signalToner
     if (needsLink && activeCompanyName) {
       const equipmentId =
@@ -557,14 +582,14 @@ Si el usuario pide humano en horario de atención, puedes sugerir que un técnic
       )
 
       if (serviceUrl && shouldSendNewLink(phoneNumber, serviceUrl)) {
-        // plantilla de “attachment” según intención
-        let linkTplName = 'LINK_SERVICE'
+        // plantilla por intención
+        let linkTplName: 'LINK_SERVICE' | 'LINK_REMOTE' | 'LINK_TONER' = 'LINK_SERVICE'
         if (signalRemote) linkTplName = 'LINK_REMOTE'
         else if (signalToner) linkTplName = 'LINK_TONER'
 
         const eq = (customerInfo?.equipment && customerInfo.equipment[0]) || {}
         const linkMsg =
-          (await renderTemplateByCategoryName('templates', linkTplName, {
+          (await renderTemplateByCategoryName('LINK', linkTplName, {
             link: serviceUrl,
             equipmentBrand: eq.brand || '',
             equipmentModel: eq.model || '',
@@ -582,13 +607,13 @@ Si el usuario pide humano en horario de atención, puedes sugerir que un técnic
 
     // 10) Nota fuera de horario (informativa, nunca humano)
     if (!isOpen) {
-      const out = await buildOutOfHoursNotice(scheduleContext)
+      const out = await buildOutOfHoursNotice()
       response += `\n\n${out}`
     }
 
     // 11) Cierre “gracias” → despedida + hint
     const hint = await getMenuHintText()
-    if (isThanks) {
+    if (looksLikeThanks(txt)) {
       const bye = await buildFarewell(systemVars)
       let finalBye = bye
       if (!alreadyHasHint(finalBye, hint)) finalBye += hint
@@ -596,7 +621,7 @@ Si el usuario pide humano en horario de atención, puedes sugerir que un técnic
       return finalBye
     }
 
-    // 12) Adjuntar hint una sola vez si no es “menú completo”
+    // 12) Adjuntar hint si no es “menú completo”
     if (!looksLikeMenuFull(response) && !alreadyHasHint(response, hint)) {
       response += hint
     }
