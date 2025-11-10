@@ -177,5 +177,42 @@ router.post(
     }
   }
 );
+// ================================
+// GET /api/groups
+// Obtener lista de grupos de WhatsApp
+// Protegido con validateApiKey (x-api-key)
+// ================================
+router.get(
+  '/groups',
+  validateApiKey,
+  async (req: Request, res: Response) => {
+    const r = req as RequestWithApiKey;
+    try {
+      logger.info(
+        { apiKey: r.apiKey?.name ?? 'unknown-key' },
+        '[API] Getting WhatsApp groups'
+      );
 
+      // Obtener grupos de WhatsApp
+      const { getWhatsAppGroups } = await import('../../services/whatsapp.js');
+      
+      const groups = await getWhatsAppGroups();
+
+      logger.info(`[API] Found ${groups.length} groups`);
+
+      return res.status(200).json({
+        success: true,
+        data: groups,
+      });
+    } catch (e) {
+      logger.error({ err: e }, '[API] Error getting groups');
+      const err = e as any;
+      return res.status(500).json({
+        success: false,
+        error: 'Error al obtener grupos de WhatsApp',
+        details: err?.message,
+      });
+    }
+  }
+);
 export default router;

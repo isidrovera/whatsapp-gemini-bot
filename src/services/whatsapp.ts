@@ -1465,6 +1465,51 @@ export async function forceNewQRState(): Promise<void> {
   }
 }
 
+// ==================================================
+// OBTENER GRUPOS DE WHATSAPP
+// ==================================================
+export async function getWhatsAppGroups(): Promise<Array<{
+  id: string;
+  name: string;
+  participants: number;
+  createdAt: string | null;
+  description: string | null;
+}>> {
+  if (!sock || !isReady) {
+    logger.error('[WhatsApp] Client not ready to fetch groups');
+    throw new Error('WhatsApp client not ready');
+  }
+
+  try {
+    logger.info('[WhatsApp] Fetching WhatsApp groups...');
+
+    const chats = await sock.groupFetchAllParticipating();
+    
+    if (!chats || Object.keys(chats).length === 0) {
+      logger.warn('[WhatsApp] No groups found');
+      return [];
+    }
+
+    const groups = Object.values(chats).map((chat: any) => ({
+      id: chat.id,
+      name: chat.subject || 'Sin nombre',
+      participants: chat.participants?.length || 0,
+      createdAt: chat.creation 
+        ? new Date(chat.creation * 1000).toISOString() 
+        : null,
+      description: chat.desc || null,
+    }));
+
+    logger.info(`✅ [WhatsApp] Found ${groups.length} groups`);
+    
+    return groups;
+  } catch (error) {
+    logger.error({ err: error }, '❌ [WhatsApp] Error fetching groups:');
+    throw error;
+  }
+}
+
+
 export async function disconnect(): Promise<void> {
   await disconnectSession();
 }
