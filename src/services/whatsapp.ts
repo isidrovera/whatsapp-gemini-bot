@@ -116,6 +116,17 @@ function normalizeJidToPhone(remoteJid: string): string {
   return justNumber.replace(/\D/g, '');
 }
 
+/**
+ * Valida de forma simple que el número "parezca" un teléfono real.
+ * En este caso asumimos Perú (E.164 sin '+'): 51 + 9 dígitos = 11 caracteres.
+ *
+ * Ejemplo válido: 51994681222
+ */
+function isLikelyRealPhone(phone: string | null | undefined): boolean {
+  if (!phone) return false;
+  return /^51\d{9}$/.test(phone);
+}
+
 // ==================================================
 // URGENCIA
 // ==================================================
@@ -531,31 +542,38 @@ async function handleIncomingMessage(
       return;
     }
 
+    // ----------------------------------------------------------
+    // 3) Resolver teléfono E.164 y verificar que sea "real"
+    // ----------------------------------------------------------
     const phoneNumberRaw = normalizeJidToPhone(senderJid);
-    const normalizedPhone = normalizePhone(phoneNumberRaw);
-    if (!normalizedPhone) {
+    const phoneE164 = normalizePhone(phoneNumberRaw);
+
+    // Validamos que parezca un número E.164 peruano (51 + 9 dígitos)
+    if (!isLikelyRealPhone(phoneE164)) {
       logger.error(
-        `[PARSER] Could not normalize phone from JID "${senderJid}" -> "${phoneNumberRaw}"`
+        `[PARSER] No se pudo extraer un teléfono válido del JID "${senderJid}" -> "${phoneNumberRaw}" (candidate="${phoneE164}")`
       );
+      // No creamos contacto con "teléfono raro" (LID). Preferimos ignorar
+      // este mensaje antes que contaminar la tabla contacts con phoneNumber=6503...
       return;
     }
 
     // 1) Bloqueos / permisos
-    const isBlockedNum = await blockedModel.isBlocked(normalizedPhone);
+    const isBlockedNum = await blockedModel.isBlocked(phoneE164);
     if (isBlockedNum) {
       logger.info(
-        `[BLOCKED] Message from ${normalizedPhone} - completely blocked`
+        `[BLOCKED] Message from ${phoneE164} - completely blocked`
       );
       return;
     }
 
-    const permissions = await blockedModel.getPermissions(normalizedPhone);
+    const permissions = await blockedModel.getPermissions(phoneE164);
 
     // 2) Human takeover vigente (en horario hábil)
-    const shouldRespond = await contactModel.shouldBotRespond(normalizedPhone);
+    const shouldRespond = await contactModel.shouldBotRespond(phoneE164);
     if (!shouldRespond) {
       logger.info(
-        `[BOT-PAUSED] 🤫 Skipping response for ${normalizedPhone} - human takeover active`
+        `[BOT-PAUSED] 🤫 Skipping response for ${phoneE164} - human takeover active`
       );
       return;
     }
@@ -570,7 +588,7 @@ async function handleIncomingMessage(
 
     if (mediaType) {
       logger.info(
-        `[WHATSAPP] Processing ${mediaType} from ${normalizedPhone}...`
+        `[WHATSAPP] Processing ${mediaType} from ${phoneE164}...`
       );
 
       try {
@@ -628,18 +646,18 @@ async function handleIncomingMessage(
     }
 
     logger.info(
-      `Message from ${normalizedPhone}: ${finalMessageText.substring(
+      `Message from ${phoneE164}: ${finalMessageText.substring(
         0,
         120
       )}... ${mediaType ? `[+${mediaType.toUpperCase()}]` : ''}`
     );
 
     // 4) Contacto y estado
-    await contactModel.getOrCreate(normalizedPhone);
-    let contact = await contactModel.findByPhone(normalizedPhone);
+    await contactModel.getOrCreate(phoneE164);
+    let contact = await contactModel.findByPhone(phoneE164);
     if (!contact) {
       logger.error(
-        `[CONTACT] Failed to create or retrieve contact for ${normalizedPhone}`
+        `[CONTACT] Failed to create or retrieve contact for ${phoneE164}`
       );
       return;
     }
@@ -655,7 +673,7 @@ async function handleIncomingMessage(
 
       // Si dice "urgente", SOLO tag; NO takeover
       if (esUrgente(finalMessageText)) {
-        await marcarUrgenteSinTakeover(normalizedPhone);
+        await marcarUrgenteSinTakeover(phoneE164);
       }
       // Continuamos con flujo (links/AI), pero se bloquea derivación humana más abajo.
     }
@@ -665,7 +683,7 @@ async function handleIncomingMessage(
     // ==========================================================
     if (permissions.accessLevel === 'RESTRICTED') {
       logger.info(
-        `[RESTRICTED] ${normalizedPhone} - Only auto-responses allowed`
+        `[RESTRICTED] ${phoneE164} - Only auto-responses allowed`
       );
 
       const canUseAutoResponse = permissions.permissions.autoresponse ?? false;
@@ -677,7 +695,7 @@ async function handleIncomingMessage(
             contact: {
               name: contact.name || null,
               dni: contact.dni || null,
-              phoneNumber: normalizedPhone,
+              phoneNumber: phoneE164,
               companyName: contact.companyName || null,
               ruc: contact.ruc || null,
             },
@@ -720,7 +738,7 @@ async function handleIncomingMessage(
           contact: {
             name: contact.name || null,
             dni: contact.dni || null,
-            phoneNumber: normalizedPhone,
+            phoneNumber: phoneE164,
             companyName: contact.companyName || null,
             ruc: contact.ruc || null,
           },
@@ -736,7 +754,7 @@ async function handleIncomingMessage(
 
       if (autoResp) {
         logger.info(
-          `[AUTO-RESPONSE] Sent auto-response for ${normalizedPhone}`
+          `[AUTO-RESPONSE] Sent auto-response for ${phoneE164}`
         );
         await sendMessage(senderJid, autoResp);
         // Si quisieras cortar aquí, podrías return; (dejamos fluir por si necesita AI).
@@ -747,7 +765,7 @@ async function handleIncomingMessage(
     // 8) REGISTRO (DNI / RUC / EMPRESA)
     // ==========================================================
     if (state === 'NEW') {
-      await contactModel.updateState(normalizedPhone, 'WAITING_DNI');
+      await contactModel.updateState(phoneE164, 'WAITING_DNI');
       await sendMessage(
         senderJid,
         '¡Hola! 👋 Para continuar, por favor envíame tu *DNI (8 dígitos)* para validar tu identidad y registrar tu nombre. 🙏'
@@ -782,7 +800,7 @@ async function handleIncomingMessage(
       const nombreCompleto = `${persona.nombres} ${persona.apellidoPaterno} ${persona.apellidoMaterno}`.trim();
 
       await contactModel.updateDNI(
-        normalizedPhone,
+        phoneE164,
         dniCandidate,
         nombreCompleto
       );
@@ -808,21 +826,21 @@ async function handleIncomingMessage(
 
       const linkRes =
         await contactModel.linkExistingCompanyByRucAndSetPrimary(
-          normalizedPhone,
+          phoneE164,
           rucCandidate
         );
 
       if (linkRes.ok === true) {
-        contact = await contactModel.findByPhone(normalizedPhone);
+        contact = await contactModel.findByPhone(phoneE164);
         if (!contact) {
           logger.error(
-            `[CONTACT] Contact disappeared after linking company for ${normalizedPhone}`
+            `[CONTACT] Contact disappeared after linking company for ${phoneE164}`
           );
           return;
         }
 
         if (contact.companies && contact.companies.length > 1) {
-          await contactModel.updateState(normalizedPhone, 'SELECTING_COMPANY');
+          await contactModel.updateState(phoneE164, 'SELECTING_COMPANY');
           await sendMessage(
             senderJid,
             `He verificado tu empresa con RUC ${rucCandidate} ✅`
@@ -831,11 +849,11 @@ async function handleIncomingMessage(
           return;
         }
 
-        await contactModel.updateState(normalizedPhone, 'MENU');
-        contact = await contactModel.findByPhone(normalizedPhone);
+        await contactModel.updateState(phoneE164, 'MENU');
+        contact = await contactModel.findByPhone(phoneE164);
         if (!contact) {
           logger.error(
-            `[CONTACT] Contact disappeared after state update for ${normalizedPhone}`
+            `[CONTACT] Contact disappeared after state update for ${phoneE164}`
           );
           return;
         }
@@ -853,8 +871,8 @@ async function handleIncomingMessage(
       );
 
       if (!infoRuc) {
-        await contactModel.updateState(normalizedPhone, 'WAITING_COMPANY_NAME');
-        await saveProvisionalRUC(normalizedPhone, rucCandidate);
+        await contactModel.updateState(phoneE164, 'WAITING_COMPANY_NAME');
+        await saveProvisionalRUC(phoneE164, rucCandidate);
 
         await sendMessage(
           senderJid,
@@ -866,18 +884,18 @@ async function handleIncomingMessage(
       const razonSocial =
         infoRuc.razonSocial || `Empresa ${rucCandidate}`.trim();
 
-      await contactModel.updateRUC(normalizedPhone, rucCandidate, razonSocial);
+      await contactModel.updateRUC(phoneE164, rucCandidate, razonSocial);
 
-      contact = await contactModel.findByPhone(normalizedPhone);
+      contact = await contactModel.findByPhone(phoneE164);
       if (!contact) {
         logger.error(
-          `[CONTACT] Contact disappeared after RUC update for ${normalizedPhone}`
+          `[CONTACT] Contact disappeared after RUC update for ${phoneE164}`
         );
         return;
       }
 
       if (contact.companies && contact.companies.length > 1) {
-        await contactModel.updateState(normalizedPhone, 'SELECTING_COMPANY');
+        await contactModel.updateState(phoneE164, 'SELECTING_COMPANY');
 
         await sendMessage(
           senderJid,
@@ -887,10 +905,10 @@ async function handleIncomingMessage(
         return;
       }
 
-      await contactModel.updateState(normalizedPhone, 'MENU');
-      contact = await contactModel.findByPhone(normalizedPhone);
+      await contactModel.updateState(phoneE164, 'MENU');
+      contact = await contactModel.findByPhone(phoneE164);
       if (!contact) {
-        logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
+        logger.error(`[CONTACT] Contact disappeared for ${phoneE164}`);
         return;
       }
 
@@ -905,16 +923,16 @@ async function handleIncomingMessage(
     if (state === 'WAITING_COMPANY_NAME') {
       const razonSocialManual = finalMessageText.trim();
 
-      contact = await contactModel.findByPhone(normalizedPhone);
+      contact = await contactModel.findByPhone(phoneE164);
       if (!contact) {
-        logger.error(`[CONTACT] Contact not found for ${normalizedPhone}`);
+        logger.error(`[CONTACT] Contact not found for ${phoneE164}`);
         return;
       }
 
       const provisionalRuc = contact.ruc || '';
 
       if (!provisionalRuc || provisionalRuc.length !== 11) {
-        await contactModel.updateState(normalizedPhone, 'WAITING_RUC');
+        await contactModel.updateState(phoneE164, 'WAITING_RUC');
         await sendMessage(
           senderJid,
           'Necesito nuevamente el RUC (11 dígitos) para poder registrar tu empresa. 🙏'
@@ -923,19 +941,19 @@ async function handleIncomingMessage(
       }
 
       await contactModel.updateRUC(
-        normalizedPhone,
+        phoneE164,
         provisionalRuc,
         razonSocialManual
       );
 
-      contact = await contactModel.findByPhone(normalizedPhone);
+      contact = await contactModel.findByPhone(phoneE164);
       if (!contact) {
-        logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
+        logger.error(`[CONTACT] Contact disappeared for ${phoneE164}`);
         return;
       }
 
       if (contact.companies && contact.companies.length > 1) {
-        await contactModel.updateState(normalizedPhone, 'SELECTING_COMPANY');
+        await contactModel.updateState(phoneE164, 'SELECTING_COMPANY');
 
         await sendMessage(
           senderJid,
@@ -945,10 +963,10 @@ async function handleIncomingMessage(
         return;
       }
 
-      await contactModel.updateState(normalizedPhone, 'MENU');
-      contact = await contactModel.findByPhone(normalizedPhone);
+      await contactModel.updateState(phoneE164, 'MENU');
+      contact = await contactModel.findByPhone(phoneE164);
       if (!contact) {
-        logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
+        logger.error(`[CONTACT] Contact disappeared for ${phoneE164}`);
         return;
       }
 
@@ -979,11 +997,11 @@ async function handleIncomingMessage(
       const chosenPivot = empresas[idxChosen];
 
       await contactModel.setPrimaryCompany(contact.id, chosenPivot.companyId);
-      await contactModel.updateState(normalizedPhone, 'MENU');
+      await contactModel.updateState(phoneE164, 'MENU');
 
-      contact = await contactModel.findByPhone(normalizedPhone);
+      contact = await contactModel.findByPhone(phoneE164);
       if (!contact) {
-        logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
+        logger.error(`[CONTACT] Contact disappeared for ${phoneE164}`);
         return;
       }
 
@@ -1012,7 +1030,7 @@ async function handleIncomingMessage(
 
         if (!canUseOdoo) {
           logger.warn(
-            `[PERMISSION-DENIED] ${normalizedPhone} - odoo access denied`
+            `[PERMISSION-DENIED] ${phoneE164} - odoo access denied`
           );
           await sendMessage(
             senderJid,
@@ -1021,7 +1039,7 @@ async function handleIncomingMessage(
           return;
         }
 
-        const link = await generateOdooLinkForContact(contact, normalizedPhone);
+        const link = await generateOdooLinkForContact(contact, phoneE164);
         if (link) {
           await sendMessage(
             senderJid,
@@ -1045,7 +1063,7 @@ async function handleIncomingMessage(
 
         if (!canCreateTickets) {
           logger.warn(
-            `[PERMISSION-DENIED] ${normalizedPhone} - tickets access denied`
+            `[PERMISSION-DENIED] ${phoneE164} - tickets access denied`
           );
           await sendMessage(
             senderJid,
@@ -1054,7 +1072,7 @@ async function handleIncomingMessage(
           return;
         }
 
-        const link = await generateOdooLinkForContact(contact, normalizedPhone);
+        const link = await generateOdooLinkForContact(contact, phoneE164);
         if (link) {
           await sendMessage(
             senderJid,
@@ -1074,7 +1092,7 @@ async function handleIncomingMessage(
 
       // 3️⃣ Asistencia remota (permitido off-hours: solo guía/ID, sin humano)
       if (trimmed === '3') {
-        await contactModel.updateState(normalizedPhone, 'WAITING_REMOTE_INFO');
+        await contactModel.updateState(phoneE164, 'WAITING_REMOTE_INFO');
         await sendMessage(
           senderJid,
           '💻 *Asistencia remota*\n' +
@@ -1093,7 +1111,7 @@ async function handleIncomingMessage(
             'Actualmente solo tienes una empresa asociada.'
           );
         } else {
-          await contactModel.updateState(normalizedPhone, 'SELECTING_COMPANY');
+          await contactModel.updateState(phoneE164, 'SELECTING_COMPANY');
           await sendMessage(senderJid, buildCompanySelectionMenu(contact));
         }
         return;
@@ -1114,7 +1132,7 @@ async function handleIncomingMessage(
         const canTalkToHuman = permissions.permissions.human ?? true;
         if (!canTalkToHuman) {
           logger.warn(
-            `[PERMISSION-DENIED] ${normalizedPhone} - human access denied`
+            `[PERMISSION-DENIED] ${phoneE164} - human access denied`
           );
           await sendMessage(
             senderJid,
@@ -1124,7 +1142,7 @@ async function handleIncomingMessage(
           return;
         }
 
-        await contactModel.setHumanTakeover(normalizedPhone);
+        await contactModel.setHumanTakeover(phoneE164);
         await sendMessage(
           senderJid,
           '👨‍🔧 Listo. Estoy derivando tu caso a un técnico. Te van a responder en breve.'
@@ -1143,7 +1161,7 @@ async function handleIncomingMessage(
           return;
         }
 
-        const link = await generateOdooLinkForContact(contact, normalizedPhone);
+        const link = await generateOdooLinkForContact(contact, phoneE164);
         if (link) {
           await sendMessage(
             senderJid,
@@ -1170,7 +1188,7 @@ async function handleIncomingMessage(
           return;
         }
 
-        const link = await generateOdooLinkForContact(contact, normalizedPhone);
+        const link = await generateOdooLinkForContact(contact, phoneE164);
         if (link) {
           await sendMessage(
             senderJid,
@@ -1191,7 +1209,7 @@ async function handleIncomingMessage(
       const canUseAI = permissions.permissions.ai ?? true;
       if (canUseAI) {
         const responseFromGemini = await geminiService.processMessage(
-          normalizedPhone,
+          phoneE164,
           finalMessageText,
           !!mediaType,
           mediaAnalysisResult
@@ -1206,7 +1224,7 @@ async function handleIncomingMessage(
         await sendMessage(senderJid, responseFromGemini);
       } else {
         logger.warn(
-          `[PERMISSION-DENIED] ${normalizedPhone} - AI access denied`
+          `[PERMISSION-DENIED] ${phoneE164} - AI access denied`
         );
         await sendMessage(
           senderJid,
@@ -1222,11 +1240,11 @@ async function handleIncomingMessage(
     // ==========================================================
     if (state === 'WAITING_REMOTE_INFO') {
       // No activamos humano automáticamente.
-      await contactModel.updateState(normalizedPhone, 'MENU');
+      await contactModel.updateState(phoneE164, 'MENU');
 
-      contact = await contactModel.findByPhone(normalizedPhone);
+      contact = await contactModel.findByPhone(phoneE164);
       if (!contact) {
-        logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
+        logger.error(`[CONTACT] Contact disappeared for ${phoneE164}`);
         return;
       }
 
@@ -1242,12 +1260,12 @@ async function handleIncomingMessage(
     // 11) Estado desconocido → MENU
     // ==========================================================
     logger.warn(
-      `[BOT] Estado desconocido "${state}" para ${normalizedPhone}, forzando MENU`
+      `[BOT] Estado desconocido "${state}" para ${phoneE164}, forzando MENU`
     );
-    await contactModel.updateState(normalizedPhone, 'MENU');
-    contact = await contactModel.findByPhone(normalizedPhone);
+    await contactModel.updateState(phoneE164, 'MENU');
+    contact = await contactModel.findByPhone(phoneE164);
     if (!contact) {
-      logger.error(`[CONTACT] Contact disappeared for ${normalizedPhone}`);
+      logger.error(`[CONTACT] Contact disappeared for ${phoneE164}`);
       return;
     }
     await sendMessage(senderJid, await buildMainMenu(contact));
@@ -1266,6 +1284,7 @@ async function handleIncomingMessage(
     );
   }
 }
+
 
 // ==================================================
 // ENVÍO DE MENSAJES
