@@ -49,14 +49,34 @@ router.post(
         });
       }
 
-      let target = (to || '').trim();
+      const rawTo = to.toString().trim();
+      if (!rawTo) {
+        return res.status(400).json({
+          success: false,
+          error: 'El campo "to" está vacío',
+        });
+      }
 
-      // 🔹 Detectar si es JID (grupo o contacto): contiene '@'
-      const isJid = target.includes('@');
+      let targetForSend = rawTo; // lo que enviaremos a sendDirectMessage
+      let forLog = rawTo;        // lo que mostramos en log
 
-      if (!isJid) {
-        // 👉 Lo tratamos como número normal
-        const cleanPhone = target.replace(/\D/g, '');
+      if (rawTo.includes('@')) {
+        // Caso JID directo (grupo o contacto)
+        // Permitimos:
+        //   - *@g.us  (grupo)
+        //   - *@s.whatsapp.net (contacto)
+        //   - *status@broadcast (sistema)
+        const allowed = /@(g\.us|s\.whatsapp\.net|broadcast)$/;
+        if (!allowed.test(rawTo)) {
+          return res.status(400).json({
+            success: false,
+            error:
+              'Formato de JID inválido en "to". Se esperaba *@g.us o *@s.whatsapp.net',
+          });
+        }
+      } else {
+        // Caso número normal → validamos como antes
+        const cleanPhone = rawTo.replace(/\D/g, '');
         if (cleanPhone.length < 10) {
           return res.status(400).json({
             success: false,
@@ -64,22 +84,22 @@ router.post(
               'Formato de teléfono inválido. Debe incluir código de país (ej: 51987654321)',
           });
         }
-        target = cleanPhone;
+        targetForSend = cleanPhone; // sendDirectMessage se encargará de agregar @s.whatsapp.net
+        forLog = cleanPhone;
       }
-      // Si es JID, NO tocamos target (puede ser 1203...@g.us, 5199...@s.whatsapp.net, etc.)
 
       logger.info(
-        { apiKey: r.apiKey?.name ?? 'unknown-key', to: target, isJid },
+        { apiKey: r.apiKey?.name ?? 'unknown-key', to: forLog },
         '[API] Sending message'
       );
 
-      // ahora usamos sendDirectMessage, que decide si es JID o número
-      const result = await sendDirectMessage(target, message);
+      // ahora usamos sendDirectMessage con número O JID
+      const result = await sendDirectMessage(targetForSend, message);
 
       return res.status(200).json({
         success: true,
         data: {
-          to: target,
+          to: targetForSend,
           message,
           messageId: result?.key?.id || null,
           sentAt: new Date().toISOString(),

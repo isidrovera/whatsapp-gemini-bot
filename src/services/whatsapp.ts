@@ -1325,31 +1325,30 @@ export async function sendDirectMessage(to: string, text: string) {
     throw new Error('WhatsApp client not ready');
   }
 
-  const raw = (to || '').trim();
-  if (!raw) {
-    logger.error('sendDirectMessage: destino vacío');
-    throw new Error('Destino vacío en sendDirectMessage');
+  const trimmed = (to || '').trim();
+  if (!trimmed) {
+    throw new Error('Destino vacío (to)');
   }
 
-  // 🔹 Si contiene '@' lo tratamos como JID (grupo/contacto)
-  //    Si NO contiene '@', lo tratamos como número y construimos el JID de usuario
   let jid: string;
-  let isJid = false;
 
-  if (raw.includes('@')) {
-    isJid = true;
-    jid = raw;
+  // 1) Si ya viene como JID (grupo o contacto), lo usamos tal cual
+  //    Ej: 51924894829-1599154643@g.us  (grupo)
+  //        51999999999@s.whatsapp.net   (contacto)
+  if (trimmed.includes('@')) {
+    jid = trimmed;
   } else {
-    const clean = raw.replace(/\D/g, '');
+    // 2) Si viene como número, lo normalizamos a JID de persona
+    const clean = trimmed.replace(/\D/g, '');
     if (!clean) {
-      logger.error('sendDirectMessage: número inválido (sin dígitos)');
-      throw new Error('Número inválido en sendDirectMessage');
+      throw new Error(`Número vacío después de limpiar: "${to}"`);
     }
     jid = `${clean}@s.whatsapp.net`;
   }
 
   try {
     const resp = await sock.sendMessage(jid, { text });
+
     const sentId = resp?.key?.id;
     if (sentId) {
       markBotMessageId(sentId);
@@ -1357,17 +1356,15 @@ export async function sendDirectMessage(to: string, text: string) {
     }
 
     logger.info(
-      `(API) Message sent to ${jid} (isJid=${isJid}) from to="${to}": ${text.substring(
-        0,
-        80
-      )}...`
+      `(API) Message sent to ${jid}: ${text.substring(0, 80)}...`
     );
     return resp;
   } catch (error) {
-    logger.error({ err: error, to, jid }, 'Error sending direct message:');
+    logger.error({ err: error }, 'Error sending direct message:');
     throw error;
   }
 }
+
 
 
 // ==================================================
@@ -1463,7 +1460,7 @@ export async function sendMedia(to: string, payload: SendMediaPayload) {
 
 
 export async function sendMediaToPhone(
-  to: string,
+  phoneOrJid: string,
   payload: SendMediaPayload
 ) {
   if (!sock || !isReady) {
@@ -1471,17 +1468,27 @@ export async function sendMediaToPhone(
     throw new Error('WhatsApp client not ready (sendMediaToPhone)');
   }
 
-  const raw = (to || '').trim();
+  const raw = (phoneOrJid || '').trim();
   if (!raw) {
-    logger.error('sendMediaToPhone: destino vacío');
-    throw new Error('Destino vacío en sendMediaToPhone');
+    throw new Error('Destino vacío (sendMediaToPhone)');
   }
 
-  // 👇 delegamos en sendMedia, que ya sabe manejar:
-  //   - número: "51994681222"  →  51994681222@s.whatsapp.net
-  //   - JID:    "1203...@g.us" → se usa tal cual (grupo correcto)
-  return sendMedia(raw, payload);
+  let jid: string;
+
+  if (raw.includes('@')) {
+    // grupo o contacto JID completo
+    jid = raw;
+  } else {
+    const clean = raw.replace(/\D/g, '');
+    if (!clean) {
+      throw new Error(`Número vacío después de limpiar: "${phoneOrJid}"`);
+    }
+    jid = `${clean}@s.whatsapp.net`;
+  }
+
+  return sendMedia(jid, payload);
 }
+
 
 
 // ==================================================
