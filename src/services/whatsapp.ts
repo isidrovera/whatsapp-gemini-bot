@@ -503,8 +503,8 @@ async function handleIncomingMessage(
 
     const key = message.key;
     const senderJid = key?.remoteJid ?? key?.participant ?? null;
-    if (!senderJid) {
-      logger.warn({ key }, '[WA] No se pudo resolver senderJid (key vacío)');
+    if (senderJid === 'status@broadcast') {
+      logger.debug('[WA] Ignorando mensaje de status@broadcast');
       return;
     }
 
@@ -543,20 +543,30 @@ async function handleIncomingMessage(
     }
 
     // ----------------------------------------------------------
-    // 3) Resolver teléfono E.164 y verificar que sea "real"
-    // ----------------------------------------------------------
-    const phoneNumberRaw = normalizeJidToPhone(senderJid);
-    const phoneE164 = normalizePhone(phoneNumberRaw);
+// 3) Resolver teléfono E.164 y verificar que sea "real"
+// ----------------------------------------------------------
+const phoneNumberRaw = normalizeJidToPhone(senderJid);
 
-    // Validamos que parezca un número E.164 peruano (51 + 9 dígitos)
-    if (!isLikelyRealPhone(phoneE164)) {
-      logger.error(
-        `[PARSER] No se pudo extraer un teléfono válido del JID "${senderJid}" -> "${phoneNumberRaw}" (candidate="${phoneE164}")`
-      );
-      // No creamos contacto con "teléfono raro" (LID). Preferimos ignorar
-      // este mensaje antes que contaminar la tabla contacts con phoneNumber=6503...
-      return;
-    }
+// Si no hay dígitos en el JID (por ejemplo status@broadcast), salimos
+if (!phoneNumberRaw) {
+  logger.warn(
+    `[PARSER] JID "${senderJid}" no contiene número utilizable, ignorando mensaje`
+  );
+  return;
+}
+
+// AQUÍ SÍ usamos normalizePhone
+const phoneE164 = normalizePhone(phoneNumberRaw);
+
+// Validamos que parezca un número E.164 peruano (51 + 9 dígitos)
+if (!isLikelyRealPhone(phoneE164)) {
+  logger.error(
+    `[PARSER] No se pudo extraer un teléfono válido del JID "${senderJid}" -> "${phoneNumberRaw}" (candidate="${phoneE164}")`
+  );
+  // No creamos contacto con "teléfono raro" (LID). Preferimos ignorar
+  // este mensaje antes que contaminar la tabla contacts con phoneNumber=6503...
+  return;
+}
 
     // 1) Bloqueos / permisos
     const isBlockedNum = await blockedModel.isBlocked(phoneE164);
