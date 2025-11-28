@@ -1319,14 +1319,34 @@ export async function sendMessage(jid: string, text: string): Promise<void> {
   }
 }
 
-export async function sendDirectMessage(phoneE164: string, text: string) {
+export async function sendDirectMessage(to: string, text: string) {
   if (!sock || !isReady) {
     logger.error('WhatsApp client not ready');
     throw new Error('WhatsApp client not ready');
   }
 
-  const clean = phoneE164.replace(/\D/g, '');
-  const jid = `${clean}@s.whatsapp.net`;
+  const raw = (to || '').trim();
+  if (!raw) {
+    logger.error('sendDirectMessage: destino vacío');
+    throw new Error('Destino vacío en sendDirectMessage');
+  }
+
+  // 🔹 Si contiene '@' lo tratamos como JID (grupo/contacto)
+  //    Si NO contiene '@', lo tratamos como número y construimos el JID de usuario
+  let jid: string;
+  let isJid = false;
+
+  if (raw.includes('@')) {
+    isJid = true;
+    jid = raw;
+  } else {
+    const clean = raw.replace(/\D/g, '');
+    if (!clean) {
+      logger.error('sendDirectMessage: número inválido (sin dígitos)');
+      throw new Error('Número inválido en sendDirectMessage');
+    }
+    jid = `${clean}@s.whatsapp.net`;
+  }
 
   try {
     const resp = await sock.sendMessage(jid, { text });
@@ -1335,13 +1355,20 @@ export async function sendDirectMessage(phoneE164: string, text: string) {
       markBotMessageId(sentId);
       logger.debug(`Marked bot message id=${sentId} (API direct)`);
     }
-    logger.info(`(API) Message sent to ${jid}: ${text.substring(0, 80)}...`);
+
+    logger.info(
+      `(API) Message sent to ${jid} (isJid=${isJid}) from to="${to}": ${text.substring(
+        0,
+        80
+      )}...`
+    );
     return resp;
   } catch (error) {
-    logger.error({ err: error }, 'Error sending direct message:');
+    logger.error({ err: error, to, jid }, 'Error sending direct message:');
     throw error;
   }
 }
+
 
 // ==================================================
 // ENVÍO DE MEDIA
@@ -1354,10 +1381,32 @@ export type SendMediaPayload = {
   kind?: 'image' | 'video' | 'audio' | 'application';
 };
 
-export async function sendMedia(jid: string, payload: SendMediaPayload) {
+export async function sendMedia(to: string, payload: SendMediaPayload) {
   if (!sock || !isReady) {
     logger.error('WhatsApp client not ready (sendMedia)');
     throw new Error('WhatsApp client not ready (sendMedia)');
+  }
+
+  const raw = (to || '').trim();
+  if (!raw) {
+    logger.error('sendMedia: destino vacío');
+    throw new Error('Destino vacío en sendMedia');
+  }
+
+  // 🔹 Igual lógica: JID si trae '@', número si no
+  let jid: string;
+  let isJid = false;
+
+  if (raw.includes('@')) {
+    isJid = true;
+    jid = raw;
+  } else {
+    const clean = raw.replace(/\D/g, '');
+    if (!clean) {
+      logger.error('sendMedia: número inválido (sin dígitos)');
+      throw new Error('Número inválido en sendMedia');
+    }
+    jid = `${clean}@s.whatsapp.net`;
   }
 
   const { buffer, mime, fileName, caption } = payload;
@@ -1389,9 +1438,9 @@ export async function sendMedia(jid: string, payload: SendMediaPayload) {
     }
 
     logger.info(
-      `Media sent to ${jid}: ${kind} ${fileName ? `(${fileName})` : ''} ${
-        caption ? `| ${caption.substring(0, 50)}…` : ''
-      }`
+      `Media sent to ${jid} (isJid=${isJid}) from to="${to}": ${kind} ${
+        fileName ? `(${fileName})` : ''
+      } ${caption ? `| ${caption.substring(0, 50)}…` : ''}`
     );
 
     return resp;
@@ -1404,6 +1453,7 @@ export async function sendMedia(jid: string, payload: SendMediaPayload) {
         code: error?.code || boom?.statusCode,
         data: error?.data || boom?.payload,
         stack: error?.stack,
+        to,
       },
       'Error sending media:'
     );
@@ -1411,8 +1461,9 @@ export async function sendMedia(jid: string, payload: SendMediaPayload) {
   }
 }
 
+
 export async function sendMediaToPhone(
-  phoneE164: string,
+  to: string,
   payload: SendMediaPayload
 ) {
   if (!sock || !isReady) {
@@ -1420,10 +1471,18 @@ export async function sendMediaToPhone(
     throw new Error('WhatsApp client not ready (sendMediaToPhone)');
   }
 
-  const clean = phoneE164.replace(/\D/g, '');
-  const jid = `${clean}@s.whatsapp.net`;
-  return sendMedia(jid, payload);
+  const raw = (to || '').trim();
+  if (!raw) {
+    logger.error('sendMediaToPhone: destino vacío');
+    throw new Error('Destino vacío en sendMediaToPhone');
+  }
+
+  // 👇 delegamos en sendMedia, que ya sabe manejar:
+  //   - número: "51994681222"  →  51994681222@s.whatsapp.net
+  //   - JID:    "1203...@g.us" → se usa tal cual (grupo correcto)
+  return sendMedia(raw, payload);
 }
+
 
 // ==================================================
 // ESTADO / QR / CONEXIÓN

@@ -49,28 +49,37 @@ router.post(
         });
       }
 
-      // Validar formato de teléfono (debe venir con código de país)
-      const cleanPhone = to.replace(/\D/g, '');
-      if (cleanPhone.length < 10) {
-        return res.status(400).json({
-          success: false,
-          error:
-            'Formato de teléfono inválido. Debe incluir código de país (ej: 51987654321)',
-        });
+      let target = (to || '').trim();
+
+      // 🔹 Detectar si es JID (grupo o contacto): contiene '@'
+      const isJid = target.includes('@');
+
+      if (!isJid) {
+        // 👉 Lo tratamos como número normal
+        const cleanPhone = target.replace(/\D/g, '');
+        if (cleanPhone.length < 10) {
+          return res.status(400).json({
+            success: false,
+            error:
+              'Formato de teléfono inválido. Debe incluir código de país (ej: 51987654321)',
+          });
+        }
+        target = cleanPhone;
       }
+      // Si es JID, NO tocamos target (puede ser 1203...@g.us, 5199...@s.whatsapp.net, etc.)
 
       logger.info(
-        { apiKey: r.apiKey?.name ?? 'unknown-key', to: cleanPhone },
+        { apiKey: r.apiKey?.name ?? 'unknown-key', to: target, isJid },
         '[API] Sending message'
       );
 
-      // ahora usamos sendDirectMessage, que devuelve resp de Baileys
-      const result = await sendDirectMessage(cleanPhone, message);
+      // ahora usamos sendDirectMessage, que decide si es JID o número
+      const result = await sendDirectMessage(target, message);
 
       return res.status(200).json({
         success: true,
         data: {
-          to: cleanPhone,
+          to: target,
           message,
           messageId: result?.key?.id || null,
           sentAt: new Date().toISOString(),
@@ -116,14 +125,22 @@ router.post(
         });
       }
 
-      const cleanPhone = to.replace(/\D/g, '');
-      if (cleanPhone.length < 10) {
-        return res.status(400).json({
-          success: false,
-          error:
-            'Formato de teléfono inválido. Debe incluir código de país (ej: 51987654321)',
-        });
+      let target = (to || '').trim();
+      const isJid = target.includes('@');
+
+      if (!isJid) {
+        // 👉 Número normal
+        const cleanPhone = target.replace(/\D/g, '');
+        if (cleanPhone.length < 10) {
+          return res.status(400).json({
+            success: false,
+            error:
+              'Formato de teléfono inválido. Debe incluir código de país (ej: 51987654321)',
+          });
+        }
+        target = cleanPhone;
       }
+      // Si es JID, lo usamos tal cual (grupo/contacto)
 
       if (!file && !url) {
         return res.status(400).json({
@@ -133,7 +150,13 @@ router.post(
       }
 
       logger.info(
-        { apiKey: r.apiKey?.name ?? 'unknown-key', to: cleanPhone, hasFile: !!file, hasUrl: !!url },
+        {
+          apiKey: r.apiKey?.name ?? 'unknown-key',
+          to: target,
+          isJid,
+          hasFile: !!file,
+          hasUrl: !!url,
+        },
         '[API] Sending media'
       );
 
@@ -141,15 +164,14 @@ router.post(
 
       if (file) {
         // Enviar el archivo que subieron vía multipart/form-data
-        result = await sendMediaToPhone(cleanPhone, {
-          buffer: file.data as Buffer, // si Multer tipa distinto, forzamos a Buffer
+        result = await sendMediaToPhone(target, {
+          buffer: file.data as Buffer,
           mime: file.mimetype as string,
           fileName: file.name as string,
           caption,
         });
       } else if (url) {
         // (Pendiente) soportar enviar desde URL remota.
-        // Para no romper el server, devolvemos 501.
         return res.status(501).json({
           success: false,
           error:
@@ -160,7 +182,7 @@ router.post(
       return res.status(200).json({
         success: true,
         data: {
-          to: cleanPhone,
+          to: target,
           caption: caption || '',
           messageId: result?.key?.id || null,
           sentAt: new Date().toISOString(),
@@ -177,6 +199,7 @@ router.post(
     }
   }
 );
+
 // ================================
 // GET /api/groups
 // Obtener lista de grupos de WhatsApp
