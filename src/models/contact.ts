@@ -968,6 +968,7 @@ export async function releaseHumanTakeover(phoneNumber: string) {
 /**
  * Determina si el bot debe responder:
  *  - Si no existe contacto → true (responder)
+ *  - Si está en onboarding (NEW / WAITING_...) → SIEMPRE responde y limpia takeover
  *  - Si no hay takeover → true
  *  - Si takeover > 1h → liberar y true
  *  - Si takeover vigente → false (pausado)
@@ -981,9 +982,36 @@ export async function shouldBotRespond(
       where: { phoneNumber: phone },
     });
 
+    // 1) Si no existe → que responda el bot
     if (!contact) return true;
+
+    // 2) Estados de ONBOARDING: el bot siempre debe responder
+    const onboardingStates = [
+      'NEW',
+      'WAITING_DNI',
+      'WAITING_RUC',
+      'WAITING_COMPANY_NAME',
+      'SELECTING_COMPANY',
+    ];
+
+    if (onboardingStates.includes(contact.state)) {
+      // si por alguna razón tenía takeover, lo limpiamos
+      if (contact.humanTakeoverAt) {
+        await prisma.contact.update({
+          where: { phoneNumber: phone },
+          data: { humanTakeoverAt: null },
+        });
+        logger.info(
+          `[CONTACT] Clearing human takeover for ${phone} in onboarding state=${contact.state}`
+        );
+      }
+      return true;
+    }
+
+    // 3) Si no hay takeover → responde
     if (!contact.humanTakeoverAt) return true;
 
+    // 4) Takeover expirado (> 1h) → liberar y responder
     const now = new Date();
     const diff = now.getTime() - contact.humanTakeoverAt.getTime();
     const oneHourInMs = 60 * 60 * 1000;
@@ -1001,19 +1029,24 @@ export async function shouldBotRespond(
       return true;
     }
 
+    // 5) Takeover vigente y NO está en onboarding → bloquear bot
     const remainingMinutes = Math.round(
       (oneHourInMs - diff) / 60000
     );
     logger.info(
-      `[CONTACT] Bot paused for ${phone} - ${remainingMinutes} minutes remaining`
+      `[CONTACT] Bot paused for ${phone} - ${remainingMinutes} minutes remaining (state=${contact.state})`
     );
     return false;
   } catch (error) {
-    logger.error({ err: error },'Error checking if bot should respond:');
+    logger.error(
+      { err: error },
+      'Error checking if bot should respond:'
+    );
     // en caso de error no bloqueamos al bot
     return true;
   }
 }
+
 
 /**
  * Bloquear contacto para que el bot no lo atienda más

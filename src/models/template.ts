@@ -227,18 +227,23 @@ export async function ensureDefaults() {
       content: string;
       variables?: string[];
     }> = [
+      // Menú principal por defecto (SOLO opciones, sin saludo largo)
       {
         category: 'menu',
         name: 'MAIN_MENU__DEFAULT',
         content: [
-          '🙌 *¿En qué puedo ayudarte?*',
-          '',
-          'Elige una opción o escribe tu consulta:',
-          '1️⃣ Servicio técnico',
+          '1️⃣ Servicio técnico en sitio',
           '2️⃣ Tóner / Insumos',
           '3️⃣ Asistencia remota',
-          '4️⃣ Cambiar empresa',
+          '4️⃣ Cambiar empresa activa',
+          '5️⃣ Hablar con un técnico',
         ].join('\n'),
+      },
+      // Hint corto para Gemini y respuestas (se pega al final)
+      {
+        category: 'templates',
+        name: 'menu_hint',
+        content: 'Si quieres ver el *menú de opciones*, escribe *menu*.',
       },
       {
         category: 'templates',
