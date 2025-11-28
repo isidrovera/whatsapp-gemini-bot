@@ -748,38 +748,46 @@ if (!isLikelyRealPhone(phoneE164)) {
     // ==========================================================
     // 7) AUTO-RESPUESTAS (si tiene permiso)
     // ==========================================================
-    const canUseAutoResponse = permissions.permissions.autoresponse ?? true;
+    // 7) AUTO-RESPUESTAS (si tiene permiso)
+const canUseAutoResponse = permissions.permissions.autoresponse ?? true;
 
-    if (canUseAutoResponse) {
-      const autoResp = await autoResponseModel.findAndProcessResponse(
-        finalMessageText,
-        {
-          contact: {
-            name: contact.name || '',
-            dni: contact.dni || '',
-            phoneNumber: phoneE164,
-            companyName: contact.companyName || '',
-            ruc: contact.ruc || '',
-          },
-          company: {
-            razonSocial: contact.companyName || '',
-            numeroDoc: contact.ruc || '',
-            name: contact.companyName || '',
-            ruc: contact.ruc || '',
-          },
-          customVars: {},
-        }
-      );
-
-
-      if (autoResp) {
-        logger.info(
-          `[AUTO-RESPONSE] Sent auto-response for ${phoneE164}`
-        );
-        await sendMessage(senderJid, autoResp);
-        // Si quisieras cortar aquí, podrías return; (dejamos fluir por si necesita AI).
-      }
+if (canUseAutoResponse) {
+  const autoResp = await autoResponseModel.findAndProcessResponse(
+    finalMessageText,
+    {
+      contact: {
+        name: contact.name || '',
+        dni: contact.dni || '',
+        phoneNumber: phoneE164,
+        companyName: contact.companyName || '',
+        ruc: contact.ruc || '',
+      },
+      company: {
+        razonSocial: contact.companyName || '',
+        numeroDoc: contact.ruc || '',
+        name: contact.companyName || '',
+        ruc: contact.ruc || '',
+      },
+      customVars: {},
     }
+  );
+
+  if (autoResp) {
+    logger.info(
+      `[AUTO-RESPONSE] Sent auto-response for ${phoneE164}`
+    );
+    await sendMessage(senderJid, autoResp);
+
+    // 👇 CLAVE: si ya está en menú / registrado,
+    // NO seguimos al flujo de Gemini (evita el segundo mensaje).
+    if (state === 'MENU' || state === 'REGISTERED') {
+      return;
+    }
+    // Si está en NEW / WAITING_DNI / WAITING_RUC, etc.,
+    // dejamos que siga al bloque de registro.
+  }
+}
+
 
     // ==========================================================
     // 8) REGISTRO (DNI / RUC / EMPRESA)
