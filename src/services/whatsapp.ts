@@ -502,11 +502,18 @@ async function handleIncomingMessage(
     if ((message.messageTimestamp as number) * 1000 < startTime) return;
 
     const key = message.key;
-    const senderJid = key?.remoteJid ?? key?.participant ?? null;
+    const senderJid = key?.remoteJid ?? key?.participant;
+
+    if (!senderJid) {
+      logger.warn('Received message without remoteJid/participant, ignoring');
+      return;
+    }
+
     if (senderJid === 'status@broadcast') {
       logger.debug('[WA] Ignorando mensaje de status@broadcast');
       return;
     }
+
 
     if (upsertType === 'append') {
       logger.debug('Ignoring local append upsert (likely our own send)');
@@ -703,21 +710,22 @@ if (!isLikelyRealPhone(phoneE164)) {
           finalMessageText,
           {
             contact: {
-              name: contact.name || null,
-              dni: contact.dni || null,
+              name: contact.name || '',
+              dni: contact.dni || '',
               phoneNumber: phoneE164,
-              companyName: contact.companyName || null,
-              ruc: contact.ruc || null,
+              companyName: contact.companyName || '',
+              ruc: contact.ruc || '',
             },
             company: {
-              razonSocial: contact.companyName || null,
-              numeroDoc: contact.ruc || null,
-              name: contact.companyName || null,
-              ruc: contact.ruc || null,
+              razonSocial: contact.companyName || '',
+              numeroDoc: contact.ruc || '',
+              name: contact.companyName || '',
+              ruc: contact.ruc || '',
             },
             customVars: {},
           }
         );
+
 
         if (autoResp) {
           await sendMessage(senderJid, autoResp);
@@ -746,21 +754,22 @@ if (!isLikelyRealPhone(phoneE164)) {
         finalMessageText,
         {
           contact: {
-            name: contact.name || null,
-            dni: contact.dni || null,
+            name: contact.name || '',
+            dni: contact.dni || '',
             phoneNumber: phoneE164,
-            companyName: contact.companyName || null,
-            ruc: contact.ruc || null,
+            companyName: contact.companyName || '',
+            ruc: contact.ruc || '',
           },
           company: {
-            razonSocial: contact.companyName || null,
-            numeroDoc: contact.ruc || null,
-            name: contact.companyName || null,
-            ruc: contact.ruc || null,
+            razonSocial: contact.companyName || '',
+            numeroDoc: contact.ruc || '',
+            name: contact.companyName || '',
+            ruc: contact.ruc || '',
           },
           customVars: {},
         }
       );
+
 
       if (autoResp) {
         logger.info(
@@ -1218,18 +1227,20 @@ if (!isLikelyRealPhone(phoneE164)) {
       // Fallback Gemini (permitido off-hours)
       const canUseAI = permissions.permissions.ai ?? true;
       if (canUseAI) {
+        const mediaAnalysisJson =
+  mediaAnalysisResult ? JSON.stringify(mediaAnalysisResult, null, 2) : '';
+
         const responseFromGemini = await geminiService.processMessage(
           phoneE164,
           finalMessageText,
           !!mediaType,
-          mediaAnalysisResult
-            ? JSON.stringify(mediaAnalysisResult, null, 2)
-            : null,
-          anydeskCode || null,
-          mediaAnalysisResult?.mediaTypeClass || null,
-          mediaAnalysisResult?.detectedErrorCode || null,
-          mediaAnalysisResult?.detectedSerial || null
+          mediaAnalysisJson,                         // string siempre
+          anydeskCode ?? '',                         // string
+          mediaAnalysisResult?.mediaTypeClass ?? '', // string
+          mediaAnalysisResult?.detectedErrorCode ?? '', // string
+          mediaAnalysisResult?.detectedSerial ?? ''  // string
         );
+
 
         await sendMessage(senderJid, responseFromGemini);
       } else {
