@@ -883,33 +883,84 @@ export async function removeCompanyFromContact(
  * ------------------------------------------------- */
 
 export async function setHumanTakeover(phoneNumber: string) {
+  const phone = normalizePhone(phoneNumber);
+  logger.info(`[CONTACT] Setting human takeover for ${phone}`);
+
   try {
-    const phone = normalizePhone(phoneNumber);
-    logger.info(`[CONTACT] Setting human takeover for ${phone}`);
+    // 1) Buscar contacto
+    let contact = await prisma.contact.findUnique({
+      where: { phoneNumber: phone },
+    });
+
+    // 2) Si no existe, lo creamos con takeover activo
+    if (!contact) {
+      logger.warn(
+        `[CONTACT] setHumanTakeover: contact not found for ${phone}, creating new contact`
+      );
+      contact = await prisma.contact.create({
+        data: {
+          phoneNumber: phone,
+          state: 'NEW',
+          humanTakeoverAt: new Date(),
+        },
+      });
+      return contact;
+    }
+
+    // 3) Si existe, actualizar takeover
     return await prisma.contact.update({
       where: { phoneNumber: phone },
       data: {
         humanTakeoverAt: new Date(),
       },
     });
-  } catch (error) {
-    logger.error({ err: error },'Error setting human takeover:');
+  } catch (error: any) {
+    if (error?.code === 'P2025') {
+      // Race rara: entre el findUnique y el update alguien borró el contacto
+      logger.warn(
+        `[CONTACT] setHumanTakeover: P2025 for ${phone} (no contact on update), ignoring`
+      );
+      return null;
+    }
+
+    logger.error({ err: error }, 'Error setting human takeover:');
     throw error;
   }
 }
 
 export async function releaseHumanTakeover(phoneNumber: string) {
+  const phone = normalizePhone(phoneNumber);
+  logger.info(`[CONTACT] Releasing human takeover for ${phone}`);
+
   try {
-    const phone = normalizePhone(phoneNumber);
-    logger.info(`[CONTACT] Releasing human takeover for ${phone}`);
+    // 1) Verificamos si existe el contacto
+    const contact = await prisma.contact.findUnique({
+      where: { phoneNumber: phone },
+    });
+
+    if (!contact) {
+      logger.warn(
+        `[CONTACT] releaseHumanTakeover: contact not found for ${phone}, nothing to release`
+      );
+      return null;
+    }
+
+    // 2) Limpiar takeover
     return await prisma.contact.update({
       where: { phoneNumber: phone },
       data: {
         humanTakeoverAt: null,
       },
     });
-  } catch (error) {
-    logger.error({ err: error },'Error releasing human takeover:');
+  } catch (error: any) {
+    if (error?.code === 'P2025') {
+      logger.warn(
+        `[CONTACT] releaseHumanTakeover: P2025 for ${phone} (no contact on update), ignoring`
+      );
+      return null;
+    }
+
+    logger.error({ err: error }, 'Error releasing human takeover:');
     throw error;
   }
 }

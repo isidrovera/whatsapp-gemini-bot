@@ -33,6 +33,8 @@ import {
   isGroupJid,
   normalizePhone,
   extractPhoneFromJid,
+  normalizeJidToPhone,   // 👈 nuevo
+  isLikelyRealPhone,
 } from '../utils/validators.js';
 
 // Dinámicos (horarios / plantillas / autorespuestas)
@@ -109,23 +111,7 @@ function isFromBotById(id?: string | null) {
 
 type UpsertType = 'notify' | 'append' | 'replace' | string;
 
-function normalizeJidToPhone(remoteJid: string): string {
-  if (!remoteJid) return '';
-  const leftSide = remoteJid.split('@')[0];
-  const justNumber = leftSide.split(':')[0];
-  return justNumber.replace(/\D/g, '');
-}
 
-/**
- * Valida de forma simple que el número "parezca" un teléfono real.
- * En este caso asumimos Perú (E.164 sin '+'): 51 + 9 dígitos = 11 caracteres.
- *
- * Ejemplo válido: 51994681222
- */
-function isLikelyRealPhone(phone: string | null | undefined): boolean {
-  if (!phone) return false;
-  return /^51\d{9}$/.test(phone);
-}
 
 // ==================================================
 // URGENCIA
@@ -446,50 +432,65 @@ async function handleAgentMessageFromMe(
   const messageText = extractMessageText(message);
   const textLower = (messageText || '').toLowerCase().trim();
 
-  const phoneNumber = normalizeJidToPhone(senderJid);
-  const normalizedPhone = normalizePhone(phoneNumber);
+  // Sacamos el número del JID (ej: "5192489..." de "5192489@s.whatsapp.net")
+  const phoneNumberRaw = normalizeJidToPhone(senderJid);
 
-  if (textLower === HUMAN_TAKEOVER_COMMAND) {
-    await contactModel.setHumanTakeover(normalizedPhone);
-    logger.info(`[HUMAN-TAKEOVER] ✋ Manually activated for ${normalizedPhone}`);
+  if (!phoneNumberRaw) {
+    logger.warn(
+      `[AGENT-MSG] Received agent message with empty/invalid phone from JID=${senderJid}`
+    );
     return;
   }
 
-  if (textLower === RELEASE_TAKEOVER_COMMAND) {
-    await contactModel.releaseHumanTakeover(normalizedPhone);
+  // OJO: NO necesitamos llamar a normalizePhone aquí,
+  // porque TODOS los métodos de contactModel ya lo hacen internamente.
+
+  // Comando manual: activar takeover
+  if (textLower === HUMAN_TAKEOVER_COMMAND) {
+    await contactModel.setHumanTakeover(phoneNumberRaw);
     logger.info(
-      `[BOT-REACTIVATED] 🤖 Manually reactivated for ${normalizedPhone}`
+      `[HUMAN-TAKEOVER] ✋ Manually activated for ${phoneNumberRaw}`
+    );
+    return;
+  }
+
+  // Comando manual: liberar takeover
+  if (textLower === RELEASE_TAKEOVER_COMMAND) {
+    await contactModel.releaseHumanTakeover(phoneNumberRaw);
+    logger.info(
+      `[BOT-REACTIVATED] 🤖 Manually reactivated for ${phoneNumberRaw}`
     );
     return;
   }
 
   // Cualquier mensaje del agente renueva takeover
   if (messageText && messageText.trim().length > 0) {
-    const contact = await contactModel.findByPhone(normalizedPhone);
+    const contact = await contactModel.findByPhone(phoneNumberRaw);
     const now = new Date();
     const oneHourInMs = 60 * 60 * 1000;
 
     if (!contact?.humanTakeoverAt) {
-      await contactModel.setHumanTakeover(normalizedPhone);
+      await contactModel.setHumanTakeover(phoneNumberRaw);
       logger.info(
-        `[HUMAN-TAKEOVER] 🙋 Agent message detected for ${normalizedPhone}`
+        `[HUMAN-TAKEOVER] 🙋 Agent message detected for ${phoneNumberRaw}`
       );
     } else {
       const diff = now.getTime() - contact.humanTakeoverAt.getTime();
       if (diff > oneHourInMs) {
-        await contactModel.setHumanTakeover(normalizedPhone);
+        await contactModel.setHumanTakeover(phoneNumberRaw);
         logger.info(
-          `[HUMAN-TAKEOVER] 🔄 Renewed for ${normalizedPhone} (previous expired)`
+          `[HUMAN-TAKEOVER] 🔄 Renewed for ${phoneNumberRaw} (previous expired)`
         );
       } else {
-        await contactModel.setHumanTakeover(normalizedPhone);
+        await contactModel.setHumanTakeover(phoneNumberRaw);
         logger.info(
-          `[HUMAN-TAKEOVER] ⏰ Extended for ${normalizedPhone} - Human still active`
+          `[HUMAN-TAKEOVER] ⏰ Extended for ${phoneNumberRaw} - Human still active`
         );
       }
     }
   }
 }
+
 
 // ==================================================
 // HANDLER PRINCIPAL

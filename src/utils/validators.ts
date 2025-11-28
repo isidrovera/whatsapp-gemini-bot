@@ -108,20 +108,19 @@ export function normalizePhone(raw: string): string {
       const cleanedLocal = stripTrunkZeroIfNeeded(local, cc);
       const final = cc + cleanedLocal;
       if (!isValidPhoneE164(final)) {
-        throw new Error(`Número inválido para país +${cc}: "${raw}" → "${final}"`);
+        throw new Error(
+          `Número inválido para país +${cc}: "${raw}" → "${final}"`
+        );
       }
       return final;
     }
   }
 
   // 3) No coincide con CC conocido
-  //    - Si empieza con '51' (u otro CC de 2–3 dígitos) sin estar en KNOWN_CCS, igualmente aceptar como E.164 genérico
-  //    - O asumir DEFAULT_CC si tiene pinta de número local
   const defCC = defaultCountryCode();
 
-  // Si empieza con 1–3 dígitos que aparentan CC pero no lo conocemos, lo aceptamos si cae en 8–15 total
+  // Si tiene pinta de e164 (8–15 dígitos), lo aceptamos tal cual
   if (d.length >= 8 && d.length <= 15) {
-    // Lo tratamos como E.164 "genérico"
     return d;
   }
 
@@ -172,4 +171,34 @@ export function extractPhoneFromJid(jid: string): string {
 /** ¿Es un JID de grupo? */
 export function isGroupJid(jid: string): boolean {
   return !!jid && jid.endsWith('@g.us');
+}
+
+/** =========================
+ *  Helpers extra para WhatsApp
+ *  ========================= */
+
+/**
+ * Normaliza un remoteJid a solo dígitos.
+ * Ej: "51924894792@s.whatsapp.net" → "51924894792"
+ *     "51924894792:12@s.whatsapp.net" → "51924894792"
+ */
+export function normalizeJidToPhone(remoteJid: string): string {
+  if (!remoteJid) return '';
+  const leftSide = remoteJid.split('@')[0];
+  const justNumber = leftSide.split(':')[0];
+  return digitsOnly(justNumber);
+}
+
+/**
+ * Valida de forma simple que el número "parezca" un teléfono real.
+ * En tu caso asumes Perú (E.164 sin '+'): 51 + 9 dígitos = 11 caracteres.
+ *
+ * Ejemplo válido: 51994681222
+ */
+export function isLikelyRealPhone(
+  phone: string | null | undefined
+): boolean {
+  const d = digitsOnly(phone ?? '');
+  // Regla específica para Perú (DEFAULT_CC=51)
+  return /^51\d{9}$/.test(d);
 }
