@@ -177,11 +177,11 @@ model BlockedNumber {
 
 model ConversationHistory {
   id          String   @id @default(uuid())
-  phoneNumber String   @map("phone_number")
+  phoneNumber String?  @map("phone_number")  // ← Agregar ?
   role        String
   content     String
   createdAt   DateTime @default(now()) @map("created_at")
-  contact     Contact  @relation(fields: [phoneNumber], references: [phoneNumber])
+  contact     Contact? @relation(fields: [phoneNumber], references: [phoneNumber])  // ← Agregar ?
 
   @@index([phoneNumber, createdAt])
   @@map("conversation_history")
