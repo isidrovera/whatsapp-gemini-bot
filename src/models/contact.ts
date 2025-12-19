@@ -1349,7 +1349,7 @@ export async function deleteContact(contactId: string) {
       where: { id: contactId },
     });
 
-    if (existing) {
+    if (existing && existing.phoneNumber) {
       await prisma.conversationHistory.deleteMany({
         where: { phoneNumber: existing.phoneNumber },
       });
