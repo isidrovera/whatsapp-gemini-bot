@@ -664,7 +664,8 @@ async function handleIncomingMessage(
         // Refrescar por si hubo merge
         contact = await contactModel.findByPhone(phoneE164);
 
-      
+      } 
+
     } else {
       // ✅ PN normal
       const phoneNumberRaw = normalizeJidToPhone(senderJid);
