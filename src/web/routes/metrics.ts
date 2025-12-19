@@ -123,8 +123,8 @@ router.get('/', async (req, res) => {
       },
     });
 
-    // Obtener información de contactos asociados a estos números
-    const phoneNumbers = [...new Set(recentRows.map(r => r.phoneNumber))];
+    // ✅ Obtener información de contactos asociados a estos números (filtrar nulls)
+    const phoneNumbers = [...new Set(recentRows.map(r => r.phoneNumber).filter((p): p is string => p !== null))];
     const contacts = await prisma.contact.findMany({
       where: { phoneNumber: { in: phoneNumbers } },
       select: {
@@ -240,7 +240,7 @@ router.get('/api/messages-per-hour', async (req, res) => {
     // IMPORTANTE:
     // Ajusta nombres de tabla y columnas a tu schema Postgres real.
     // conversation_history, created_at, etc.
-    const result = await prisma.$queryRawUnsafe<
+    const result = await prisma.$queryRawUnsafe
       { hour_label: string; cnt: string }[]
     >(
       `
@@ -291,7 +291,7 @@ router.get('/api/department-distribution', async (req, res) => {
 
     // Ajusta nombres reales de tu schema:
     // conversation_history.department_id, department.id, department.name, created_at
-    const rows = await prisma.$queryRawUnsafe<
+    const rows = await prisma.$queryRawUnsafe
       { name: string; cnt: string }[]
     >(
       `
@@ -331,7 +331,7 @@ router.get('/api/summary', async (_req, res) => {
     ]);
 
     // métrica de respuesta en últimos 7 días (placeholder basado en tu SQL original)
-    const resp = await prisma.$queryRawUnsafe<
+    const resp = await prisma.$queryRawUnsafe
       { incoming: string; with_reply: string; tmo_hours: string }[]
     >(
       `
