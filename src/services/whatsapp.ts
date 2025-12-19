@@ -1671,15 +1671,13 @@ export async function forceNewQRState(): Promise<void> {
 // ==================================================
 // OBTENER GRUPOS DE WHATSAPP
 // ==================================================
-export async function getWhatsAppGroups(): Promise
-  Array<{
-    id: string;
-    name: string;
-    participants: number;
-    createdAt: string | null;
-    description: string | null;
-  }>
-> {
+export async function getWhatsAppGroups(): Promise<Array<{
+  id: string;
+  name: string;
+  participants: number;
+  createdAt: string | null;
+  description: string | null;
+}>> {
   if (!sock || !isReady) {
     logger.error('[WhatsApp] Client not ready to fetch groups');
     throw new Error('WhatsApp client not ready');
