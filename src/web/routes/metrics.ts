@@ -2,12 +2,10 @@ import express from 'express';
 import { getPrismaClient } from '../../config/database.js';
 import { logger } from '../../utils/logger.js';
 
-// si guardaste helpers de métricas en otro archivo (por ej. src/metrics/metric.ts)
-// ajusta la ruta del import:
 import {
   calculateToday,
   getLastDays,
-} from '../../models/metric.js'; // <-- AJUSTA ESTE PATH si tu archivo vive en otro lado
+} from '../../models/metric.js';
 
 const router = express.Router();
 const prisma = getPrismaClient();
@@ -32,31 +30,23 @@ function endOfDay(date: Date): Date {
  */
 router.get('/', async (req, res) => {
   try {
-    // Lee filtros opcionales del querystring
     const { from, to, department } = req.query as {
       from?: string;
       to?: string;
       department?: string;
     };
 
-    // Rango de fechas (por defecto: últimos 7 días)
     const today = new Date();
-    const defaultFrom = new Date(today.getTime() - 6 * 24 * 3600 * 1000); // hoy-6
+    const defaultFrom = new Date(today.getTime() - 6 * 24 * 3600 * 1000);
     const dateFrom = from ? new Date(from + 'T00:00:00') : startOfDay(defaultFrom);
     const dateTo = to ? new Date(to + 'T23:59:59') : endOfDay(today);
 
-    // =============================
-    // 1. KPIs base / stats
-    // =============================
-
-    // Métrica de "hoy" calculada on the fly
     const todayCalc = await calculateToday();
-    // (ejemplo) tasa satisfacción: placeholder fijo hasta que tengas NPS/CSAT real
-    const satisfactionPct = '92%'; // demo / placeholder
+    const satisfactionPct = '92%';
 
     const stats = {
       totalConversations: todayCalc.totalMessages ?? 0,
-      resolved: Math.round((todayCalc.totalMessages ?? 0) * 0.7), // demo
+      resolved: Math.round((todayCalc.totalMessages ?? 0) * 0.7),
       avgResponseTime:
         todayCalc.avgResponseTime != null
           ? `${Math.round(todayCalc.avgResponseTime)}m`
@@ -64,20 +54,11 @@ router.get('/', async (req, res) => {
       satisfaction: satisfactionPct,
     };
 
-    // =============================
-    // 2. Departamentos disponibles
-    // =============================
     const departments = await prisma.department.findMany({
       orderBy: { sortOrder: 'asc' },
       select: { id: true, name: true },
     });
 
-    // =============================
-    // 3. Top productos consultados
-    // =============================
-    // Esto es mock razonable: si aún no trackeas consultas por producto,
-    // devolvemos lista vacía o algo mínimo.
-    // Ajusta cuando tengas tabla "productConsultation" o similar.
     const topProducts = await prisma.product.findMany({
       take: 5,
       orderBy: { createdAt: 'desc' },
@@ -85,32 +66,20 @@ router.get('/', async (req, res) => {
         id: true,
         name: true,
         category: true,
-        // si no tienes 'consultations', usamos 0
       },
     });
 
     const topProductsEnriquecidos = topProducts.map(p => ({
       ...p,
-      consultations: 0, // placeholder
+      consultations: 0,
     }));
 
-    // =============================
-    // 4. Top keywords
-    // =============================
-    // Si tienes una tabla departmentKeyword/productKeyword con contador,
-    // la consultas aquí. Si no, placeholder vacío.
     const topKeywords: Array<{
       keyword: string;
       category: string | null;
       count: number;
     }> = [];
 
-    // =============================
-    // 5. Actividad reciente
-    // =============================
-    // Tomamos las últimas 20 entradas de conversationHistory
-    // Si tu schema NO tiene relaciones directas contact/department en conversationHistory,
-    // hacemos una query separada para obtener esos datos
     const recentRows = await prisma.conversationHistory.findMany({
       take: 20,
       orderBy: { createdAt: 'desc' },
@@ -123,8 +92,9 @@ router.get('/', async (req, res) => {
       },
     });
 
-    // ✅ Obtener información de contactos asociados a estos números (filtrar nulls)
+    // ✅ Filtrar nulls correctamente
     const phoneNumbers = [...new Set(recentRows.map(r => r.phoneNumber).filter((p): p is string => p !== null))];
+    
     const contacts = await prisma.contact.findMany({
       where: { phoneNumber: { in: phoneNumbers } },
       select: {
@@ -133,21 +103,7 @@ router.get('/', async (req, res) => {
       },
     });
 
-    // Crear mapa de phoneNumber -> contact
     const contactMap = new Map(contacts.map(c => [c.phoneNumber, c]));
-
-    // Si tienes departmentId en conversationHistory, descomenta esto:
-    // const conversationsWithDept = await prisma.conversationHistory.findMany({
-    //   where: { id: { in: recentRows.map(r => r.id) } },
-    //   select: {
-    //     id: true,
-    //     departmentId: true,
-    //     department: {
-    //       select: { name: true }
-    //     }
-    //   }
-    // });
-    // const deptMap = new Map(conversationsWithDept.map(c => [c.id, c.department?.name || null]));
 
     const recentActivity = recentRows.map(r => {
       const contact = contactMap.get(r.phoneNumber);
@@ -155,16 +111,12 @@ router.get('/', async (req, res) => {
         timestamp: r.createdAt,
         contactName: contact?.name || 'Desconocido',
         phoneNumber: r.phoneNumber,
-        department: 'Sin departamento', // Si tienes departmentId: deptMap.get(r.id) || 'Sin departamento'
+        department: 'Sin departamento',
         type: 'Mensaje',
         status: 'pending',
       };
     });
 
-    // =============================
-    // 6. Tiempos de respuesta por dept
-    // =============================
-    // Hasta que tengas la métrica real por dept, mandamos mock vacío:
     const responseTimesByDept: Array<{
       name: string;
       avgTime: string;
@@ -172,23 +124,15 @@ router.get('/', async (req, res) => {
       efficiency: number;
     }> = [];
 
-    // =============================
-    // 7. Valores default para inputs fecha en la vista
-    // =============================
-    const isoFrom = dateFrom.toISOString().slice(0, 10); // yyyy-mm-dd
+    const isoFrom = dateFrom.toISOString().slice(0, 10);
     const isoTo = dateTo.toISOString().slice(0, 10);
 
-    // =============================
-    // Render
-    // =============================
     res.render('metrics', {
       title: 'Métricas',
       user: req.session?.username || 'Admin',
-
       dateFrom: isoFrom,
       dateTo: isoTo,
       departments,
-
       stats,
       topProducts: topProductsEnriquecidos,
       topKeywords,
@@ -198,7 +142,6 @@ router.get('/', async (req, res) => {
   } catch (err: any) {
     logger.error({ err, message: err?.message, stack: err?.stack }, 'Error rendering /metrics');
 
-    // fallback para no dejarte en 404
     res.status(500).render('metrics', {
       title: 'Métricas',
       user: req.session?.username || 'Admin',
@@ -225,7 +168,6 @@ router.get('/', async (req, res) => {
  * ===========================
  */
 
-// GET /metrics/api/messages-per-hour?date=YYYY-MM-DD
 router.get('/api/messages-per-hour', async (req, res) => {
   try {
     const { date } = req.query as { date?: string };
@@ -233,26 +175,16 @@ router.get('/api/messages-per-hour', async (req, res) => {
     const today = new Date();
     const limaDate =
       date ||
-      new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(
-        today
-      ); // YYYY-MM-DD
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(today);
 
-    // IMPORTANTE:
-    // Ajusta nombres de tabla y columnas a tu schema Postgres real.
-    // conversation_history, created_at, etc.
-    const result = await prisma.$queryRawUnsafe
-      { hour_label: string; cnt: string }[]
-    >(
+    const result = await prisma.$queryRawUnsafe<{ hour_label: string; cnt: string }[]>(
       `
       WITH hours AS (
         SELECT generate_series(0, 23) AS h
       ),
       msgs AS (
         SELECT
-          date_trunc(
-            'hour',
-            (created_at AT TIME ZONE 'America/Lima')
-          ) AS dt
+          date_trunc('hour', (created_at AT TIME ZONE 'America/Lima')) AS dt
         FROM conversation_history
         WHERE (created_at AT TIME ZONE 'America/Lima')::date = $1::date
       )
@@ -278,22 +210,15 @@ router.get('/api/messages-per-hour', async (req, res) => {
   }
 });
 
-// GET /metrics/api/department-distribution?date=YYYY-MM-DD
 router.get('/api/department-distribution', async (req, res) => {
   try {
     const { date } = req.query as { date?: string };
     const today = new Date();
     const limaDate =
       date ||
-      new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(
-        today
-      ); // YYYY-MM-DD
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(today);
 
-    // Ajusta nombres reales de tu schema:
-    // conversation_history.department_id, department.id, department.name, created_at
-    const rows = await prisma.$queryRawUnsafe
-      { name: string; cnt: string }[]
-    >(
+    const rows = await prisma.$queryRawUnsafe<{ name: string; cnt: string }[]>(
       `
       SELECT d.name, COUNT(ch.id)::text AS cnt
       FROM conversation_history ch
@@ -310,30 +235,21 @@ router.get('/api/department-distribution', async (req, res) => {
     res.json({ labels, values, date: limaDate });
   } catch (error) {
     logger.error({ err: error }, 'Error in /metrics/api/department-distribution:');
-    res
-      .status(500)
-      .json({ error: 'Error getting department distribution' });
+    res.status(500).json({ error: 'Error getting department distribution' });
   }
 });
 
-// GET /metrics/api/summary
 router.get('/api/summary', async (_req, res) => {
   try {
-    // ventana últimos 7 días
     const now = new Date();
-    const sevenDaysAgoISO = new Date(
-      now.getTime() - 7 * 24 * 3600 * 1000
-    ).toISOString();
+    const sevenDaysAgoISO = new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString();
 
     const [messagesTotal, contactsRegistered] = await Promise.all([
       prisma.conversationHistory.count(),
       prisma.contact.count({ where: { state: 'REGISTERED' } }),
     ]);
 
-    // métrica de respuesta en últimos 7 días (placeholder basado en tu SQL original)
-    const resp = await prisma.$queryRawUnsafe
-      { incoming: string; with_reply: string; tmo_hours: string }[]
-    >(
+    const resp = await prisma.$queryRawUnsafe<{ incoming: string; with_reply: string; tmo_hours: string }[]>(
       `
       WITH win AS (
         SELECT *
@@ -369,9 +285,7 @@ router.get('/api/summary', async (_req, res) => {
     const incoming = parseInt(rec.incoming, 10) || 0;
     const withReply = parseInt(rec.with_reply, 10) || 0;
     const response_rate_pct = incoming > 0 ? (withReply / incoming) * 100 : 0;
-    const avg_first_response_hours = Number(
-      parseFloat(rec.tmo_hours).toFixed(2)
-    );
+    const avg_first_response_hours = Number(parseFloat(rec.tmo_hours).toFixed(2));
 
     res.json({
       messages_total: messagesTotal,
@@ -381,9 +295,7 @@ router.get('/api/summary', async (_req, res) => {
     });
   } catch (error) {
     logger.error({ err: error }, 'Error in /metrics/api/summary:');
-    res
-      .status(500)
-      .json({ error: 'Error getting metrics summary' });
+    res.status(500).json({ error: 'Error getting metrics summary' });
   }
 });
 
