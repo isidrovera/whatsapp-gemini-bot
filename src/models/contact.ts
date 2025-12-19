@@ -170,8 +170,8 @@ async function mergeContactCompanies(fromContactId: string, toContactId: string)
  * Mueve historial conversacional si tu ConversationHistory se vincula por phoneNumber.
  */
 async function mergeConversationHistoryPhone(
-  fromPhoneNumber: string,
-  toPhoneNumber: string
+  fromPhoneNumber: string | null,
+  toPhoneNumber: string | null
 ) {
   if (!fromPhoneNumber || !toPhoneNumber) return;
 
@@ -180,7 +180,6 @@ async function mergeConversationHistoryPhone(
     data: { phoneNumber: toPhoneNumber },
   });
 }
-
 /* -------------------------------------------------
  * FUNCIONES NUEVAS (para Baileys v7: PN + LID)
  * ------------------------------------------------- */
