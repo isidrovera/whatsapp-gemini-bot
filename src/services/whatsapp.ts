@@ -664,9 +664,16 @@ async function handleIncomingMessage(
         // Refrescar por si hubo merge
         contact = await contactModel.findByPhone(phoneE164);
 
-      } 
+      } else {
+        // ✅ CASO 2: No hay mapping después de esperar - IGNORAR SILENCIOSAMENTE
+        logger.warn(`[LID-UNRESOLVED] No mapping disponible para ${senderJid}, ignorando mensaje`);
+        
+        // ✅ NO enviar mensaje al usuario
+        // ✅ NO crear shadow, NO continuar flujo
+        return;
+      }
 
-    } else {
+    } else  {
       // ✅ PN normal
       const phoneNumberRaw = normalizeJidToPhone(senderJid);
       if (!phoneNumberRaw) {
