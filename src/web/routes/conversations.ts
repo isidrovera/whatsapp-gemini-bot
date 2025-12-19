@@ -5,6 +5,7 @@ import { getPrismaClient } from '../../config/database.js';
 import { logger } from '../../utils/logger.js';
 import { sendMessage, sendMedia, getConnectionStatus, onWhatsAppExists } from '../../services/whatsapp.js';
 import { normalizePhone } from '../../utils/validators.js';
+import * as conversationModel from '../../models/conversation.js';
 
 const router = express.Router();
 const prisma = getPrismaClient();
@@ -68,7 +69,21 @@ router.get('/api/:phoneNumber', async (req, res) => {
       prisma.contact.findUnique({ where: { phoneNumber: normalizedPhone } }),
     ]);
 
-    res.json({ contact, messages });
+    // ✅ Validación agregada
+    if (!contact || !contact.phoneNumber) {
+      return res.status(404).json({ error: 'Contact not found or has no phone number' });
+    }
+
+    const history = await conversationModel.getHistory(contact.phoneNumber, 100);
+    const stats = await conversationModel.getStatistics(contact.phoneNumber);
+
+    res.json({ 
+      contact, 
+      messages,
+      history,
+      stats,
+      phoneNumber: contact.phoneNumber
+    });
   } catch (error) {
     logger.error({ err: error }, 'Error getting conversation:');
     res.status(500).json({ error: 'Error getting conversation' });
@@ -506,7 +521,8 @@ router.get('/api/new-messages/check', async (req, res) => {
       return res.json({ hasNew: false, messages: [], count: 0 });
     }
 
-    const phones = [...new Set(newMessages.map(m => m.phoneNumber))];
+    // ✅ Filtrar nulls
+    const phones = [...new Set(newMessages.map(m => m.phoneNumber).filter((p): p is string => p !== null))];
     const contacts = await prisma.contact.findMany({
       where: { phoneNumber: { in: phones } },
       select: { phoneNumber: true, name: true, isBlocked: true },
@@ -579,16 +595,14 @@ router.get('/api/connection-status', (_req, res) => {
 });
 
 /** ========== Conversaciones recientes (para dashboard) ========== **/
-// Derivado de conversationHistory (último mensaje por contacto)
 router.get('/api/recent', async (req, res) => {
   try {
     const limitParam = (req.query.limit as string) || '10';
     const limit = Math.min(parseInt(limitParam, 10) || 10, 50);
 
-    // Tomar los últimos N mensajes (de cualquier rol) y agrupar por phoneNumber, quedándonos con el más reciente por número
     const latest = await prisma.conversationHistory.findMany({
       orderBy: { createdAt: 'desc' },
-      take: 200, // sobre-muestrea para agrupar
+      take: 200,
       select: { id: true, phoneNumber: true, content: true, createdAt: true, role: true }
     });
 
@@ -599,7 +613,7 @@ router.get('/api/recent', async (req, res) => {
     }> = [];
 
     for (const m of latest) {
-      if (!seen.has(m.phoneNumber)) {
+      if (m.phoneNumber && !seen.has(m.phoneNumber)) {
         seen.add(m.phoneNumber);
         perContact.push({
           phoneNumber: m.phoneNumber,
@@ -619,7 +633,7 @@ router.get('/api/recent', async (req, res) => {
     const data = perContact.map((p, idx) => {
       const c = map.get(p.phoneNumber);
       return {
-        conversation_id: `${p.phoneNumber}-${idx}`, // no hay tabla conversation; id sintético
+        conversation_id: `${p.phoneNumber}-${idx}`,
         contact_name: c?.name || p.phoneNumber,
         phone_e164: p.phoneNumber,
         last_message: p.lastMessage?.content || '',
