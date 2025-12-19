@@ -33,7 +33,7 @@ import {
   isGroupJid,
   normalizePhone,
   extractPhoneFromJid,
-  normalizeJidToPhone,   // 👈 nuevo
+  normalizeJidToPhone, // 👈 ya lo tienes
   isLikelyRealPhone,
 } from '../utils/validators.js';
 
@@ -111,7 +111,42 @@ function isFromBotById(id?: string | null) {
 
 type UpsertType = 'notify' | 'append' | 'replace' | string;
 
+// ==================================================
+// LID/PN helpers (Baileys v7) - sin romper tu lógica
+// ==================================================
+function isLidJid(jid: string) {
+  return (jid || '').endsWith('@lid');
+}
 
+function tryResolvePnFromLidMapping(lidJid: string): string | null {
+  // ⚠️ API interna / WIP: lo hacemos ultra defensivo para no romper
+  try {
+    const anySock: any = sock as any;
+    const repo = anySock?.signalRepository;
+    const lm = repo?.lidMapping;
+
+    if (!lm) return null;
+
+    // a veces lidMapping es Map-like
+    const entry = typeof lm.get === 'function' ? lm.get(lidJid) : null;
+
+    // entry podría ser jid PN o número
+    const pnJidOrPhone = entry?.pn || entry?.jid || entry?.phoneNumber || entry || null;
+    if (!pnJidOrPhone) return null;
+
+    const digits = String(pnJidOrPhone).includes('@')
+      ? extractPhoneFromJid(String(pnJidOrPhone))
+      : String(pnJidOrPhone).replace(/\D/g, '');
+
+    if (!digits) return null;
+
+    const phoneE164 = normalizePhone(digits);
+    if (!isLikelyRealPhone(phoneE164)) return null;
+    return phoneE164;
+  } catch {
+    return null;
+  }
+}
 
 // ==================================================
 // URGENCIA
@@ -340,6 +375,45 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
 
     sock.ev.on('creds.update', saveCreds);
 
+    // ==================================================
+    // LID mapping updates (Baileys v7) - para unir LID <-> PN
+    // ==================================================
+    sock.ev.on('lid-mapping.update', async (update: any) => {
+      try {
+        // update puede variar en forma; lo manejamos defensivo
+        const items: any[] = Array.isArray(update)
+          ? update
+          : (update?.mappings || update?.updates || []);
+
+        for (const it of items) {
+          const lid = it?.lid || it?.LID || it?.id;
+          const pn =
+            it?.pn || it?.jid || it?.phoneNumber || it?.pnJid || null;
+
+          if (!lid || !pn) continue;
+
+          const pnDigits = String(pn).includes('@')
+            ? extractPhoneFromJid(String(pn))
+            : String(pn).replace(/\D/g, '');
+
+          if (!pnDigits) continue;
+
+          const phoneE164 = normalizePhone(pnDigits);
+          if (!isLikelyRealPhone(phoneE164)) continue;
+
+          // Une el shadow (LID) con el contacto real por phone
+          // (si no existe shadow, solo pega billysId)
+          await contactModel.attachLidToPhoneContact(phoneE164, String(lid));
+
+          logger.info(
+            `[LID-MAP] Attached/merged lid=${String(lid)} -> phone=${phoneE164}`
+          );
+        }
+      } catch (err) {
+        logger.warn({ err }, '[LID-MAP] error processing lid-mapping.update');
+      }
+    });
+
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
@@ -491,7 +565,6 @@ async function handleAgentMessageFromMe(
   }
 }
 
-
 // ==================================================
 // HANDLER PRINCIPAL
 // ==================================================
@@ -514,7 +587,6 @@ async function handleIncomingMessage(
       logger.debug('[WA] Ignorando mensaje de status@broadcast');
       return;
     }
-
 
     if (upsertType === 'append') {
       logger.debug('Ignoring local append upsert (likely our own send)');
@@ -551,44 +623,92 @@ async function handleIncomingMessage(
     }
 
     // ----------------------------------------------------------
-// 3) Resolver teléfono E.164 y verificar que sea "real"
-// ----------------------------------------------------------
-const phoneNumberRaw = normalizeJidToPhone(senderJid);
+    // 3) Resolver identidad (PN o LID) SIN romper el registro
+    // ----------------------------------------------------------
+    const isLid = isLidJid(senderJid);
 
-// Si no hay dígitos en el JID (por ejemplo status@broadcast), salimos
-if (!phoneNumberRaw) {
-  logger.warn(
-    `[PARSER] JID "${senderJid}" no contiene número utilizable, ignorando mensaje`
-  );
-  return;
-}
+    let phoneE164: string | null = null;
+    let contact: any = null;
 
-// AQUÍ SÍ usamos normalizePhone
-const phoneE164 = normalizePhone(phoneNumberRaw);
+    if (isLid) {
+      // 1) Buscar o crear shadow por billysId
+      contact = await contactModel.findByBillysId(senderJid);
+      if (!contact) {
+        contact = await contactModel.getOrCreateByBillysId(senderJid);
+      }
 
-// Validamos que parezca un número E.164 peruano (51 + 9 dígitos)
-if (!isLikelyRealPhone(phoneE164)) {
-  logger.error(
-    `[PARSER] No se pudo extraer un teléfono válido del JID "${senderJid}" -> "${phoneNumberRaw}" (candidate="${phoneE164}")`
-  );
-  // No creamos contacto con "teléfono raro" (LID). Preferimos ignorar
-  // este mensaje antes que contaminar la tabla contacts con phoneNumber=6503...
-  return;
-}
+      // 2) Intentar resolver PN desde mapping interno de Baileys
+      const mapped = tryResolvePnFromLidMapping(senderJid);
+      if (mapped) {
+        phoneE164 = mapped;
 
-    // 1) Bloqueos / permisos
-    const isBlockedNum = await blockedModel.isBlocked(phoneE164);
-    if (isBlockedNum) {
-      logger.info(
-        `[BLOCKED] Message from ${phoneE164} - completely blocked`
-      );
+        // 3) Si ya conocemos el PN, unimos inmediatamente LID->PN en DB
+        await contactModel.attachLidToPhoneContact(phoneE164, senderJid);
+
+        // refrescar contacto por phone (preferimos usar la cuenta real)
+        const refreshed = await contactModel.findByPhone(phoneE164);
+        if (refreshed) contact = refreshed;
+      } else {
+        // si ya tiene phoneNumber guardado (por mapping pasado), úsalo
+        phoneE164 = contact?.phoneNumber || null;
+      }
+    } else {
+      // PN normal
+      const phoneNumberRaw = normalizeJidToPhone(senderJid);
+      if (!phoneNumberRaw) {
+        logger.warn(
+          `[PARSER] JID "${senderJid}" no contiene número utilizable, ignorando mensaje`
+        );
+        return;
+      }
+
+      phoneE164 = normalizePhone(phoneNumberRaw);
+
+      // Validamos PN real (Perú)
+      if (!isLikelyRealPhone(phoneE164)) {
+        logger.error(
+          `[PARSER] No se pudo extraer un teléfono válido del JID "${senderJid}" -> "${phoneNumberRaw}" (candidate="${phoneE164}")`
+        );
+        return;
+      }
+
+      await contactModel.getOrCreate(phoneE164);
+
+      // ⚠️ pegamos billysId también (si algún día llega LID aquí, se unirá)
+      await contactModel.attachLidToPhoneContact(phoneE164, senderJid);
+
+      contact = await contactModel.findByPhone(phoneE164);
+    }
+
+    if (!contact) {
+      logger.error(`[CONTACT] No se pudo obtener/crear contacto para jid=${senderJid}`);
       return;
     }
 
-    const permissions = await blockedModel.getPermissions(phoneE164);
+    // ----------------------------------------------------------
+    // 1) Bloqueos / permisos (solo si tenemos phoneE164 real)
+    // ----------------------------------------------------------
+    if (phoneE164) {
+      const isBlockedNum = await blockedModel.isBlocked(phoneE164);
+      if (isBlockedNum) {
+        logger.info(`[BLOCKED] Message from ${phoneE164} - completely blocked`);
+        return;
+      }
+    }
 
+    // Si no hay phoneE164 (LID sin mapping), NO cortamos: respondemos igual
+    // con el mismo flujo, pero evitando contaminar DB.
+    const permissions = phoneE164
+      ? await blockedModel.getPermissions(phoneE164)
+      : await blockedModel.getPermissions('00000000000'); // fallback “permit all” (si tu modelo lo niega, dímelo y lo ajusto)
+
+    // ----------------------------------------------------------
     // 2) Human takeover vigente (en horario hábil)
-    const shouldRespond = await contactModel.shouldBotRespond(phoneE164);
+    // ----------------------------------------------------------
+    const shouldRespond = phoneE164
+      ? await contactModel.shouldBotRespond(phoneE164)
+      : true;
+
     if (!shouldRespond) {
       logger.info(
         `[BOT-PAUSED] 🤫 Skipping response for ${phoneE164} - human takeover active`
@@ -596,7 +716,9 @@ if (!isLikelyRealPhone(phoneE164)) {
       return;
     }
 
+    // ----------------------------------------------------------
     // 3) Texto y media
+    // ----------------------------------------------------------
     const rawText = extractMessageText(message);
     const mediaType = getMediaType(message);
 
@@ -605,9 +727,7 @@ if (!isLikelyRealPhone(phoneE164)) {
     let finalMessageTextFromMedia: string | null = null;
 
     if (mediaType) {
-      logger.info(
-        `[WHATSAPP] Processing ${mediaType} from ${phoneE164}...`
-      );
+      logger.info(`[WHATSAPP] Processing ${mediaType} from ${phoneE164 || senderJid}...`);
 
       try {
         if (mediaType === 'image') {
@@ -664,24 +784,20 @@ if (!isLikelyRealPhone(phoneE164)) {
     }
 
     logger.info(
-      `Message from ${phoneE164}: ${finalMessageText.substring(
+      `Message from ${phoneE164 || senderJid}: ${finalMessageText.substring(
         0,
         120
       )}... ${mediaType ? `[+${mediaType.toUpperCase()}]` : ''}`
     );
 
-    // 4) Contacto y estado
-    await contactModel.getOrCreate(phoneE164);
-    let contact = await contactModel.findByPhone(phoneE164);
-    if (!contact) {
-      logger.error(
-        `[CONTACT] Failed to create or retrieve contact for ${phoneE164}`
-      );
-      return;
-    }
+    // ----------------------------------------------------------
+    // 4) Contacto y estado (NO recrear, ya tenemos "contact")
+    // ----------------------------------------------------------
     let state = contact.state || 'NEW';
 
+    // ----------------------------------------------------------
     // 5) Horario
+    // ----------------------------------------------------------
     const status = await workingHoursModel.getStatusInfo(new Date());
     const negocioCerrado = !status?.isOpen;
 
@@ -690,7 +806,7 @@ if (!isLikelyRealPhone(phoneE164)) {
       await replyOutOfHours(senderJid);
 
       // Si dice "urgente", SOLO tag; NO takeover
-      if (esUrgente(finalMessageText)) {
+      if (phoneE164 && esUrgente(finalMessageText)) {
         await marcarUrgenteSinTakeover(phoneE164);
       }
       // Continuamos con flujo (links/AI), pero se bloquea derivación humana más abajo.
@@ -700,9 +816,7 @@ if (!isLikelyRealPhone(phoneE164)) {
     // 6) NIVEL DE ACCESO RESTRINGIDO
     // ==========================================================
     if (permissions.accessLevel === 'RESTRICTED') {
-      logger.info(
-        `[RESTRICTED] ${phoneE164} - Only auto-responses allowed`
-      );
+      logger.info(`[RESTRICTED] ${phoneE164 || senderJid} - Only auto-responses allowed`);
 
       const canUseAutoResponse = permissions.permissions.autoresponse ?? false;
 
@@ -713,7 +827,7 @@ if (!isLikelyRealPhone(phoneE164)) {
             contact: {
               name: contact.name || '',
               dni: contact.dni || '',
-              phoneNumber: phoneE164,
+              phoneNumber: phoneE164 || '',
               companyName: contact.companyName || '',
               ruc: contact.ruc || '',
             },
@@ -726,7 +840,6 @@ if (!isLikelyRealPhone(phoneE164)) {
             customVars: {},
           }
         );
-
 
         if (autoResp) {
           await sendMessage(senderJid, autoResp);
@@ -748,50 +861,56 @@ if (!isLikelyRealPhone(phoneE164)) {
     // ==========================================================
     // 7) AUTO-RESPUESTAS (si tiene permiso)
     // ==========================================================
-    // 7) AUTO-RESPUESTAS (si tiene permiso)
-const canUseAutoResponse = permissions.permissions.autoresponse ?? true;
+    const canUseAutoResponse = permissions.permissions.autoresponse ?? true;
 
-if (canUseAutoResponse) {
-  const autoResp = await autoResponseModel.findAndProcessResponse(
-    finalMessageText,
-    {
-      contact: {
-        name: contact.name || '',
-        dni: contact.dni || '',
-        phoneNumber: phoneE164,
-        companyName: contact.companyName || '',
-        ruc: contact.ruc || '',
-      },
-      company: {
-        razonSocial: contact.companyName || '',
-        numeroDoc: contact.ruc || '',
-        name: contact.companyName || '',
-        ruc: contact.ruc || '',
-      },
-      customVars: {},
+    if (canUseAutoResponse) {
+      const autoResp = await autoResponseModel.findAndProcessResponse(
+        finalMessageText,
+        {
+          contact: {
+            name: contact.name || '',
+            dni: contact.dni || '',
+            phoneNumber: phoneE164 || '',
+            companyName: contact.companyName || '',
+            ruc: contact.ruc || '',
+          },
+          company: {
+            razonSocial: contact.companyName || '',
+            numeroDoc: contact.ruc || '',
+            name: contact.companyName || '',
+            ruc: contact.ruc || '',
+          },
+          customVars: {},
+        }
+      );
+
+      if (autoResp) {
+        logger.info(`[AUTO-RESPONSE] Sent auto-response for ${phoneE164 || senderJid}`);
+        await sendMessage(senderJid, autoResp);
+
+        // 👇 CLAVE: si ya está en menú / registrado,
+        // NO seguimos al flujo de Gemini (evita el segundo mensaje).
+        if (state === 'MENU' || state === 'REGISTERED') {
+          return;
+        }
+        // Si está en NEW / WAITING_DNI / WAITING_RUC, etc. seguimos.
+      }
     }
-  );
-
-  if (autoResp) {
-    logger.info(
-      `[AUTO-RESPONSE] Sent auto-response for ${phoneE164}`
-    );
-    await sendMessage(senderJid, autoResp);
-
-    // 👇 CLAVE: si ya está en menú / registrado,
-    // NO seguimos al flujo de Gemini (evita el segundo mensaje).
-    if (state === 'MENU' || state === 'REGISTERED') {
-      return;
-    }
-    // Si está en NEW / WAITING_DNI / WAITING_RUC, etc.,
-    // dejamos que siga al bloque de registro.
-  }
-}
-
 
     // ==========================================================
     // 8) REGISTRO (DNI / RUC / EMPRESA)
     // ==========================================================
+    // ⚠️ Si NO tenemos phoneE164 real (LID sin mapping), no forzamos registro,
+    // porque tu contactModel usa phoneNumber como key para updates de estado.
+    // Respondemos pidiendo reintentar "menu" para que ya entre con PN/mapping.
+    if (!phoneE164) {
+      await sendMessage(
+        senderJid,
+        '✅ Te leo bien. Para continuar, envíame "menu" o vuelve a escribir tu mensaje (WhatsApp a veces cambia el identificador y se sincroniza en segundos).'
+      );
+      return;
+    }
+
     if (state === 'NEW') {
       await contactModel.updateState(phoneE164, 'WAITING_DNI');
       await sendMessage(
@@ -827,11 +946,7 @@ if (canUseAutoResponse) {
 
       const nombreCompleto = `${persona.nombres} ${persona.apellidoPaterno} ${persona.apellidoMaterno}`.trim();
 
-      await contactModel.updateDNI(
-        phoneE164,
-        dniCandidate,
-        nombreCompleto
-      );
+      await contactModel.updateDNI(phoneE164, dniCandidate, nombreCompleto);
 
       await sendMessage(
         senderJid,
@@ -968,11 +1083,7 @@ if (canUseAutoResponse) {
         return;
       }
 
-      await contactModel.updateRUC(
-        phoneE164,
-        provisionalRuc,
-        razonSocialManual
-      );
+      await contactModel.updateRUC(phoneE164, provisionalRuc, razonSocialManual);
 
       contact = await contactModel.findByPhone(phoneE164);
       if (!contact) {
@@ -1057,9 +1168,7 @@ if (canUseAutoResponse) {
         const canUseOdoo = permissions.permissions.odoo ?? true;
 
         if (!canUseOdoo) {
-          logger.warn(
-            `[PERMISSION-DENIED] ${phoneE164} - odoo access denied`
-          );
+          logger.warn(`[PERMISSION-DENIED] ${phoneE164} - odoo access denied`);
           await sendMessage(
             senderJid,
             '⚠️ No tienes permiso para consultar información de servicio técnico.'
@@ -1090,9 +1199,7 @@ if (canUseAutoResponse) {
         const canCreateTickets = permissions.permissions.tickets ?? true;
 
         if (!canCreateTickets) {
-          logger.warn(
-            `[PERMISSION-DENIED] ${phoneE164} - tickets access denied`
-          );
+          logger.warn(`[PERMISSION-DENIED] ${phoneE164} - tickets access denied`);
           await sendMessage(
             senderJid,
             '⚠️ No tienes permiso para crear solicitudes de tóner.'
@@ -1159,9 +1266,7 @@ if (canUseAutoResponse) {
 
         const canTalkToHuman = permissions.permissions.human ?? true;
         if (!canTalkToHuman) {
-          logger.warn(
-            `[PERMISSION-DENIED] ${phoneE164} - human access denied`
-          );
+          logger.warn(`[PERMISSION-DENIED] ${phoneE164} - human access denied`);
           await sendMessage(
             senderJid,
             '⚠️ No puedes solicitar atención humana en este momento. ' +
@@ -1178,7 +1283,7 @@ if (canUseAutoResponse) {
         return;
       }
 
-      // Intents libres (servicio / tóner) — permitidos off-hours (vía link)
+      // Intents libres (servicio / tóner)
       if (detectServiceIntent(finalMessageText)) {
         const canUseOdoo = permissions.permissions.odoo ?? true;
         if (!canUseOdoo) {
@@ -1233,29 +1338,26 @@ if (canUseAutoResponse) {
         return;
       }
 
-      // Fallback Gemini (permitido off-hours)
+      // Fallback Gemini
       const canUseAI = permissions.permissions.ai ?? true;
       if (canUseAI) {
         const mediaAnalysisJson =
-  mediaAnalysisResult ? JSON.stringify(mediaAnalysisResult, null, 2) : '';
+          mediaAnalysisResult ? JSON.stringify(mediaAnalysisResult, null, 2) : '';
 
         const responseFromGemini = await geminiService.processMessage(
           phoneE164,
           finalMessageText,
           !!mediaType,
-          mediaAnalysisJson,                         // string siempre
-          anydeskCode ?? '',                         // string
+          mediaAnalysisJson, // string siempre
+          anydeskCode ?? '', // string
           mediaAnalysisResult?.mediaTypeClass ?? '', // string
           mediaAnalysisResult?.detectedErrorCode ?? '', // string
-          mediaAnalysisResult?.detectedSerial ?? ''  // string
+          mediaAnalysisResult?.detectedSerial ?? '' // string
         );
-
 
         await sendMessage(senderJid, responseFromGemini);
       } else {
-        logger.warn(
-          `[PERMISSION-DENIED] ${phoneE164} - AI access denied`
-        );
+        logger.warn(`[PERMISSION-DENIED] ${phoneE164} - AI access denied`);
         await sendMessage(
           senderJid,
           'Lo siento, no puedo procesar tu mensaje en este momento. ' +
@@ -1315,7 +1417,6 @@ if (canUseAutoResponse) {
   }
 }
 
-
 // ==================================================
 // ENVÍO DE MENSAJES
 // ==================================================
@@ -1353,8 +1454,6 @@ export async function sendDirectMessage(to: string, text: string) {
   let jid: string;
 
   // 1) Si ya viene como JID (grupo o contacto), lo usamos tal cual
-  //    Ej: 51924894829-1599154643@g.us  (grupo)
-  //        51999999999@s.whatsapp.net   (contacto)
   if (trimmed.includes('@')) {
     jid = trimmed;
   } else {
@@ -1375,17 +1474,13 @@ export async function sendDirectMessage(to: string, text: string) {
       logger.debug(`Marked bot message id=${sentId} (API direct)`);
     }
 
-    logger.info(
-      `(API) Message sent to ${jid}: ${text.substring(0, 80)}...`
-    );
+    logger.info(`(API) Message sent to ${jid}: ${text.substring(0, 80)}...`);
     return resp;
   } catch (error) {
     logger.error({ err: error }, 'Error sending direct message:');
     throw error;
   }
 }
-
-
 
 // ==================================================
 // ENVÍO DE MEDIA
@@ -1427,8 +1522,7 @@ export async function sendMedia(to: string, payload: SendMediaPayload) {
   }
 
   const { buffer, mime, fileName, caption } = payload;
-  const kind =
-    payload.kind ?? (mime.split('/')[0] as SendMediaPayload['kind']);
+  const kind = payload.kind ?? (mime.split('/')[0] as SendMediaPayload['kind']);
 
   try {
     let resp: any;
@@ -1478,7 +1572,6 @@ export async function sendMedia(to: string, payload: SendMediaPayload) {
   }
 }
 
-
 export async function sendMediaToPhone(
   phoneOrJid: string,
   payload: SendMediaPayload
@@ -1509,8 +1602,6 @@ export async function sendMediaToPhone(
   return sendMedia(jid, payload);
 }
 
-
-
 // ==================================================
 // ESTADO / QR / CONEXIÓN
 // ==================================================
@@ -1540,14 +1631,14 @@ export function getQRCode(): string | null {
 export function getQRDataURL(): string | null {
   return qrDataURL;
 }
-export function hasQR(): boolean {
-  return currentQR !== null;
+export function hasQR(): string | null {
+  return currentQR !== null ? currentQR : null;
 }
 
 export function getStatusForDashboard() {
   return {
     connected: isReady,
-    hasQR: hasQR(),
+    hasQR: currentQR !== null,
     botNumber: botPhoneNumber || null,
   };
 }
@@ -1583,13 +1674,15 @@ export async function forceNewQRState(): Promise<void> {
 // ==================================================
 // OBTENER GRUPOS DE WHATSAPP
 // ==================================================
-export async function getWhatsAppGroups(): Promise<Array<{
-  id: string;
-  name: string;
-  participants: number;
-  createdAt: string | null;
-  description: string | null;
-}>> {
+export async function getWhatsAppGroups(): Promise<
+  Array<{
+    id: string;
+    name: string;
+    participants: number;
+    createdAt: string | null;
+    description: string | null;
+  }>
+> {
   if (!sock || !isReady) {
     logger.error('[WhatsApp] Client not ready to fetch groups');
     throw new Error('WhatsApp client not ready');
@@ -1599,7 +1692,7 @@ export async function getWhatsAppGroups(): Promise<Array<{
     logger.info('[WhatsApp] Fetching WhatsApp groups...');
 
     const chats = await sock.groupFetchAllParticipating();
-    
+
     if (!chats || Object.keys(chats).length === 0) {
       logger.warn('[WhatsApp] No groups found');
       return [];
@@ -1609,21 +1702,18 @@ export async function getWhatsAppGroups(): Promise<Array<{
       id: chat.id,
       name: chat.subject || 'Sin nombre',
       participants: chat.participants?.length || 0,
-      createdAt: chat.creation 
-        ? new Date(chat.creation * 1000).toISOString() 
-        : null,
+      createdAt: chat.creation ? new Date(chat.creation * 1000).toISOString() : null,
       description: chat.desc || null,
     }));
 
     logger.info(`✅ [WhatsApp] Found ${groups.length} groups`);
-    
+
     return groups;
   } catch (error) {
     logger.error({ err: error }, '❌ [WhatsApp] Error fetching groups:');
     throw error;
   }
 }
-
 
 export async function disconnect(): Promise<void> {
   await disconnectSession();

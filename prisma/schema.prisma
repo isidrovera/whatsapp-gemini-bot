@@ -51,7 +51,7 @@ model TrustedDevice {
 
 model Contact {
   id              String                @id @default(uuid())
-  phoneNumber     String                @unique @map("phone_number")
+  phoneNumber     String?               @unique @map("phone_number")
   billysId        String?               @unique @map("billys_id")
   name            String?
   dni             String?               @unique
@@ -68,6 +68,7 @@ model Contact {
 
   @@map("contacts")
 }
+
 
 model Company {
   id                 String           @id @default(uuid())

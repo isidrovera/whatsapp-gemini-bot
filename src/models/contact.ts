@@ -30,13 +30,11 @@ function isValidRUC(ruc: string) {
  * y desmarca las demás del mismo contacto.
  */
 async function setPrimaryCompanyInternal(contactId: string, companyId: string) {
-  // Desmarcar todas las empresas del contacto
   await prisma.contactCompany.updateMany({
     where: { contactId },
     data: { isPrimary: false },
   });
 
-  // Marcar esta como primaria
   return prisma.contactCompany.updateMany({
     where: { contactId, companyId },
     data: { isPrimary: true },
@@ -56,7 +54,6 @@ async function getOrCreateCompany(ruc: string, name: string) {
     throw new Error('RUC y razón social requeridos para la empresa');
   }
 
-  // buscamos empresa existente por ruc legacy o numeroDoc
   let existing = await prisma.company.findFirst({
     where: {
       OR: [{ ruc: cleanedRuc }, { numeroDoc: cleanedRuc }],
@@ -64,21 +61,12 @@ async function getOrCreateCompany(ruc: string, name: string) {
   });
 
   if (existing) {
-    // merge defensivo por si faltan algunos campos
     const patchData: Record<string, any> = {};
 
-    if (!existing.razonSocial && cleanedName) {
-      patchData.razonSocial = cleanedName;
-    }
-    if (!existing.name && cleanedName) {
-      patchData.name = cleanedName;
-    }
-    if (!existing.numeroDoc) {
-      patchData.numeroDoc = cleanedRuc;
-    }
-    if (!existing.ruc) {
-      patchData.ruc = cleanedRuc;
-    }
+    if (!existing.razonSocial && cleanedName) patchData.razonSocial = cleanedName;
+    if (!existing.name && cleanedName) patchData.name = cleanedName;
+    if (!existing.numeroDoc) patchData.numeroDoc = cleanedRuc;
+    if (!existing.ruc) patchData.ruc = cleanedRuc;
 
     if (Object.keys(patchData).length > 0) {
       existing = await prisma.company.update({
@@ -90,7 +78,6 @@ async function getOrCreateCompany(ruc: string, name: string) {
     return existing;
   }
 
-  // crear nueva empresa
   return prisma.company.create({
     data: {
       tipoDoc: 'RUC',
@@ -104,14 +91,292 @@ async function getOrCreateCompany(ruc: string, name: string) {
   });
 }
 
+/**
+ * Genera un phoneNumber "shadow" único para contactos creados solo por @lid.
+ * No es un número real; sirve para cumplir el NOT NULL + UNIQUE del schema.
+ */
+function makeShadowPhoneFromBillysId(billysId: string) {
+  // estable y UNIQUE (porque billysId es unique)
+  // evita usar caracteres raros; prisma/sql lo soporta igual, pero lo dejamos limpio
+  const safe = (billysId || '').replace(/[^a-zA-Z0-9@._-]/g, '');
+  return `lid:${safe}`;
+}
+
+/**
+ * Merge seguro de pivots contactCompany del shadow al real, evitando duplicados.
+ */
+async function mergeContactCompanies(fromContactId: string, toContactId: string) {
+  const fromPivots = await prisma.contactCompany.findMany({
+    where: { contactId: fromContactId },
+  });
+
+  for (const p of fromPivots) {
+    const existing = await prisma.contactCompany.findFirst({
+      where: {
+        contactId: toContactId,
+        companyId: p.companyId,
+      },
+    });
+
+    if (!existing) {
+      // crear pivot equivalente en el contacto real
+      await prisma.contactCompany.create({
+        data: {
+          contactId: toContactId,
+          companyId: p.companyId,
+          role: p.role || null,
+          isPrimary: !!p.isPrimary,
+        },
+      });
+    } else {
+      // merge suave: si el shadow tenía role y el real no, copiar
+      // y si el shadow era primary, lo respetamos luego con setPrimaryCompanyInternal
+      const patch: any = {};
+      if (!existing.role && p.role) patch.role = p.role;
+      // NO tocamos existing.isPrimary aquí directamente para evitar inconsistencias,
+      // se ajusta con setPrimaryCompanyInternal si hace falta.
+      if (Object.keys(patch).length > 0) {
+        await prisma.contactCompany.update({
+          where: { id: existing.id },
+          data: patch,
+        });
+      }
+    }
+  }
+
+  // borrar pivots del shadow
+  await prisma.contactCompany.deleteMany({
+    where: { contactId: fromContactId },
+  });
+}
+
+/**
+ * Mueve historial conversacional si tu ConversationHistory se vincula por phoneNumber.
+ */
+async function mergeConversationHistoryPhone(
+  fromPhoneNumber: string,
+  toPhoneNumber: string
+) {
+  if (!fromPhoneNumber || !toPhoneNumber) return;
+
+  // Si tu ConversationHistory usa phoneNumber (como en tu deleteContact), movemos todo
+  await prisma.conversationHistory.updateMany({
+    where: { phoneNumber: fromPhoneNumber },
+    data: { phoneNumber: toPhoneNumber },
+  });
+}
+
+/* -------------------------------------------------
+ * FUNCIONES NUEVAS (para Baileys v7: PN + LID)
+ * ------------------------------------------------- */
+
+/**
+ * getOrCreateByBillysId:
+ * - crea un contacto "shadow" cuando solo llega @lid (billysId),
+ *   con phoneNumber sintético UNIQUE.
+ * - si ya existe, lo devuelve.
+ */
+export async function getOrCreateByBillysId(billysId: string) {
+  try {
+    const existing = await prisma.contact.findUnique({
+      where: { billysId },
+      include: {
+        companies: { include: { company: true } },
+      },
+    });
+    if (existing) return existing;
+
+    const shadowPhone = makeShadowPhoneFromBillysId(billysId);
+
+    // Race-safe: si por alguna razón ya existe el phone, lo ajustamos
+    try {
+      return await prisma.contact.create({
+        data: {
+          phoneNumber: shadowPhone,
+          billysId,
+          state: 'NEW',
+        },
+        include: {
+          companies: { include: { company: true } },
+        },
+      });
+    } catch (err: any) {
+      // Puede chocar por UNIQUE si otra corrida creó el mismo billysId
+      logger.warn({ err }, 'Race on contact.create (by billysId), retrying findUnique...');
+      return await prisma.contact.findUnique({
+        where: { billysId },
+        include: {
+          companies: { include: { company: true } },
+        },
+      });
+    }
+  } catch (error) {
+    logger.error({ err: error }, 'Error in getOrCreateByBillysId:');
+    throw error;
+  }
+}
+
+/**
+ * attachLidToPhoneContact:
+ * - asegura que el contacto REAL por phoneNumber tenga billysId = @lid
+ * - si existe un contacto shadow con ese billysId, lo MERGE al real:
+ *    - mueve ContactCompany
+ *    - mueve ConversationHistory (phoneNumber shadow -> real)
+ *    - elimina shadow
+ *
+ * Importante: esto evita que el usuario "se vuelva a registrar" cuando llega @lid luego.
+ */
+export async function attachLidToPhoneContact(phoneNumber: string, billysId: string) {
+  const phone = normalizePhone(phoneNumber);
+
+  if (!phone || !billysId) return null;
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // 1) contacto real por phone
+      let real = await tx.contact.findUnique({
+        where: { phoneNumber: phone },
+      });
+
+      if (!real) {
+        // Si no existe, lo creamos (estado NEW)
+        real = await tx.contact.create({
+          data: { phoneNumber: phone, state: 'NEW' },
+        });
+      }
+
+      // 2) contacto shadow por billysId
+      const shadow = await tx.contact.findUnique({
+        where: { billysId },
+      });
+
+      // 3) Si no hay shadow, solo pegamos billysId al real (si está libre)
+      if (!shadow) {
+        if (!real.billysId) {
+          // si el real no tiene billysId, lo seteamos
+          real = await tx.contact.update({
+            where: { id: real.id },
+            data: { billysId },
+          });
+        } else if (real.billysId !== billysId) {
+          // real ya tiene otro billysId: no lo pisamos (evita problemas de UNIQUE)
+          // si quisieras permitir reemplazo, aquí habría que validar que no exista ese billysId.
+        }
+        return real;
+      }
+
+      // 4) Si shadow == real, ya está todo ok
+      if (shadow.id === real.id) {
+        return real;
+      }
+
+      // 5) MERGE shadow -> real (evitando UNIQUE de billysId)
+      //    a) mover empresas (con prisma "general" porque en tx no tenemos helpers; repetimos lógica)
+      const shadowPivots = await tx.contactCompany.findMany({
+        where: { contactId: shadow.id },
+      });
+
+      for (const p of shadowPivots) {
+        const exists = await tx.contactCompany.findFirst({
+          where: { contactId: real.id, companyId: p.companyId },
+        });
+
+        if (!exists) {
+          await tx.contactCompany.create({
+            data: {
+              contactId: real.id,
+              companyId: p.companyId,
+              role: p.role || null,
+              isPrimary: !!p.isPrimary,
+            },
+          });
+        } else {
+          // merge suave role
+          if (!exists.role && p.role) {
+            await tx.contactCompany.update({
+              where: { id: exists.id },
+              data: { role: p.role },
+            });
+          }
+        }
+      }
+
+      // borrar pivots shadow
+      await tx.contactCompany.deleteMany({
+        where: { contactId: shadow.id },
+      });
+
+      //    b) mover conversation history si aplica (por phoneNumber)
+      //       - shadow.phoneNumber es sintético tipo "lid:xxx"
+      //       - lo movemos al phone real
+      await tx.conversationHistory.updateMany({
+        where: { phoneNumber: shadow.phoneNumber },
+        data: { phoneNumber: real.phoneNumber },
+      });
+
+      //    c) si shadow tenía datos y real no, copiamos (merge defensivo)
+      const patch: any = {};
+      if (!real.name && shadow.name) patch.name = shadow.name;
+      if (!real.dni && shadow.dni) patch.dni = shadow.dni;
+      if (!real.companyName && shadow.companyName) patch.companyName = shadow.companyName;
+      // ruc legacy: solo copiar si real no tiene y no rompe unique (puede romper si ya existe en otro contacto)
+      // lo evitamos por seguridad:
+      // if (!real.ruc && shadow.ruc) patch.ruc = shadow.ruc;
+
+      if (Object.keys(patch).length > 0) {
+        real = await tx.contact.update({
+          where: { id: real.id },
+          data: patch,
+        });
+      }
+
+      //    d) eliminar shadow (libera el UNIQUE billysId para el real)
+      await tx.contact.delete({
+        where: { id: shadow.id },
+      });
+
+      //    e) asegurar billysId en real (ya no hay conflicto)
+      if (real.billysId !== billysId) {
+        real = await tx.contact.update({
+          where: { id: real.id },
+          data: { billysId },
+        });
+      }
+
+      //    f) si el shadow traía una primaria marcada, dejamos primaria consistente:
+      //       - buscamos pivots en real con isPrimary true (si hay 2, corregimos)
+      const primaries = await tx.contactCompany.findMany({
+        where: { contactId: real.id, isPrimary: true },
+      });
+
+      if (primaries.length > 1) {
+        // dejamos la primera como primaria y desmarcamos el resto
+        const keep = primaries[0];
+        await tx.contactCompany.updateMany({
+          where: { contactId: real.id },
+          data: { isPrimary: false },
+        });
+        await tx.contactCompany.update({
+          where: { id: keep.id },
+          data: { isPrimary: true },
+        });
+      }
+
+      return real;
+    });
+
+    return result;
+  } catch (error) {
+    logger.error({ err: error }, 'Error in attachLidToPhoneContact:');
+    // No reventamos el bot por esto: devolvemos null y seguimos
+    return null;
+  }
+}
+
 /* -------------------------------------------------
  * FUNCIONES EXPORTADAS DE APOYO MULTIEMPRESA
  * ------------------------------------------------- */
 
-/**
- * Vincula una empresa existente (companyId ya conocido) a un contacto.
- * Opcionalmente la marca como principal.
- */
 export async function linkExistingCompanyToContact(
   contactId: string,
   opts: {
@@ -121,7 +386,6 @@ export async function linkExistingCompanyToContact(
   }
 ) {
   try {
-    // 1. asegurar que la empresa exista
     const company = await prisma.company.findUnique({
       where: { id: opts.companyId },
     });
@@ -129,7 +393,6 @@ export async function linkExistingCompanyToContact(
       throw new Error('Empresa no encontrada');
     }
 
-    // 2. asegurar relación pivot
     let pivot = await prisma.contactCompany.findFirst({
       where: {
         contactId,
@@ -147,7 +410,6 @@ export async function linkExistingCompanyToContact(
         },
       });
     } else {
-      // si ya existe, podemos actualizar role
       if (opts.role !== undefined) {
         pivot = await prisma.contactCompany.update({
           where: { id: pivot.id },
@@ -156,41 +418,24 @@ export async function linkExistingCompanyToContact(
       }
     }
 
-    // 3. si pidió "principal", marcamos esta como primary
     if (opts.isPrimary) {
       await setPrimaryCompanyInternal(contactId, opts.companyId);
 
-      // reflejar en contact.companyName;
-      // ⚠ ya NO seteamos contact.ruc porque contact.ruc es UNIQUE
       await prisma.contact.update({
         where: { id: contactId },
         data: {
-          companyName:
-            company.name ||
-            company.razonSocial ||
-            'SIN RAZON SOCIAL',
+          companyName: company.name || company.razonSocial || 'SIN RAZON SOCIAL',
         },
       });
     }
 
     return pivot;
   } catch (error) {
-    logger.error({ err: error },'Error linking existing company:');
+    logger.error({ err: error }, 'Error linking existing company:');
     throw error;
   }
 }
 
-/**
- * Intenta:
- *  - Buscar contacto por phoneNumber
- *  - Buscar company existente por RUC/numeroDoc
- *  - Vincular esa company al contacto si existe
- *  - Marcarla primaria
- *  - Actualizar contact.companyName y state='REGISTERED'
- *
- * Importante: ya NO escribimos contact.ruc
- * porque ese campo es UNIQUE en Contact y rompe si varios contactos usan el mismo RUC.
- */
 export async function linkExistingCompanyByRucAndSetPrimary(
   phoneNumber: string,
   ruc: string
@@ -202,7 +447,6 @@ export async function linkExistingCompanyByRucAndSetPrimary(
       return { ok: false, reason: 'INVALID_RUC' };
     }
 
-    // 1. asegurar contacto
     const contact = await prisma.contact.findUnique({
       where: { phoneNumber: phone },
     });
@@ -210,7 +454,6 @@ export async function linkExistingCompanyByRucAndSetPrimary(
       return { ok: false, reason: 'CONTACT_NOT_FOUND' };
     }
 
-    // 2. buscar empresa ya existente con ese RUC
     const existingCompany = await prisma.company.findFirst({
       where: {
         OR: [{ ruc }, { numeroDoc: ruc }],
@@ -218,14 +461,12 @@ export async function linkExistingCompanyByRucAndSetPrimary(
     });
 
     if (!existingCompany) {
-      // no hay empresa aún → necesitamos pedir razón social más adelante
       logger.info(
         `[RUC-LINK] Empresa con RUC ${ruc} no existe aún. Se pedirá razón social`
       );
       return { ok: false, reason: 'COMPANY_NOT_FOUND' };
     }
 
-    // 3. asegurar pivot contact_company
     let pivot = await prisma.contactCompany.findFirst({
       where: {
         contactId: contact.id,
@@ -244,11 +485,8 @@ export async function linkExistingCompanyByRucAndSetPrimary(
       });
     }
 
-    // 4. marcar como primaria
     await setPrimaryCompanyInternal(contact.id, existingCompany.id);
 
-    // 5. reflejar SOLO companyName + state en el contacto
-    //    ⚠ NO seteamos contact.ruc porque es UNIQUE en Contact
     await prisma.contact.update({
       where: { id: contact.id },
       data: {
@@ -262,7 +500,10 @@ export async function linkExistingCompanyByRucAndSetPrimary(
 
     return { ok: true };
   } catch (error) {
-    logger.error({ err: error },'linkExistingCompanyByRucAndSetPrimary error:');
+    logger.error(
+      { err: error },
+      'linkExistingCompanyByRucAndSetPrimary error:'
+    );
     return { ok: false, reason: 'EXCEPTION' };
   }
 }
@@ -271,10 +512,6 @@ export async function linkExistingCompanyByRucAndSetPrimary(
  * LECTURA / CONSULTA
  * ------------------------------------------------- */
 
-/**
- * Busca contacto por teléfono normalizado (E.164 sin '+').
- * Incluye sus empresas asociadas.
- */
 export async function findByPhone(phoneNumber: string) {
   try {
     const phone = normalizePhone(phoneNumber);
@@ -289,14 +526,11 @@ export async function findByPhone(phoneNumber: string) {
       },
     });
   } catch (error) {
-    logger.error({ err: error },'Error finding contact by phone:');
+    logger.error({ err: error }, 'Error finding contact by phone:');
     return null;
   }
 }
 
-/**
- * Busca contacto por billysId (ID técnico WhatsApp ej "5192...@c.us")
- */
 export async function findByBillysId(billysId: string) {
   try {
     return await prisma.contact.findUnique({
@@ -310,15 +544,11 @@ export async function findByBillysId(billysId: string) {
       },
     });
   } catch (error) {
-    logger.error({ err: error },'Error finding contact by billysId:');
+    logger.error({ err: error }, 'Error finding contact by billysId:');
     return null;
   }
 }
 
-/**
- * Lista todos los contactos (más recientes primero)
- * Enriquecidos con su empresa primaria calculada.
- */
 export async function getAll(limit?: number, offset?: number) {
   try {
     const contacts = await prisma.contact.findMany({
@@ -334,7 +564,6 @@ export async function getAll(limit?: number, offset?: number) {
       },
     });
 
-    // pre-formatear para la vista
     return contacts.map((c) => {
       const { companyName, ruc } = resolvePrimaryCompany(c);
 
@@ -354,28 +583,21 @@ export async function getAll(limit?: number, offset?: number) {
       };
     });
   } catch (error) {
-    logger.error({ err: error },'Error getting all contacts:');
+    logger.error({ err: error }, 'Error getting all contacts:');
     return [];
   }
 }
 
-/**
- * ¿Está registrado?
- */
 export async function isRegistered(phoneNumber: string): Promise<boolean> {
   try {
     const contact = await findByPhone(phoneNumber);
     return contact?.state === 'REGISTERED';
   } catch (error) {
-    logger.error({ err: error },'Error checking registration:');
+    logger.error({ err: error }, 'Error checking registration:');
     return false;
   }
 }
 
-/**
- * Devuelve TODAS las empresas asociadas a un contacto,
- * con su RUC, rol y si es la principal.
- */
 export async function getAllCompaniesForContact(contactId: string) {
   try {
     const contact = await prisma.contact.findUnique({
@@ -402,23 +624,13 @@ export async function getAllCompaniesForContact(contactId: string) {
       isPrimary: cc.isPrimary || false,
     }));
   } catch (error) {
-    logger.error({ err: error },'Error getting companies for contact:');
+    logger.error({ err: error }, 'Error getting companies for contact:');
     return [];
   }
 }
 
-/**
- * Retorna { companyName, ruc } para la empresa primaria del contacto.
- * Si no hay primaria, intenta la primera. Si no hay ninguna, cae a los campos legacy.
- *
- * ⚠ Esta función la usa whatsapp.ts (buildMainMenu, generateOdooLinkForContact)
- * así que debe ser exportada.
- */
 export function resolvePrimaryCompany(contact: any) {
-  // contact.companies: ContactCompany[] con { isPrimary, role, company: { name, razonSocial, ruc, numeroDoc } }
-
   if (contact?.companies && contact.companies.length > 0) {
-    // buscar la primary explícita
     const primary = contact.companies.find((cc: any) => cc.isPrimary);
     const chosen = primary || contact.companies[0];
     if (chosen && chosen.company) {
@@ -437,7 +649,6 @@ export function resolvePrimaryCompany(contact: any) {
     }
   }
 
-  // fallback legacy
   return {
     companyName: contact?.companyName ?? null,
     ruc: contact?.ruc ?? null,
@@ -448,9 +659,6 @@ export function resolvePrimaryCompany(contact: any) {
  * CREAR / OBTENER
  * ------------------------------------------------- */
 
-/**
- * Crea contacto NUEVO (lanza si ya existe)
- */
 export async function create(phoneNumber: string, billysId?: string) {
   try {
     const phone = normalizePhone(phoneNumber);
@@ -463,21 +671,11 @@ export async function create(phoneNumber: string, billysId?: string) {
       },
     });
   } catch (error: any) {
-    logger.error({ err: error },'Error creating contact:');
+    logger.error({ err: error }, 'Error creating contact:');
     throw error;
   }
 }
 
-/**
- * getOrCreate:
- * - normaliza phone
- * - busca por phone
- * - si existe:
- *    - si no tiene billysId y recibimos uno → lo seteamos
- * - si NO existe:
- *    - creamos con state=NEW (y billysId si viene)
- * Maneja race condition.
- */
 export async function getOrCreate(phoneNumber: string) {
   const phone = normalizePhone(phoneNumber);
   const existing = await findByPhone(phone);
@@ -495,8 +693,8 @@ export async function getOrCreate(phoneNumber: string) {
 
 /**
  * linkBillysId:
- *  - asigna billysId a un contacto existente identificado por phoneNumber
- *  - sólo si ese contacto aún no tiene billysId
+ * - asigna billysId a un contacto existente identificado por phoneNumber
+ * - sólo si ese contacto aún no tiene billysId
  */
 export async function linkBillysId(phoneNumber: string, billysId: string) {
   try {
@@ -517,7 +715,6 @@ export async function linkBillysId(phoneNumber: string, billysId: string) {
     }
 
     if (contact.billysId) {
-      // ya tiene billysId, no lo sobreescribimos
       return contact;
     }
 
@@ -526,7 +723,7 @@ export async function linkBillysId(phoneNumber: string, billysId: string) {
       data: { billysId },
     });
   } catch (error) {
-    logger.error({ err: error },'Error linking billysId:');
+    logger.error({ err: error }, 'Error linking billysId:');
     throw error;
   }
 }
@@ -535,14 +732,7 @@ export async function linkBillysId(phoneNumber: string, billysId: string) {
  * ACTUALIZACIONES DE IDENTIDAD / ESTADO
  * ------------------------------------------------- */
 
-/**
- * Actualiza DNI y nombre; pasa a WAITING_RUC
- */
-export async function updateDNI(
-  phoneNumber: string,
-  dni: string,
-  name: string
-) {
+export async function updateDNI(phoneNumber: string, dni: string, name: string) {
   try {
     const phone = normalizePhone(phoneNumber);
 
@@ -559,22 +749,11 @@ export async function updateDNI(
       },
     });
   } catch (error) {
-    logger.error({ err: error },'Error updating DNI:');
+    logger.error({ err: error }, 'Error updating DNI:');
     throw error;
   }
 }
 
-/**
- * Actualiza RUC y razón social; pasa a REGISTERED
- *
- * - asegura/crea Company
- * - asegura pivot ContactCompany
- * - marca esa empresa como primaria
- * - actualiza contact.companyName y state='REGISTERED'
- *
- * ⚠ YA NO escribe contact.ruc (para no violar UNIQUE si
- * varios contactos usan el mismo RUC)
- */
 export async function updateRUC(
   phoneNumber: string,
   ruc: string,
@@ -587,16 +766,13 @@ export async function updateRUC(
       throw new Error(`RUC inválido: ${ruc}`);
     }
 
-    // 1. asegurar contacto
     const contact = await prisma.contact.findUnique({
       where: { phoneNumber: phone },
     });
     if (!contact) throw new Error('Contacto no encontrado');
 
-    // 2. asegurar company (crea si no existe)
     const company = await getOrCreateCompany(ruc, companyName);
 
-    // 3. asegurar pivot ContactCompany
     let pivot = await prisma.contactCompany.findFirst({
       where: {
         contactId: contact.id,
@@ -615,29 +791,21 @@ export async function updateRUC(
       });
     }
 
-    // 4. marcar esa empresa como primaria para este contacto
     await setPrimaryCompanyInternal(contact.id, company.id);
 
-    // 5. actualizar contacto legacy + estado
     return await prisma.contact.update({
       where: { phoneNumber: phone },
       data: {
-        companyName:
-          company.name ||
-          company.razonSocial ||
-          companyName,
+        companyName: company.name || company.razonSocial || companyName,
         state: 'REGISTERED',
       },
     });
   } catch (error) {
-    logger.error({ err: error },'Error updating RUC:');
+    logger.error({ err: error }, 'Error updating RUC:');
     throw error;
   }
 }
 
-/**
- * Cambia el estado (NEW / WAITING_DNI / WAITING_RUC / REGISTERED / etc.)
- */
 export async function updateState(phoneNumber: string, state: string) {
   try {
     const phone = normalizePhone(phoneNumber);
@@ -646,19 +814,11 @@ export async function updateState(phoneNumber: string, state: string) {
       data: { state },
     });
   } catch (error) {
-    logger.error({ err: error },'Error updating state:');
+    logger.error({ err: error }, 'Error updating state:');
     throw error;
   }
 }
 
-/**
- * Edición manual desde panel:
- * - nombre
- * - dni
- * - state
- * - isBlocked
- * - humanTakeoverAt (forzado)
- */
 export async function updateContactInfo(
   contactId: string,
   patch: {
@@ -689,7 +849,7 @@ export async function updateContactInfo(
       data,
     });
   } catch (error) {
-    logger.error({ err: error },'Error updating contact info:');
+    logger.error({ err: error }, 'Error updating contact info:');
     throw error;
   }
 }
@@ -698,13 +858,6 @@ export async function updateContactInfo(
  * MULTIEMPRESA
  * ------------------------------------------------- */
 
-/**
- * Agrega o asegura una empresa en el contacto.
- * Si isPrimary = true, la deja como principal.
- *
- * ⚠ Cuando marcamos como primaria ya NO seteamos contact.ruc,
- * solo contact.companyName (para evitar UNIQUE en Contact.ruc).
- */
 export async function addCompanyToContact(
   contactId: string,
   opts: {
@@ -719,10 +872,8 @@ export async function addCompanyToContact(
       throw new Error(`RUC inválido: ${opts.ruc}`);
     }
 
-    // asegurar empresa
     const company = await getOrCreateCompany(opts.ruc, opts.name);
 
-    // asegurar vínculo
     let pivot = await prisma.contactCompany.findFirst({
       where: {
         contactId,
@@ -740,7 +891,6 @@ export async function addCompanyToContact(
         },
       });
     } else {
-      // actualizar role si vino
       if (opts.role !== undefined) {
         pivot = await prisma.contactCompany.update({
           where: { id: pivot.id },
@@ -749,42 +899,26 @@ export async function addCompanyToContact(
       }
     }
 
-    // marcar primaria si se pidió
     if (opts.isPrimary) {
       await setPrimaryCompanyInternal(contactId, company.id);
 
-      // reflejar en contacto legacy SOLO companyName
       await prisma.contact.update({
         where: { id: contactId },
         data: {
-          companyName:
-            company.name ||
-            company.razonSocial ||
-            opts.name ||
-            null,
+          companyName: company.name || company.razonSocial || opts.name || null,
         },
       });
     }
 
     return pivot;
   } catch (error) {
-    logger.error({ err: error },'Error adding company to contact:');
+    logger.error({ err: error }, 'Error adding company to contact:');
     throw error;
   }
 }
 
-/**
- * Cambia la empresa principal del contacto.
- *
- * Ya NO seteamos contact.ruc aquí (por el UNIQUE),
- * solo actualizamos companyName.
- */
-export async function setPrimaryCompany(
-  contactId: string,
-  companyId: string
-) {
+export async function setPrimaryCompany(contactId: string, companyId: string) {
   try {
-    // 1. asegurar que la relación exista
     const pivot = await prisma.contactCompany.findFirst({
       where: { contactId, companyId },
       include: { company: true },
@@ -793,40 +927,25 @@ export async function setPrimaryCompany(
       throw new Error('Relación contacto-empresa no existe');
     }
 
-    // 2. marcar como primaria y desmarcar las demás
     await setPrimaryCompanyInternal(contactId, companyId);
 
-    // 3. reflejar en contacto legacy SOLO companyName
     await prisma.contact.update({
       where: { id: contactId },
       data: {
         companyName:
-          pivot.company.name ||
-          pivot.company.razonSocial ||
-          'SIN RAZON SOCIAL',
+          pivot.company.name || pivot.company.razonSocial || 'SIN RAZON SOCIAL',
       },
     });
 
     return true;
   } catch (error) {
-    logger.error({ err: error },'Error setting primary company:');
+    logger.error({ err: error }, 'Error setting primary company:');
     throw error;
   }
 }
 
-/**
- * Quita una empresa del contacto.
- *
- * Si borramos la empresa primaria, reasignamos otra como primaria
- * y actualizamos SOLO companyName (sin tocar ruc).
- * Si ya no queda ninguna empresa, limpiamos companyName.
- */
-export async function removeCompanyFromContact(
-  contactId: string,
-  companyId: string
-) {
+export async function removeCompanyFromContact(contactId: string, companyId: string) {
   try {
-    // ver si era primaria
     const pivot = await prisma.contactCompany.findFirst({
       where: { contactId, companyId },
     });
@@ -834,13 +953,11 @@ export async function removeCompanyFromContact(
 
     const wasPrimary = pivot.isPrimary;
 
-    // borrar la relación
     await prisma.contactCompany.delete({
       where: { id: pivot.id },
     });
 
     if (wasPrimary) {
-      // reasignar otra primaria si existe
       const remaining = await prisma.contactCompany.findFirst({
         where: { contactId },
         include: { company: true },
@@ -850,7 +967,6 @@ export async function removeCompanyFromContact(
       if (remaining) {
         await setPrimaryCompanyInternal(contactId, remaining.companyId);
 
-        // reflejar en contacto legacy SOLO companyName
         await prisma.contact.update({
           where: { id: contactId },
           data: {
@@ -861,7 +977,6 @@ export async function removeCompanyFromContact(
           },
         });
       } else {
-        // si ya no tiene empresas, limpiamos companyName
         await prisma.contact.update({
           where: { id: contactId },
           data: {
@@ -873,7 +988,7 @@ export async function removeCompanyFromContact(
 
     return true;
   } catch (error) {
-    logger.error({ err: error },'Error removing company from contact:');
+    logger.error({ err: error }, 'Error removing company from contact:');
     throw error;
   }
 }
@@ -887,12 +1002,10 @@ export async function setHumanTakeover(phoneNumber: string) {
   logger.info(`[CONTACT] Setting human takeover for ${phone}`);
 
   try {
-    // 1) Buscar contacto
     let contact = await prisma.contact.findUnique({
       where: { phoneNumber: phone },
     });
 
-    // 2) Si no existe, lo creamos con takeover activo
     if (!contact) {
       logger.warn(
         `[CONTACT] setHumanTakeover: contact not found for ${phone}, creating new contact`
@@ -907,7 +1020,6 @@ export async function setHumanTakeover(phoneNumber: string) {
       return contact;
     }
 
-    // 3) Si existe, actualizar takeover
     return await prisma.contact.update({
       where: { phoneNumber: phone },
       data: {
@@ -916,7 +1028,6 @@ export async function setHumanTakeover(phoneNumber: string) {
     });
   } catch (error: any) {
     if (error?.code === 'P2025') {
-      // Race rara: entre el findUnique y el update alguien borró el contacto
       logger.warn(
         `[CONTACT] setHumanTakeover: P2025 for ${phone} (no contact on update), ignoring`
       );
@@ -933,7 +1044,6 @@ export async function releaseHumanTakeover(phoneNumber: string) {
   logger.info(`[CONTACT] Releasing human takeover for ${phone}`);
 
   try {
-    // 1) Verificamos si existe el contacto
     const contact = await prisma.contact.findUnique({
       where: { phoneNumber: phone },
     });
@@ -945,7 +1055,6 @@ export async function releaseHumanTakeover(phoneNumber: string) {
       return null;
     }
 
-    // 2) Limpiar takeover
     return await prisma.contact.update({
       where: { phoneNumber: phone },
       data: {
@@ -965,27 +1074,15 @@ export async function releaseHumanTakeover(phoneNumber: string) {
   }
 }
 
-/**
- * Determina si el bot debe responder:
- *  - Si no existe contacto → true (responder)
- *  - Si está en onboarding (NEW / WAITING_...) → SIEMPRE responde y limpia takeover
- *  - Si no hay takeover → true
- *  - Si takeover > 1h → liberar y true
- *  - Si takeover vigente → false (pausado)
- */
-export async function shouldBotRespond(
-  phoneNumber: string
-): Promise<boolean> {
+export async function shouldBotRespond(phoneNumber: string): Promise<boolean> {
   try {
     const phone = normalizePhone(phoneNumber);
     const contact = await prisma.contact.findUnique({
       where: { phoneNumber: phone },
     });
 
-    // 1) Si no existe → que responda el bot
     if (!contact) return true;
 
-    // 2) Estados de ONBOARDING: el bot siempre debe responder
     const onboardingStates = [
       'NEW',
       'WAITING_DNI',
@@ -995,7 +1092,6 @@ export async function shouldBotRespond(
     ];
 
     if (onboardingStates.includes(contact.state)) {
-      // si por alguna razón tenía takeover, lo limpiamos
       if (contact.humanTakeoverAt) {
         await prisma.contact.update({
           where: { phoneNumber: phone },
@@ -1008,10 +1104,8 @@ export async function shouldBotRespond(
       return true;
     }
 
-    // 3) Si no hay takeover → responde
     if (!contact.humanTakeoverAt) return true;
 
-    // 4) Takeover expirado (> 1h) → liberar y responder
     const now = new Date();
     const diff = now.getTime() - contact.humanTakeoverAt.getTime();
     const oneHourInMs = 60 * 60 * 1000;
@@ -1029,42 +1123,26 @@ export async function shouldBotRespond(
       return true;
     }
 
-    // 5) Takeover vigente y NO está en onboarding → bloquear bot
-    const remainingMinutes = Math.round(
-      (oneHourInMs - diff) / 60000
-    );
+    const remainingMinutes = Math.round((oneHourInMs - diff) / 60000);
     logger.info(
       `[CONTACT] Bot paused for ${phone} - ${remainingMinutes} minutes remaining (state=${contact.state})`
     );
     return false;
   } catch (error) {
-    logger.error(
-      { err: error },
-      'Error checking if bot should respond:'
-    );
-    // en caso de error no bloqueamos al bot
+    logger.error({ err: error }, 'Error checking if bot should respond:');
     return true;
   }
 }
 
-
-/**
- * Bloquear contacto para que el bot no lo atienda más
- */
-export async function blockContact(
-  phoneNumber: string,
-  reason: string = 'Bloqueado'
-) {
+export async function blockContact(phoneNumber: string, reason: string = 'Bloqueado') {
   try {
     const phone = normalizePhone(phoneNumber);
 
-    // marcamos isBlocked en la tabla de contactos
     const updated = await prisma.contact.update({
       where: { phoneNumber: phone },
       data: { isBlocked: true },
     });
 
-    // opcional: registramos en la tabla BlockedNumber
     await prisma.blockedNumber.upsert({
       where: { identifier: phone },
       update: {
@@ -1080,14 +1158,11 @@ export async function blockContact(
 
     return updated;
   } catch (error) {
-    logger.error({ err: error },'Error blocking contact:');
+    logger.error({ err: error }, 'Error blocking contact:');
     throw error;
   }
 }
 
-/**
- * Desbloquear contacto
- */
 export async function unblockContact(phoneNumber: string) {
   try {
     const phone = normalizePhone(phoneNumber);
@@ -1097,10 +1172,9 @@ export async function unblockContact(phoneNumber: string) {
       data: { isBlocked: false },
     });
 
-    // no eliminamos forzosamente el registro de BlockedNumber (auditoría)
     return updated;
   } catch (error) {
-    logger.error({ err: error },'Error unblocking contact:');
+    logger.error({ err: error }, 'Error unblocking contact:');
     throw error;
   }
 }
@@ -1109,10 +1183,6 @@ export async function unblockContact(phoneNumber: string) {
  * IMPORT / EXPORT EXCEL
  * ------------------------------------------------- */
 
-/**
- * Prepara datos para exportar a Excel.
- * NO genera el archivo XLSX aquí, solo devuelve data estructurada.
- */
 export async function exportContactsToExcelData() {
   try {
     const contacts = await prisma.contact.findMany({
@@ -1125,7 +1195,6 @@ export async function exportContactsToExcelData() {
     });
 
     return contacts.map((c) => {
-      // primaria y adicionales
       const primary = c.companies.find((cc: any) => cc.isPrimary);
       const fallback = primary || c.companies[0] || null;
 
@@ -1137,20 +1206,14 @@ export async function exportContactsToExcelData() {
       const primaryCompanyRuc =
         fallback?.company?.ruc ||
         fallback?.company?.numeroDoc ||
-        c.ruc || // ojo: legacy, puede estar seteado en algunos contactos viejos
+        c.ruc ||
         null;
 
       const extraCompanies = c.companies
         .filter((cc: any) => !primary || cc.companyId !== primary.companyId)
         .map((cc: any) => ({
-          ruc:
-            cc.company?.ruc ||
-            cc.company?.numeroDoc ||
-            null,
-          name:
-            cc.company?.name ||
-            cc.company?.razonSocial ||
-            null,
+          ruc: cc.company?.ruc || cc.company?.numeroDoc || null,
+          name: cc.company?.name || cc.company?.razonSocial || null,
           role: cc.role || null,
         }));
 
@@ -1168,35 +1231,30 @@ export async function exportContactsToExcelData() {
       };
     });
   } catch (error) {
-    logger.error({ err: error },'Error preparing export data:');
+    logger.error({ err: error }, 'Error preparing export data:');
     throw error;
   }
 }
 
-/**
- * Importa contactos en lote desde un dataset ya parseado del Excel.
- *
- * En este import seguimos usando addCompanyToContact(),
- * que ya respeta la regla de NO pisar contact.ruc.
- */
-export async function importContactsFromExcel(rows: Array<{
-  phoneNumber: string;
-  name?: string;
-  dni?: string;
-  companies?: Array<{
-    ruc: string;
-    name: string;
-    role?: string;
-    primary?: boolean;
-  }>;
-}>) {
+export async function importContactsFromExcel(
+  rows: Array<{
+    phoneNumber: string;
+    name?: string;
+    dni?: string;
+    companies?: Array<{
+      ruc: string;
+      name: string;
+      role?: string;
+      primary?: boolean;
+    }>;
+  }>
+) {
   const results: any[] = [];
 
   for (const row of rows) {
     try {
       const phone = normalizePhone(row.phoneNumber);
 
-      // getOrCreate contacto base
       let contact = await prisma.contact.findUnique({
         where: { phoneNumber: phone },
       });
@@ -1207,16 +1265,13 @@ export async function importContactsFromExcel(rows: Array<{
             phoneNumber: phone,
             name: row.name?.trim() || null,
             dni: row.dni && isValidDNI(row.dni) ? row.dni : null,
-            state: 'REGISTERED', // o el estado que tú quieras para importados
+            state: 'REGISTERED',
           },
         });
       } else {
-        // actualizar info básica sólo si no estaba
         const patchData: any = {};
         if (!contact.name && row.name) patchData.name = row.name.trim();
-        if (!contact.dni && row.dni && isValidDNI(row.dni)) {
-          patchData.dni = row.dni;
-        }
+        if (!contact.dni && row.dni && isValidDNI(row.dni)) patchData.dni = row.dni;
         if (Object.keys(patchData).length > 0) {
           contact = await prisma.contact.update({
             where: { id: contact.id },
@@ -1225,13 +1280,11 @@ export async function importContactsFromExcel(rows: Array<{
         }
       }
 
-      // manejar empresas declaradas en el Excel
       if (row.companies && row.companies.length > 0) {
         for (const comp of row.companies) {
           if (!comp.ruc || !comp.name) continue;
           if (!isValidRUC(comp.ruc)) continue;
 
-          // asegurar empresa + relación
           await addCompanyToContact(contact.id, {
             ruc: comp.ruc,
             name: comp.name,
@@ -1243,7 +1296,7 @@ export async function importContactsFromExcel(rows: Array<{
 
       results.push({ phoneNumber: phone, status: 'OK' });
     } catch (err: any) {
-      logger.error({ err },'Error importing row:');
+      logger.error({ err }, 'Error importing row:');
       results.push({
         phoneNumber: row.phoneNumber,
         status: 'ERROR',
@@ -1259,18 +1312,12 @@ export async function importContactsFromExcel(rows: Array<{
  * ELIMINACIÓN MANUAL
  * ------------------------------------------------- */
 
-/**
- * Elimina un contacto por ID.
- * Borra ContactCompany, ConversationHistory asociado y luego el Contact.
- */
 export async function deleteContact(contactId: string) {
   try {
-    // borrar relaciones con empresas
     await prisma.contactCompany.deleteMany({
       where: { contactId },
     });
 
-    // obtener contacto para su phoneNumber antes de borrarlo
     const existing = await prisma.contact.findUnique({
       where: { id: contactId },
     });
@@ -1281,14 +1328,13 @@ export async function deleteContact(contactId: string) {
       });
     }
 
-    // borrar contacto
     await prisma.contact.delete({
       where: { id: contactId },
     });
 
     return true;
   } catch (error) {
-    logger.error({ err: error },'Error deleting contact:');
+    logger.error({ err: error }, 'Error deleting contact:');
     throw error;
   }
 }
