@@ -96,10 +96,32 @@ async function getOrCreateCompany(ruc: string, name: string) {
  * No es un número real; sirve para cumplir el NOT NULL + UNIQUE del schema.
  */
 function makeShadowPhoneFromBillysId(billysId: string) {
-  // estable y UNIQUE (porque billysId es unique)
-  // evita usar caracteres raros; prisma/sql lo soporta igual, pero lo dejamos limpio
   const safe = (billysId || '').replace(/[^a-zA-Z0-9@._-]/g, '');
   return `lid:${safe}`;
+}
+
+// ✅ SOLUCIÓN 2B: Determinar qué estado es más avanzado en el flujo de registro
+function getStatePriority(state: string): number {
+  const priorities: Record<string, number> = {
+    'REGISTERED': 100,
+    'MENU': 90,
+    'WAITING_REMOTE_INFO': 80,
+    'SELECTING_COMPANY': 70,
+    'WAITING_COMPANY_NAME': 60,
+    'WAITING_RUC': 50,
+    'WAITING_DNI': 40,
+    'NEW': 10,
+  };
+  return priorities[state] || 0;
+}
+
+// ✅ SOLUCIÓN 2B: Elegir el estado más avanzado entre dos contactos
+function chooseBestState(stateA: string, stateB: string): string {
+  const priorityA = getStatePriority(stateA);
+  const priorityB = getStatePriority(stateB);
+  
+  if (priorityA >= priorityB) return stateA;
+  return stateB;
 }
 
 /**
@@ -119,7 +141,6 @@ async function mergeContactCompanies(fromContactId: string, toContactId: string)
     });
 
     if (!existing) {
-      // crear pivot equivalente en el contacto real
       await prisma.contactCompany.create({
         data: {
           contactId: toContactId,
@@ -129,12 +150,8 @@ async function mergeContactCompanies(fromContactId: string, toContactId: string)
         },
       });
     } else {
-      // merge suave: si el shadow tenía role y el real no, copiar
-      // y si el shadow era primary, lo respetamos luego con setPrimaryCompanyInternal
       const patch: any = {};
       if (!existing.role && p.role) patch.role = p.role;
-      // NO tocamos existing.isPrimary aquí directamente para evitar inconsistencias,
-      // se ajusta con setPrimaryCompanyInternal si hace falta.
       if (Object.keys(patch).length > 0) {
         await prisma.contactCompany.update({
           where: { id: existing.id },
@@ -144,7 +161,6 @@ async function mergeContactCompanies(fromContactId: string, toContactId: string)
     }
   }
 
-  // borrar pivots del shadow
   await prisma.contactCompany.deleteMany({
     where: { contactId: fromContactId },
   });
@@ -159,7 +175,6 @@ async function mergeConversationHistoryPhone(
 ) {
   if (!fromPhoneNumber || !toPhoneNumber) return;
 
-  // Si tu ConversationHistory usa phoneNumber (como en tu deleteContact), movemos todo
   await prisma.conversationHistory.updateMany({
     where: { phoneNumber: fromPhoneNumber },
     data: { phoneNumber: toPhoneNumber },
@@ -188,7 +203,6 @@ export async function getOrCreateByBillysId(billysId: string) {
 
     const shadowPhone = makeShadowPhoneFromBillysId(billysId);
 
-    // Race-safe: si por alguna razón ya existe el phone, lo ajustamos
     try {
       return await prisma.contact.create({
         data: {
@@ -201,7 +215,6 @@ export async function getOrCreateByBillysId(billysId: string) {
         },
       });
     } catch (err: any) {
-      // Puede chocar por UNIQUE si otra corrida creó el mismo billysId
       logger.warn({ err }, 'Race on contact.create (by billysId), retrying findUnique...');
       return await prisma.contact.findUnique({
         where: { billysId },
@@ -217,11 +230,13 @@ export async function getOrCreateByBillysId(billysId: string) {
 }
 
 /**
- * attachLidToPhoneContact:
+ * ✅ SOLUCIÓN 2B APLICADA: attachLidToPhoneContact con merge inteligente de estados
+ * 
  * - asegura que el contacto REAL por phoneNumber tenga billysId = @lid
  * - si existe un contacto shadow con ese billysId, lo MERGE al real:
  *    - mueve ContactCompany
  *    - mueve ConversationHistory (phoneNumber shadow -> real)
+ *    - PRESERVA EL ESTADO MÁS AVANZADO (nuevo)
  *    - elimina shadow
  *
  * Importante: esto evita que el usuario "se vuelva a registrar" cuando llega @lid luego.
@@ -239,10 +254,11 @@ export async function attachLidToPhoneContact(phoneNumber: string, billysId: str
       });
 
       if (!real) {
-        // Si no existe, lo creamos (estado NEW)
         real = await tx.contact.create({
-          data: { phoneNumber: phone, state: 'NEW' },
+          data: { phoneNumber: phone, state: 'NEW', billysId },
         });
+        logger.info(`[ATTACH-LID] Contacto real creado: ${phone} con billysId=${billysId}`);
+        return real;
       }
 
       // 2) contacto shadow por billysId
@@ -250,28 +266,29 @@ export async function attachLidToPhoneContact(phoneNumber: string, billysId: str
         where: { billysId },
       });
 
-      // 3) Si no hay shadow, solo pegamos billysId al real (si está libre)
+      // 3) Si no hay shadow, solo pegar billysId
       if (!shadow) {
         if (!real.billysId) {
-          // si el real no tiene billysId, lo seteamos
           real = await tx.contact.update({
             where: { id: real.id },
             data: { billysId },
           });
-        } else if (real.billysId !== billysId) {
-          // real ya tiene otro billysId: no lo pisamos (evita problemas de UNIQUE)
-          // si quisieras permitir reemplazo, aquí habría que validar que no exista ese billysId.
+          logger.info(`[ATTACH-LID] billysId asignado a contacto existente ${phone}`);
         }
         return real;
       }
 
-      // 4) Si shadow == real, ya está todo ok
+      // 4) Si shadow == real, ok
       if (shadow.id === real.id) {
         return real;
       }
 
-      // 5) MERGE shadow -> real (evitando UNIQUE de billysId)
-      //    a) mover empresas (con prisma "general" porque en tx no tenemos helpers; repetimos lógica)
+      // ✅ 5) MERGE INTELIGENTE: shadow -> real
+      logger.warn(
+        `[MERGE-START] Mergeando shadow=${shadow.id} (state=${shadow.state}) → real=${real.id} (state=${real.state})`
+      );
+
+      // a) Mover empresas
       const shadowPivots = await tx.contactCompany.findMany({
         where: { contactId: shadow.id },
       });
@@ -290,8 +307,8 @@ export async function attachLidToPhoneContact(phoneNumber: string, billysId: str
               isPrimary: !!p.isPrimary,
             },
           });
+          logger.info(`[MERGE] Copiada empresa ${p.companyId} de shadow a real`);
         } else {
-          // merge suave role
           if (!exists.role && p.role) {
             await tx.contactCompany.update({
               where: { id: exists.id },
@@ -301,41 +318,49 @@ export async function attachLidToPhoneContact(phoneNumber: string, billysId: str
         }
       }
 
-      // borrar pivots shadow
       await tx.contactCompany.deleteMany({
         where: { contactId: shadow.id },
       });
 
-      //    b) mover conversation history si aplica (por phoneNumber)
-      //       - shadow.phoneNumber es sintético tipo "lid:xxx"
-      //       - lo movemos al phone real
+      // b) Mover conversation history
       await tx.conversationHistory.updateMany({
         where: { phoneNumber: shadow.phoneNumber },
         data: { phoneNumber: real.phoneNumber },
       });
+      logger.info(`[MERGE] Movido historial conversacional de shadow a real`);
 
-      //    c) si shadow tenía datos y real no, copiamos (merge defensivo)
+      // ✅ c) MERGE INTELIGENTE DE DATOS (incluyendo estado)
       const patch: any = {};
+
+      // Copiar name/dni/companyName si real no tiene y shadow sí
       if (!real.name && shadow.name) patch.name = shadow.name;
       if (!real.dni && shadow.dni) patch.dni = shadow.dni;
       if (!real.companyName && shadow.companyName) patch.companyName = shadow.companyName;
-      // ruc legacy: solo copiar si real no tiene y no rompe unique (puede romper si ya existe en otro contacto)
-      // lo evitamos por seguridad:
-      // if (!real.ruc && shadow.ruc) patch.ruc = shadow.ruc;
+
+      // ✅ CLAVE: Elegir el estado más avanzado
+      const bestState = chooseBestState(real.state, shadow.state);
+      if (bestState !== real.state) {
+        patch.state = bestState;
+        logger.info(
+          `[MERGE-STATE] Eligiendo estado más avanzado: "${bestState}" (real="${real.state}", shadow="${shadow.state}")`
+        );
+      }
 
       if (Object.keys(patch).length > 0) {
         real = await tx.contact.update({
           where: { id: real.id },
           data: patch,
         });
+        logger.info(`[MERGE] Actualizado contacto real con datos de shadow:`, patch);
       }
 
-      //    d) eliminar shadow (libera el UNIQUE billysId para el real)
+      // d) Eliminar shadow (libera billysId)
       await tx.contact.delete({
         where: { id: shadow.id },
       });
+      logger.info(`[MERGE] Shadow eliminado: ${shadow.id}`);
 
-      //    e) asegurar billysId en real (ya no hay conflicto)
+      // e) Asegurar billysId en real
       if (real.billysId !== billysId) {
         real = await tx.contact.update({
           where: { id: real.id },
@@ -343,14 +368,12 @@ export async function attachLidToPhoneContact(phoneNumber: string, billysId: str
         });
       }
 
-      //    f) si el shadow traía una primaria marcada, dejamos primaria consistente:
-      //       - buscamos pivots en real con isPrimary true (si hay 2, corregimos)
+      // f) Corregir múltiples primarias si existen
       const primaries = await tx.contactCompany.findMany({
         where: { contactId: real.id, isPrimary: true },
       });
 
       if (primaries.length > 1) {
-        // dejamos la primera como primaria y desmarcamos el resto
         const keep = primaries[0];
         await tx.contactCompany.updateMany({
           where: { contactId: real.id },
@@ -360,7 +383,12 @@ export async function attachLidToPhoneContact(phoneNumber: string, billysId: str
           where: { id: keep.id },
           data: { isPrimary: true },
         });
+        logger.info(`[MERGE] Corregidas múltiples empresas primarias`);
       }
+
+      logger.info(
+        `[MERGE-COMPLETE] ✅ Merge exitoso: ${phone} ahora tiene state="${real.state}", billysId="${billysId}"`
+      );
 
       return real;
     });
@@ -368,7 +396,6 @@ export async function attachLidToPhoneContact(phoneNumber: string, billysId: str
     return result;
   } catch (error) {
     logger.error({ err: error }, 'Error in attachLidToPhoneContact:');
-    // No reventamos el bot por esto: devolvemos null y seguimos
     return null;
   }
 }
