@@ -1639,7 +1639,7 @@ export async function disconnectSession(): Promise<void> {
   if (sock) {
     try {
       await sock.logout();
-      logger.info('WhatsApp disconnected via disconnectSession()');
+      logger.info('WhatsApp disconnected via disconnectSession() - LOGOUT COMPLETO');
     } catch (error) {
       logger.error({ err: error }, 'Error disconnecting WhatsApp:');
     }
@@ -1651,9 +1651,10 @@ export async function disconnectSession(): Promise<void> {
   currentQR = null;
   qrDataURL = null;
 
-  // ✅ DESPUÉS de logout, limpiar auth para forzar QR nuevo
+  // ✅ Borrar auth solo en logout manual
   await ensureCleanAuthFolder();
 }
+
 
 export async function forceNewQRState(): Promise<void> {
   try {
@@ -1712,5 +1713,22 @@ export async function getWhatsAppGroups(): Promise
 }
 
 export async function disconnect(): Promise<void> {
-  await disconnectSession();
+  if (sock) {
+    try {
+      // ✅ NO hacer logout, solo cerrar el socket
+      sock.end(undefined);
+      logger.info('WhatsApp disconnected gracefully (auth preserved)');
+    } catch (error) {
+      logger.error({ err: error }, 'Error during graceful disconnect:');
+    }
+  }
+
+  sock = null;
+  isReady = false;
+  botPhoneNumber = null;
+  currentQR = null;
+  qrDataURL = null;
+
+  // ✅ NO borrar auth aquí
+  logger.info('✅ WhatsApp connection closed, auth files preserved');
 }
