@@ -664,20 +664,7 @@ async function handleIncomingMessage(
         // Refrescar por si hubo merge
         contact = await contactModel.findByPhone(phoneE164);
 
-      } else {
-        // ✅ CASO 2: No hay mapping después de esperar
-        logger.warn(`[LID-UNRESOLVED] No mapping disponible para ${senderJid}`);
-        
-        await sendMessage(
-          senderJid,
-          '⏳ Sincronizando tu cuenta de WhatsApp...\n\n' +
-          'Por favor vuelve a enviar tu mensaje en *5 segundos*. 🙏'
-        );
-        
-        // ✅ NO crear shadow, NO continuar flujo
-        return;
-      }
-
+      
     } else {
       // ✅ PN normal
       const phoneNumberRaw = normalizeJidToPhone(senderJid);
