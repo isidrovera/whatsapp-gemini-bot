@@ -176,8 +176,8 @@ async function mergeConversationHistoryPhone(
   if (!fromPhoneNumber || !toPhoneNumber) return;
 
   await prisma.conversationHistory.updateMany({
-    where: { phoneNumber: fromPhoneNumber },
-    data: { phoneNumber: toPhoneNumber },
+    where: { phoneNumber: fromPhoneNumber as string },
+    data: { phoneNumber: toPhoneNumber as string },
   });
 }
 /* -------------------------------------------------
