@@ -74,6 +74,8 @@ export async function initDefaults(): Promise<void> {
       { category: 'system', key: 'bot_name', value: 'Asistente Virtual', isEncrypted: false, description: 'Nombre del bot' },
       { category: 'system', key: 'auto_response_enabled', value: 'true', isEncrypted: false, description: 'Habilitar respuestas automáticas' },
       { category: 'system', key: 'department_routing_enabled', value: 'true', isEncrypted: false, description: 'Habilitar enrutamiento por departamentos' },
+      { category: 'system', key: 'auto_release_takeover_enabled', value: 'true', isEncrypted: false, description: 'Auto-liberar takeover después de 1 hora' },
+      { category: 'system', key: 'auto_release_check_interval', value: '300', isEncrypted: false, description: 'Intervalo de verificación (segundos)' },
 
       // EMPRESA (identidad pública de quien atiende)
       { category: 'company', key: 'name', value: 'Mi Empresa', isEncrypted: false, description: 'Nombre de la empresa' },

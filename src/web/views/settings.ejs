@@ -31,7 +31,6 @@
     }
   </script>
 
-
   <!-- Iconos -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
@@ -65,6 +64,15 @@
     .dark .tab-active{
       background-color: rgba(102,126,234,.25);
       color: #fff;
+    }
+
+    /* Toast de copiado */
+    @keyframes slideInUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .toast-enter {
+      animation: slideInUp 0.3s ease-out;
     }
   </style>
 </head>
@@ -158,7 +166,7 @@
         </div>
         <div class="text-sm leading-relaxed">
           <p class="font-semibold text-amber-900 dark:text-amber-100 mb-1">Importante:</p>
-          <p>Los valores marcados como “Encriptado” se guardan de forma segura. Tras guardar se mostrarán como ********.</p>
+          <p>Los valores marcados como "Encriptado" se guardan de forma segura. Tras guardar se mostrarán como ********.</p>
         </div>
       </div>
 
@@ -253,7 +261,12 @@
                         data-encrypted="<%= config.isEncrypted %>"
                         placeholder="<%= config.description || 'Ingrese valor...' %>"/>
                       <% if (config.isEncrypted) { %>
-                        <button class="toggle-eye inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-2.5 py-2 text-xs font-medium shadow" type="button" aria-label="Mostrar/Ocultar">👁️</button>
+                        <button class="toggle-eye inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-2.5 py-2 text-xs font-medium shadow transition" type="button" aria-label="Mostrar/Ocultar" title="Mostrar/Ocultar">
+                          <i data-lucide="eye" class="w-4 h-4"></i>
+                        </button>
+                        <button class="copy-value inline-flex items-center justify-center rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:hover:bg-indigo-800 dark:text-indigo-300 px-2.5 py-2 text-xs font-medium shadow transition" type="button" aria-label="Copiar" title="Copiar valor">
+                          <i data-lucide="copy" class="w-4 h-4"></i>
+                        </button>
                       <% } %>
                     </div>
                   <% } %>
@@ -302,7 +315,12 @@
                       data-encrypted="<%= config.isEncrypted %>"
                       placeholder="<%= config.description || 'Ingrese valor...' %>"/>
                     <% if (config.isEncrypted) { %>
-                      <button class="toggle-eye inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-2.5 py-2 text-xs font-medium shadow" type="button" aria-label="Mostrar/Ocultar">👁️</button>
+                      <button class="toggle-eye inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-2.5 py-2 text-xs font-medium shadow transition" type="button" aria-label="Mostrar/Ocultar" title="Mostrar/Ocultar">
+                        <i data-lucide="eye" class="w-4 h-4"></i>
+                      </button>
+                      <button class="copy-value inline-flex items-center justify-center rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:hover:bg-indigo-800 dark:text-indigo-300 px-2.5 py-2 text-xs font-medium shadow transition" type="button" aria-label="Copiar" title="Copiar valor">
+                        <i data-lucide="copy" class="w-4 h-4"></i>
+                      </button>
                     <% } %>
                   </div>
                 </div>
@@ -350,7 +368,12 @@
                       data-encrypted="<%= config.isEncrypted %>"
                       placeholder="<%= config.description || 'Ingrese valor...' %>"/>
                     <% if (config.isEncrypted) { %>
-                      <button class="toggle-eye inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-2.5 py-2 text-xs font-medium shadow" type="button" aria-label="Mostrar/Ocultar">👁️</button>
+                      <button class="toggle-eye inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-2.5 py-2 text-xs font-medium shadow transition" type="button" aria-label="Mostrar/Ocultar" title="Mostrar/Ocultar">
+                        <i data-lucide="eye" class="w-4 h-4"></i>
+                      </button>
+                      <button class="copy-value inline-flex items-center justify-center rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:hover:bg-indigo-800 dark:text-indigo-300 px-2.5 py-2 text-xs font-medium shadow transition" type="button" aria-label="Copiar" title="Copiar valor">
+                        <i data-lucide="copy" class="w-4 h-4"></i>
+                      </button>
                     <% } %>
                   </div>
                 </div>
@@ -418,7 +441,7 @@
                 </div>
 
                 <div class="flex flex-col sm:flex-row gap-3 sm:items-start">
-                  <% if (config.key === 'auto_response_enabled' || config.key === 'department_routing_enabled') { %>
+                  <% if (config.key === 'auto_response_enabled' || config.key === 'department_routing_enabled' || config.key === 'auto_release_takeover_enabled') { %>
                     <select
                       class="config-input w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-3 py-2.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                       data-category="<%= config.category %>"
@@ -427,6 +450,17 @@
                       <option value="true"  <%= config.value==='true'  ? 'selected' : '' %>>Habilitado</option>
                       <option value="false" <%= config.value==='false' ? 'selected' : '' %>>Deshabilitado</option>
                     </select>
+                  <% } else if (config.key === 'auto_release_check_interval') { %>
+                    <input
+                      type="number"
+                      min="60"
+                      step="60"
+                      class="config-input w-full rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm px-3 py-2.5 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      value="<%= config.value || '' %>"
+                      data-category="<%= config.category %>"
+                      data-key="<%= config.key %>"
+                      data-encrypted="false"
+                      placeholder="Intervalo en segundos (mín. 60)"/>
                   <% } else { %>
                     <div class="flex w-full gap-2">
                       <input
@@ -438,7 +472,12 @@
                         data-encrypted="<%= config.isEncrypted %>"
                         placeholder="<%= config.description || 'Ingrese valor...' %>"/>
                       <% if (config.isEncrypted) { %>
-                        <button class="toggle-eye inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-2.5 py-2 text-xs font-medium shadow" type="button" aria-label="Mostrar/Ocultar">👁️</button>
+                        <button class="toggle-eye inline-flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 px-2.5 py-2 text-xs font-medium shadow transition" type="button" aria-label="Mostrar/Ocultar" title="Mostrar/Ocultar">
+                          <i data-lucide="eye" class="w-4 h-4"></i>
+                        </button>
+                        <button class="copy-value inline-flex items-center justify-center rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 dark:bg-indigo-900/30 dark:hover:bg-indigo-800 dark:text-indigo-300 px-2.5 py-2 text-xs font-medium shadow transition" type="button" aria-label="Copiar" title="Copiar valor">
+                          <i data-lucide="copy" class="w-4 h-4"></i>
+                        </button>
                       <% } %>
                     </div>
                   <% } %>
@@ -506,7 +545,14 @@
               <p class="text-sm text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
                 Copia esta clave ahora. Por seguridad, no se volverá a mostrar completa.
               </p>
-              <div class="bg-slate-100 dark:bg-slate-800 rounded-lg p-3 mb-4 font-mono text-[13px] break-all" id="apiKeyFullValue"></div>
+              <div class="relative">
+                <div class="bg-slate-100 dark:bg-slate-800 rounded-lg p-3 mb-4 font-mono text-[13px] break-all" id="apiKeyFullValue"></div>
+                <button id="btnCopyFullKey" type="button"
+                  class="absolute top-2 right-2 inline-flex items-center justify-center rounded-md bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-2 py-1.5 text-xs font-medium shadow-sm transition"
+                  title="Copiar clave completa">
+                  <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
               <div class="flex items-center justify-end gap-3">
                 <button type="button" id="btnCloseApiKeyModal"
                   class="inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-sm font-semibold shadow-soft">
@@ -523,9 +569,16 @@
 
   <!-- Indicador guardado -->
   <div id="saveIndicator"
-       class="hidden fixed bottom-6 right-6 z-[2000] items-center gap-2 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 shadow-soft px-4 py-3 text-sm font-bold"
+       class="hidden fixed bottom-6 right-6 z-[2000] items-center gap-2 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 shadow-soft px-4 py-3 text-sm font-bold toast-enter"
        role="status" aria-live="polite">
     <span>✅</span><span>Configuración guardada</span>
+  </div>
+
+  <!-- Toast de copiado -->
+  <div id="copyToast"
+       class="hidden fixed bottom-6 right-6 z-[2000] items-center gap-2 rounded-xl bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 shadow-soft px-4 py-3 text-sm font-bold toast-enter"
+       role="status" aria-live="polite">
+    <span>📋</span><span>Valor copiado</span>
   </div>
 
   <script>
@@ -555,6 +608,7 @@
     let dirty = false;
     const btnReset = document.getElementById('btnResetDirty');
     const saveIndicator = document.getElementById('saveIndicator');
+    const copyToast = document.getElementById('copyToast');
 
     function markDirty(){
       if(!dirty){
@@ -564,17 +618,69 @@
       }
     }
 
+    // Toast simple de copiado
+    function showCopyToast(){
+      copyToast.classList.remove('hidden');
+      copyToast.classList.add('flex');
+      setTimeout(()=>{
+        copyToast.classList.remove('flex');
+        copyToast.classList.add('hidden');
+      },2000);
+    }
+
+    // Función de copiado al portapapeles
+    async function copyToClipboard(text){
+      try{
+        await navigator.clipboard.writeText(text);
+        showCopyToast();
+      }catch(err){
+        // Fallback para navegadores sin Clipboard API
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showCopyToast();
+      }
+    }
+
     // Toggle 👁️ para secretos
     function bindEyeButtons(ctx=document){
       ctx.querySelectorAll('.toggle-eye').forEach(btn=>{
         btn.addEventListener('click', ()=>{
-          const input = btn.previousElementSibling;
+          const container = btn.parentElement;
+          const input = container.querySelector('.config-input');
           if(!input) return;
-          input.type = (input.type === 'password') ? 'text' : 'password';
+          
+          const isPassword = input.type === 'password';
+          input.type = isPassword ? 'text' : 'password';
+          
+          // Cambiar icono
+          const icon = btn.querySelector('i[data-lucide]');
+          if(icon) {
+            icon.setAttribute('data-lucide', isPassword ? 'eye-off' : 'eye');
+            if(window.lucide) window.lucide.createIcons({ attrs: { 'stroke-width': '1.75' } });
+          }
         });
       });
     }
     bindEyeButtons();
+
+    // Botones de copiar
+    function bindCopyButtons(ctx=document){
+      ctx.querySelectorAll('.copy-value').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const container = btn.parentElement;
+          const input = container.querySelector('.config-input');
+          if(!input || !input.value) return;
+          copyToClipboard(input.value);
+        });
+      });
+    }
+    bindCopyButtons();
 
     // Detectar cambios
     document.querySelectorAll('.config-input').forEach(el=>{
@@ -695,6 +801,7 @@
     const apiKeyModal         = document.getElementById('apiKeyModal');
     const apiKeyFullValueEl   = document.getElementById('apiKeyFullValue');
     const btnCloseApiKeyModal = document.getElementById('btnCloseApiKeyModal');
+    const btnCopyFullKey      = document.getElementById('btnCopyFullKey');
 
     async function loadApiKeys(){
       try {
@@ -746,7 +853,7 @@
             <td class="px-4 py-3 text-right text-[13px]">
               <div class="inline-flex items-center gap-2">
                 <button
-                  class="toggleKeyState inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-semibold shadow-soft
+                  class="toggleKeyState inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-semibold shadow-soft transition
                          ${k.isActive
                            ? 'bg-red-500/20 text-red-600 hover:bg-red-500/30 dark:bg-red-900/20 dark:text-red-300'
                            : 'bg-emerald-500/20 text-emerald-600 hover:bg-emerald-500/30 dark:bg-emerald-900/20 dark:text-emerald-300'
@@ -757,7 +864,7 @@
                   ${k.isActive ? 'Desactivar' : 'Activar'}
                 </button>
                 <button
-                  class="deleteKey inline-flex items-center justify-center rounded-md px-2 py-1 bg-slate-200 text-slate-700 hover:bg-red-600 hover:text-white dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-red-600 text-xs font-semibold shadow-soft"
+                  class="deleteKey inline-flex items-center justify-center rounded-md px-2 py-1 bg-slate-200 text-slate-700 hover:bg-red-600 hover:text-white dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-red-600 text-xs font-semibold shadow-soft transition"
                   data-id="${k.id}" title="Eliminar">
                   <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
@@ -844,6 +951,14 @@
       }catch(err){
         alert('❌ Error creando API key');
         console.error(err);
+      }
+    });
+
+    // Copiar API key completa desde el modal
+    btnCopyFullKey && btnCopyFullKey.addEventListener('click', ()=>{
+      const fullKey = apiKeyFullValueEl.textContent;
+      if(fullKey) {
+        copyToClipboard(fullKey);
       }
     });
 

@@ -14,6 +14,7 @@ import * as adminModel from './models/admin.js'
 import * as workingHoursModel from './models/workingHours.js'
 import * as calendarModel from './models/calendar.js'
 import * as holidaySync from './services/holidaySync.js'
+import * as contactModel from './models/contact.js'
 
 import * as configModel from './models/configuration.js'
 import * as departmentModel from './models/department.js'
@@ -209,7 +210,31 @@ async function main() {
       logger.info('🗓️  Holiday re-sync disabled (set ENABLE_HOLIDAYS_RESYNC=true to enable)')
     }
 
-    // 17) Señales de terminación
+    // 17) Auto-liberación de human takeovers expirados
+    const autoReleaseTakeoverEnabled = (await configModel.get('system', 'auto_release_takeover_enabled')) === 'true'
+    
+    if (autoReleaseTakeoverEnabled) {
+      const intervalSeconds = parseInt((await configModel.get('system', 'auto_release_check_interval')) || '300')
+      const AUTO_RELEASE_CHECK_MS = Math.max(60_000, intervalSeconds * 1000) // Mínimo 1 minuto
+
+      const autoReleaseInterval = setInterval(() => {
+        contactModel
+          .autoReleaseExpiredTakeovers()
+          .then((count) => {
+            if (count > 0) {
+              logger.info(`🔓 Auto-release: ${count} takeover(s) liberado(s)`)
+            }
+          })
+          .catch((e) => logger.warn({ err: e }, '⚠️  Auto-release takeover failed'))
+      }, AUTO_RELEASE_CHECK_MS)
+
+      global.__appIntervals!.push(autoReleaseInterval)
+      logger.info(`🔓 Auto-release takeover enabled (every ${Math.round(AUTO_RELEASE_CHECK_MS / 1000)}s)`)
+    } else {
+      logger.info('🔓 Auto-release takeover disabled (enable in Settings → System)')
+    }
+
+    // 18) Señales de terminación
     setupGracefulShutdown()
 
     // Marcar como inicializado

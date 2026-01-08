@@ -1364,3 +1364,67 @@ export async function deleteContact(contactId: string) {
     throw error;
   }
 }
+
+/**
+ * Auto-libera los human takeovers que han expirado (más de 1 hora)
+ * Esta función debe ser llamada periódicamente por un interval.
+ * 
+ * @returns Cantidad de contactos liberados
+ */
+export async function autoReleaseExpiredTakeovers(): Promise<number> {
+  try {
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+    // Buscar contactos con takeover activo pero expirado
+    const expiredContacts = await prisma.contact.findMany({
+      where: {
+        humanTakeoverAt: {
+          not: null,
+          lt: oneHourAgo, // Menor que hace 1 hora
+        },
+      },
+      select: {
+        phoneNumber: true,
+        humanTakeoverAt: true,
+        state: true,
+      },
+    });
+
+    if (expiredContacts.length === 0) {
+      return 0;
+    }
+
+    // Liberar todos los takevers expirados
+    const result = await prisma.contact.updateMany({
+      where: {
+        humanTakeoverAt: {
+          not: null,
+          lt: oneHourAgo,
+        },
+      },
+      data: {
+        humanTakeoverAt: null,
+      },
+    });
+
+    // Log detallado de cada contacto liberado
+    expiredContacts.forEach((contact) => {
+      const elapsed = Math.round(
+        (now.getTime() - (contact.humanTakeoverAt?.getTime() || 0)) / 60000
+      );
+      logger.info(
+        `[AUTO-RELEASE] 🔓 Released ${contact.phoneNumber} (state=${contact.state}, elapsed=${elapsed}min)`
+      );
+    });
+
+    logger.info(
+      `[AUTO-RELEASE] ✅ Released ${result.count} expired human takeovers`
+    );
+
+    return result.count;
+  } catch (error) {
+    logger.error({ err: error }, '[AUTO-RELEASE] ❌ Error releasing expired takeovers:');
+    return 0;
+  }
+}

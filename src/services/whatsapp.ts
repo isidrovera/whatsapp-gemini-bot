@@ -525,6 +525,7 @@ async function handleAgentMessageFromMe(
     return;
   }
 
+  // ✅ Comandos explícitos /humano y /auto
   if (textLower === HUMAN_TAKEOVER_COMMAND) {
     await contactModel.setHumanTakeover(phoneNumberRaw);
     logger.info(
@@ -541,15 +542,37 @@ async function handleAgentMessageFromMe(
     return;
   }
 
+  // ✅ NUEVO: Solo activar takeover si el mensaje tiene contenido Y el usuario NO está en onboarding
   if (messageText && messageText.trim().length > 0) {
     const contact = await contactModel.findByPhone(phoneNumberRaw);
+    
+    // ✅ VALIDAR: No activar takeover si está en estados de onboarding
+    const onboardingStates = [
+      'NEW',
+      'WAITING_DNI',
+      'WAITING_RUC',
+      'WAITING_COMPANY_NAME',
+      'SELECTING_COMPANY',
+    ];
+
+    if (contact && onboardingStates.includes(contact.state)) {
+      logger.info(
+        `[AGENT-MSG] ⚠️  Ignoring agent message for ${phoneNumberRaw} - User in onboarding state=${contact.state}`
+      );
+      logger.info(
+        `[AGENT-MSG] 💡 Tip: User needs to complete registration first. Use /humano to force takeover if needed.`
+      );
+      return;
+    }
+
+    // ✅ Usuario YA está registrado (MENU, REGISTERED, WAITING_REMOTE_INFO) - activar/renovar takeover
     const now = new Date();
     const oneHourInMs = 60 * 60 * 1000;
 
     if (!contact?.humanTakeoverAt) {
       await contactModel.setHumanTakeover(phoneNumberRaw);
       logger.info(
-        `[HUMAN-TAKEOVER] 🙋 Agent message detected for ${phoneNumberRaw}`
+        `[HUMAN-TAKEOVER] 🙋 Agent message detected for ${phoneNumberRaw} (state=${contact?.state || 'unknown'})`
       );
     } else {
       const diff = now.getTime() - contact.humanTakeoverAt.getTime();
