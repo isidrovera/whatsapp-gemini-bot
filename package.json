@@ -16,7 +16,7 @@
     "@google/genai": "^1.25.0",
     "@google/generative-ai": "^0.21.0",
     "@prisma/client": "^6.18.0",
-    "@whiskeysockets/baileys": "7.0.0-rc.6",
+    "@whiskeysockets/baileys": "7.0.0-rc.9",
     "axios": "^1.7.9",
     "bcryptjs": "^3.0.2",
     "cookie-parser": "^1.4.7",

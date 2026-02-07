@@ -43,9 +43,9 @@ const COUNTRY_RULES: Record<
   { localLengths: number[]; stripTrunk0?: boolean }
 > = {
   // Perú
-  '51': { localLengths: [9], stripTrunk0: false }, // móviles 9 dígitos (empiezan con 9)
+  '51': { localLengths: [9], stripTrunk0: false },
   // Colombia
-  '57': { localLengths: [10], stripTrunk0: true }, // muchos escriben 0XXXXXXXXXX
+  '57': { localLengths: [10], stripTrunk0: true },
   // Argentina
   '54': { localLengths: [10], stripTrunk0: true },
   // México
@@ -64,8 +64,10 @@ const COUNTRY_RULES: Record<
   '598': { localLengths: [8, 9], stripTrunk0: true },
 };
 
-/** Lista de prefijos de país que reconocemos sin ambigüedad (los más usados en tu operación) */
-const KNOWN_CCS = Object.keys(COUNTRY_RULES).sort((a, b) => b.length - a.length); // ordena por largo desc para maches tipo 593 antes que 59
+/** Lista de prefijos de país que reconocemos sin ambigüedad */
+const KNOWN_CCS = Object.keys(COUNTRY_RULES).sort(
+  (a, b) => b.length - a.length
+);
 
 /** Quita prefijos internacionales "00"/"011" si los usaron al marcar */
 function stripIddPrefix(d: string): string {
@@ -134,7 +136,6 @@ export function normalizePhone(raw: string): string {
   // Si hay longitudes locales definidas para el default CC, validarlas
   if (rule?.localLengths?.length) {
     if (!rule.localLengths.includes(local.length)) {
-      // Aun así, si 8..15 con CC + local, permite — es más flexible
       const candidate = defCC + local;
       if (!isValidPhoneE164(candidate)) {
         throw new Error(
@@ -157,7 +158,8 @@ export function normalizePhone(raw: string): string {
 /** Construye el JID de WhatsApp a partir de E.164 (sin '+') */
 export function formatJid(e164: string): string {
   const d = digitsOnly(e164);
-  if (!isValidPhoneE164(d)) throw new Error(`E.164 inválido para JID: "${e164}"`);
+  if (!isValidPhoneE164(d))
+    throw new Error(`E.164 inválido para JID: "${e164}"`);
   return `${d}@s.whatsapp.net`;
 }
 
@@ -174,16 +176,72 @@ export function isGroupJid(jid: string): boolean {
 }
 
 /** =========================
+ *  Helpers LID (Baileys v7)
+ *  ========================= */
+
+/**
+ * ¿Es un JID de tipo LID?
+ *
+ * Cubre los formatos conocidos:
+ * - "123456@lid"                  (formato estándar)
+ * - "123456@lid@s.whatsapp.net"   (bug conocido en rc.6, doble sufijo)
+ *
+ * NOTA: Los LIDs NO contienen números de teléfono reales.
+ *       Los dígitos antes del @ son un identificador interno de WhatsApp.
+ */
+export function isLidJid(jid: string): boolean {
+  if (!jid) return false;
+  // Formato estándar: algo@lid
+  if (jid.endsWith('@lid')) return true;
+  // Bug rc.6: algo@lid@s.whatsapp.net
+  if (jid.includes('@lid@')) return true;
+  return false;
+}
+
+/**
+ * Normaliza un LID al formato canónico "XXXXX@lid".
+ *
+ * Si viene como "123456@lid@s.whatsapp.net" (bug rc.6),
+ * lo limpia a "123456@lid".
+ *
+ * Si ya es "123456@lid", lo devuelve tal cual.
+ * Si no es un LID, retorna null.
+ */
+export function normalizeLidJid(jid: string): string | null {
+  if (!jid) return null;
+
+  // Bug rc.6: doble sufijo "XXXX@lid@s.whatsapp.net"
+  if (jid.includes('@lid@')) {
+    const lidPart = jid.split('@lid')[0];
+    if (lidPart) return `${lidPart}@lid`;
+    return null;
+  }
+
+  // Formato estándar
+  if (jid.endsWith('@lid')) return jid;
+
+  return null;
+}
+
+/** =========================
  *  Helpers extra para WhatsApp
  *  ========================= */
 
 /**
- * Normaliza un remoteJid a solo dígitos.
+ * Normaliza un remoteJid a solo dígitos de teléfono.
  * Ej: "51924894792@s.whatsapp.net" → "51924894792"
  *     "51924894792:12@s.whatsapp.net" → "51924894792"
+ *
+ * ⚠️ IMPORTANTE: Si el JID es un LID (@lid), retorna cadena vacía.
+ *    Los LIDs NO contienen números de teléfono; sus dígitos son IDs internos.
+ *    Usar extractPhoneFromJid en un LID daría un número falso.
  */
 export function normalizeJidToPhone(remoteJid: string): string {
   if (!remoteJid) return '';
+
+  // ✅ Rechazar LIDs explícitamente - NO contienen teléfonos reales
+  if (isLidJid(remoteJid)) return '';
+
   const leftSide = remoteJid.split('@')[0];
   const justNumber = leftSide.split(':')[0];
   return digitsOnly(justNumber);
@@ -191,14 +249,76 @@ export function normalizeJidToPhone(remoteJid: string): string {
 
 /**
  * Valida de forma simple que el número "parezca" un teléfono real.
- * En tu caso asumes Perú (E.164 sin '+'): 51 + 9 dígitos = 11 caracteres.
  *
- * Ejemplo válido: 51994681222
+ * Soporta:
+ * - Perú (DEFAULT_CC=51): 51 + 9 dígitos = 11 dígitos → /^51\d{9}$/
+ * - Genérico: cualquier número E.164 válido (8-15 dígitos)
+ *
+ * Esto permite que clientes de otros países (o números resueltos desde LID)
+ * no sean rechazados incorrectamente.
  */
 export function isLikelyRealPhone(
   phone: string | null | undefined
 ): boolean {
   const d = digitsOnly(phone ?? '');
-  // Regla específica para Perú (DEFAULT_CC=51)
-  return /^51\d{9}$/.test(d);
+
+  // Sin dígitos o muy corto → no es teléfono real
+  if (d.length < 8 || d.length > 15) return false;
+
+  // Validación específica por DEFAULT_CC
+  const defCC = defaultCountryCode();
+
+  if (d.startsWith(defCC)) {
+    const rule = COUNTRY_RULES[defCC];
+    if (rule?.localLengths?.length) {
+      const local = d.slice(defCC.length);
+      return rule.localLengths.includes(local.length);
+    }
+  }
+
+  // Para otros países: aceptar si tiene longitud E.164 válida
+  // y empieza con algún CC conocido
+  for (const cc of KNOWN_CCS) {
+    if (d.startsWith(cc)) {
+      const rule = COUNTRY_RULES[cc];
+      if (rule?.localLengths?.length) {
+        const local = d.slice(cc.length);
+        return rule.localLengths.includes(local.length);
+      }
+      return true;
+    }
+  }
+
+  // Fallback: si tiene entre 8-15 dígitos, aceptar
+  return true;
+}
+
+/**
+ * Extrae un número de teléfono de un JID alternativo (remoteJidAlt / participantAlt).
+ *
+ * Baileys v7 provee estos campos en message.key cuando el remoteJid es un LID.
+ * El Alt contiene el PN (phone number JID) equivalente.
+ *
+ * Retorna el E.164 normalizado si es válido, o null si no se puede extraer.
+ */
+export function extractPhoneFromAltJid(
+  altJid: string | null | undefined
+): string | null {
+  if (!altJid) return null;
+
+  // El Alt no debería ser un LID, pero por seguridad verificar
+  if (isLidJid(altJid)) return null;
+
+  // Extraer dígitos del JID
+  const raw = extractPhoneFromJid(altJid);
+  if (!raw) return null;
+
+  try {
+    const e164 = normalizePhone(raw);
+    if (isLikelyRealPhone(e164)) return e164;
+  } catch {
+    // normalizePhone lanza si no puede normalizar
+  }
+
+  return null;
 }
