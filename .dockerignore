@@ -1,0 +1,39 @@
+# Dependencias - nunca copiar al contexto de build
+node_modules
+
+# Build output
+dist
+
+# Datos en tiempo de ejecución
+logs
+baileys_auth
+auth_info
+
+# Variables de entorno (sensibles)
+.env
+.env.*
+!.env.example
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Editor / OS
+.vscode
+.idea
+*.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Docker (no necesita copiarse a sí mismo)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# README y docs
+README.md
+*.md

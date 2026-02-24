@@ -3,6 +3,8 @@
 import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
+  fetchLatestBaileysVersion,
+  makeCacheableSignalKeyStore,
   WASocket,
   proto,
 } from '@whiskeysockets/baileys';
@@ -62,6 +64,12 @@ import { getPrismaClient } from '../config/database.js';
 const prisma = getPrismaClient();
 
 // ==================================================
+// CONSTANTES DE RECONEXIÓN (tomadas del proyecto de referencia)
+// ==================================================
+const MAX_RETRIES = 5;
+const BASE_DELAY_MS = 3000;
+
+// ==================================================
 // ESTADO INTERNO WHATSAPP
 // ==================================================
 let sock: WASocket | null = null;
@@ -79,12 +87,15 @@ const botSentMessageIds = new Map<string, number>();
 const BOT_ID_TTL_MS = 5 * 60 * 1000;
 
 // ─────────────────────────────────────────────────
-// FIX: Control centralizado de reconexión
-// Evita que múltiples timeouts compitan entre sí
-// cuando se produce un logout (desde el celular o manual)
+// Control centralizado de reconexión con límite de reintentos
 // ─────────────────────────────────────────────────
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let isLoggedOutPending = false;
+let isShuttingDown = false;
+
+// ✅ NUEVO: control de reintentos con límite (del proyecto de referencia)
+let retryCount = 0;
+let pairingCodeRequested = false; // ✅ NUEVO: evita solicitar pairing code más de una vez
 
 function clearReconnectTimer() {
   if (reconnectTimer) {
@@ -93,8 +104,39 @@ function clearReconnectTimer() {
   }
 }
 
+// ✅ NUEVO: Calcula delay con backoff exponencial + jitter (del proyecto de referencia)
+function getRetryDelay(): number {
+  const exponential = BASE_DELAY_MS * Math.pow(2, retryCount);
+  const jitter = Math.random() * 1000;
+  const maxDelay = 60000; // tope de 1 minuto
+  return Math.min(exponential + jitter, maxDelay);
+}
+
+// ✅ NUEVO: Reconexión con límite de intentos y backoff exponencial
+function scheduleReconnect() {
+  if (retryCount >= MAX_RETRIES) {
+    logger.error(`❌ Se alcanzó el límite de ${MAX_RETRIES} reintentos. No se intentará reconectar más.`);
+    logger.error('🔧 Revisa la conexión o reinicia el contenedor manualmente.');
+    return;
+  }
+
+  const delay = getRetryDelay();
+  retryCount++;
+
+  logger.info(`🔄 Reintento ${retryCount}/${MAX_RETRIES} en ${Math.round(delay / 1000)}s...`);
+
+  clearReconnectTimer();
+
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    initializeWhatsApp(false).catch((err) =>
+      logger.error({ err }, 'Reinit error')
+    );
+  }, delay);
+}
+
 // ==================================================
-// AUTH FOLDER HELPERS - SOLUCIÓN 1: PERSISTENCIA
+// AUTH FOLDER HELPERS
 // ==================================================
 const AUTH_FOLDER = path.resolve('./baileys_auth');
 
@@ -463,6 +505,12 @@ async function resolvePhoneFromJid(
 
 // ==================================================
 // INICIALIZACIÓN (BAILEYS)
+// ✅ CAMBIOS PRINCIPALES:
+//   - fetchLatestBaileysVersion() para usar versión actualizada
+//   - makeCacheableSignalKeyStore para mejor manejo de credenciales
+//   - pairing code separado del evento QR (no automático)
+//   - límite de reintentos con backoff exponencial
+//   - 405 detiene reconexión en lugar de seguir en loop
 // ==================================================
 export async function initializeWhatsApp(forceNew: boolean = false) {
   try {
@@ -470,21 +518,31 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
 
     if (forceNew) {
       await ensureCleanAuthFolder();
+      // ✅ Resetear flags al iniciar sesión nueva
+      pairingCodeRequested = false;
+      retryCount = 0;
     } else {
       await ensureAuthFolderExists();
     }
 
     const { state, saveCreds } = await useMultiFileAuthState('/app/baileys_auth');
 
+    // ✅ NUEVO: obtener versión más reciente de Baileys (reduce rechazos por versión)
+    const { version } = await fetchLatestBaileysVersion();
+    logger.info(`Baileys version: ${version.join('.')}`);
+
     sock = makeWASocket({
-      auth: state,
+      version,
+      auth: {
+        creds: state.creds,
+        // ✅ NUEVO: makeCacheableSignalKeyStore para mejor performance y estabilidad
+        keys: makeCacheableSignalKeyStore(state.keys, logger as any),
+      },
       printQRInTerminal: false,
       logger: logger as any,
 
       // Fingerprint de navegador
       browser: ['Chrome', 'Chrome', '120.0.0'],
-
-      // version eliminada - Baileys rc.9 usa su default interno actualizado
 
       syncFullHistory: false,
       markOnlineOnConnect: false,
@@ -497,15 +555,11 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // FIX: backoff progresivo con variable local al scope de esta instancia
-    // Así cada initializeWhatsApp() comienza desde 3000ms fresco
-    let reconnectDelay = 3000;
-
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        logger.info('📲 QR Code received');
+        logger.info('📲 QR Code received - procesando...');
 
         currentQR = qr;
         try {
@@ -515,15 +569,24 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
           logger.error({ err }, 'QR generation error');
         }
 
+        // ✅ CORREGIDO: el pairing code se solicita manualmente via requestPairingCode()
+        // NO automáticamente aquí. Esto evitaba el loop fatal de 405.
+        // Para vincular, llama a: POST /api/whatsapp/pairing-code { phone: "51XXXXXXXXX" }
+
         isReady = false;
         botPhoneNumber = null;
+      }
+
+      if (connection === 'connecting') {
+        logger.info('🔌 Connecting to WhatsApp servers...');
       }
 
       if (connection === 'open') {
         logger.info('✅ WhatsApp connected successfully!');
 
-        // FIX: resetear backoff y flags al conectar exitosamente
-        reconnectDelay = 3000;
+        // Resetear contadores y flags al conectar exitosamente
+        retryCount = 0;
+        pairingCodeRequested = false;
         isLoggedOutPending = false;
         isReady = true;
         currentQR = null;
@@ -533,23 +596,32 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
           botPhoneNumber = extractPhoneFromJid(sock.user.id);
           logger.info(`📱 Bot phone number: ${botPhoneNumber}`);
         }
+
+        logger.info('🟢 Bot listo para recibir mensajes');
       }
 
       if (connection === 'close') {
         const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+        const errorMessage = (lastDisconnect?.error as any)?.message || 'unknown';
 
-        logger.warn({ statusCode }, 'Connection closed');
+        logger.warn({ statusCode, errorMessage }, '🔴 Connection closed');
 
         isReady = false;
         botPhoneNumber = null;
 
-        // FIX: Cancelar cualquier reconexión pendiente anterior
-        // para que no haya dos timers compitiendo
+        // Cancelar cualquier reconexión pendiente anterior
         clearReconnectTimer();
 
-        // ✅ Restart requerido después de escanear QR - es normal en v7
+        // ✅ Shutdown en curso - no reconectar
+        if (isShuttingDown) {
+          logger.info('🛑 Shutdown in progress, skipping reconnect');
+          return;
+        }
+
+        // ✅ Restart requerido después de escanear QR / pairing - es normal en v7
         if (statusCode === DisconnectReason.restartRequired) {
-          logger.info('🔄 Restart required after QR scan, reconnecting...');
+          logger.info('🔄 Restart required after pairing/QR scan, reconnecting in 1s...');
+          retryCount = 0; // reset al reconectar tras pairing exitoso
           reconnectTimer = setTimeout(() => {
             reconnectTimer = null;
             initializeWhatsApp(false).catch(err =>
@@ -560,7 +632,6 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
         }
 
         // ✅ Logout real (desde celular o /api/logout)
-        // → limpiar auth, resetear estado y generar QR nuevo
         if (statusCode === DisconnectReason.loggedOut) {
           if (isLoggedOutPending) {
             logger.warn('[LOGOUT] Ya hay un proceso de logout en curso, ignorando duplicado');
@@ -570,10 +641,11 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
 
           logger.warn('🔐 Device logged out. Resetting auth...');
 
-          // Limpiar estado de QR/bot inmediatamente
           sock = null;
           currentQR = null;
           qrDataURL = null;
+          retryCount = 0;
+          pairingCodeRequested = false;
 
           reconnectTimer = setTimeout(async () => {
             reconnectTimer = null;
@@ -585,16 +657,19 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
           return;
         }
 
-        // ✅ Reconexión normal con backoff progresivo
-        reconnectDelay = Math.min(reconnectDelay * 1.5, 20000);
-        logger.info(`🔄 Reconnecting in ${Math.round(reconnectDelay)}ms...`);
+        // ✅ CORREGIDO: Error 405 - IP bloqueada para registro nuevo
+        // Antes seguía reconectando infinitamente quemando la IP.
+        // Ahora se detiene completamente para no agravar el bloqueo.
+        if (statusCode === 405) {
+          logger.error('🚫 Error 405: WhatsApp rechazó la conexión (IP bloqueada para registro nuevo)');
+          logger.error('   → Para solucionar: cambia la IP o espera 24-48h antes de reintentar');
+          logger.error('   → Para vincular: reinicia el contenedor con una IP limpia');
+          // ✅ DETENER - no reconectar, evitar quemar más la IP
+          return;
+        }
 
-        reconnectTimer = setTimeout(() => {
-          reconnectTimer = null;
-          initializeWhatsApp(false).catch((err) =>
-            logger.error({ err }, 'Reinit error')
-          );
-        }, reconnectDelay);
+        // ✅ Reconexión normal con backoff exponencial y límite de reintentos
+        scheduleReconnect();
       }
     });
 
@@ -610,6 +685,32 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
     throw error;
   }
 }
+
+// ==================================================
+// ✅ NUEVO: requestPairingCode como función pública y controlada
+// Se llama manualmente desde la API, NO automáticamente al recibir QR.
+// Esto elimina el loop fatal que causaba el error 405.
+// ==================================================
+export async function requestPairingCode(phoneNumber: string): Promise<string> {
+  if (!sock) throw new Error('Socket no inicializado');
+  if ((sock as any).authState?.creds?.registered) throw new Error('Ya está registrado');
+  if (pairingCodeRequested) throw new Error('Ya se solicitó un pairing code, espera que expire o reinicia');
+
+  pairingCodeRequested = true;
+  try {
+    const code = await sock.requestPairingCode(phoneNumber);
+    logger.info(`\n============================================`);
+    logger.info(`  🔢 PAIRING CODE: ${code}`);
+    logger.info(`  📱 Ingresa este código en WhatsApp:`);
+    logger.info(`     Dispositivos vinculados → Vincular con número`);
+    logger.info(`============================================\n`);
+    return code;
+  } catch (err) {
+    pairingCodeRequested = false; // permitir reintentar si falló
+    throw err;
+  }
+}
+
 // ==================================================
 // ✅ CAMBIO 5: MENSAJES DEL MISMO NÚMERO (AGENTE HUMANO) - CON SOPORTE LID
 // ==================================================
@@ -1768,8 +1869,6 @@ export function getStatusForDashboard() {
 // DESCONEXIÓN
 // ==================================================
 export async function disconnectSession(): Promise<void> {
-  // FIX: cancelar cualquier reconexión pendiente antes de desconectar
-  // para que el logout manual no compita con un timer de backoff activo
   clearReconnectTimer();
   isLoggedOutPending = false;
 
@@ -1786,7 +1885,10 @@ export async function disconnectSession(): Promise<void> {
   isReady = false;
   botPhoneNumber = null;
   currentQR = null;
+  isShuttingDown = true;
   qrDataURL = null;
+  retryCount = 0;
+  pairingCodeRequested = false;
 
   await ensureCleanAuthFolder();
 }
@@ -1845,7 +1947,6 @@ export async function getWhatsAppGroups(): Promise<Array<{
 }
 
 export async function disconnect(): Promise<void> {
-  // FIX: también cancelar timer en el disconnect suave
   clearReconnectTimer();
 
   if (sock) {
@@ -1860,8 +1961,11 @@ export async function disconnect(): Promise<void> {
   sock = null;
   isReady = false;
   botPhoneNumber = null;
+  isShuttingDown = true;
   currentQR = null;
   qrDataURL = null;
+  retryCount = 0;
+  pairingCodeRequested = false;
 
   logger.info('✅ WhatsApp connection closed, auth files preserved');
 }
