@@ -78,6 +78,21 @@ const RELEASE_TAKEOVER_COMMAND = '/auto';
 const botSentMessageIds = new Map<string, number>();
 const BOT_ID_TTL_MS = 5 * 60 * 1000;
 
+// ─────────────────────────────────────────────────
+// FIX: Control centralizado de reconexión
+// Evita que múltiples timeouts compitan entre sí
+// cuando se produce un logout (desde el celular o manual)
+// ─────────────────────────────────────────────────
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let isLoggedOutPending = false;
+
+function clearReconnectTimer() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+
 // ==================================================
 // AUTH FOLDER HELPERS - SOLUCIÓN 1: PERSISTENCIA
 // ==================================================
@@ -129,9 +144,6 @@ function isFromBotById(id?: string | null) {
 
 type UpsertType = 'notify' | 'append' | 'replace' | string;
 
-// ✅ CAMBIO 2: ELIMINADA la función isLidJid local (ahora se importa de validators.ts)
-// ✅ CAMBIO 3: ELIMINADA tryResolvePnFromLidMapping vieja (reemplazada por resolvePhoneFromLid)
-
 // ==================================================
 // ✅ CAMBIO 3: NUEVA resolución LID → PN en cascada
 // ==================================================
@@ -177,7 +189,6 @@ async function resolvePhoneFromLid(
       const pnResult = await lm.getPNForLID(canonicalLid);
 
       if (pnResult) {
-        // pnResult puede ser un JID string ("51987654321@s.whatsapp.net") u objeto
         const pnStr = typeof pnResult === 'string'
           ? pnResult
           : pnResult?.jid || pnResult?.pn || pnResult?.phoneNumber || String(pnResult);
@@ -212,7 +223,6 @@ async function resolvePhoneFromLid(
     if (contactByLid?.phoneNumber) {
       const phone = contactByLid.phoneNumber;
 
-      // Verificar que no sea un phone "shadow" (lid:XXXX)
       if (!phone.startsWith('lid:') && isLikelyRealPhone(phone)) {
         logger.info(
           `[LID-RESOLVE] ✅ Fuente 3 (BD billysId): ${canonicalLid} → ${phone}`
@@ -224,7 +234,6 @@ async function resolvePhoneFromLid(
     logger.debug({ err }, '[LID-RESOLVE] BD lookup falló');
   }
 
-  // ── No se pudo resolver ──
   logger.warn(`[LID-RESOLVE] ❌ No se pudo resolver PN para ${canonicalLid}`);
   return null;
 }
@@ -429,19 +438,16 @@ async function saveProvisionalRUC(phoneE164: string, ruc: string) {
 
 // ==================================================
 // ✅ CAMBIO 4: Helper para resolver phone desde JID (PN o LID)
-//    Usado por handleAgentMessageFromMe y otros contextos
 // ==================================================
 async function resolvePhoneFromJid(
   jid: string,
   messageKey?: proto.IMessageKey | null
 ): Promise<string | null> {
-  // Si es LID → usar cascada
   if (isLidJid(jid)) {
     const resolved = await resolvePhoneFromLid(jid, messageKey);
     return resolved?.phoneE164 || null;
   }
 
-  // Si es PN normal → extraer directamente
   const raw = normalizeJidToPhone(jid);
   if (!raw) return null;
 
@@ -460,15 +466,15 @@ async function resolvePhoneFromJid(
 // ==================================================
 export async function initializeWhatsApp(forceNew: boolean = false) {
   try {
-    logger.info(`Initializing WhatsApp client (Baileys v7)... forceNew=${forceNew}`)
+    logger.info(`Initializing WhatsApp client (Baileys v7)... forceNew=${forceNew}`);
 
     if (forceNew) {
-      await ensureCleanAuthFolder()
+      await ensureCleanAuthFolder();
     } else {
-      await ensureAuthFolderExists()
+      await ensureAuthFolderExists();
     }
 
-    const { state, saveCreds } = await useMultiFileAuthState('/app/baileys_auth')
+    const { state, saveCreds } = await useMultiFileAuthState('/app/baileys_auth');
 
     sock = makeWASocket({
       auth: state,
@@ -487,86 +493,112 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
 
       // ✅ Evita cortes en VPS
       connectTimeoutMs: 60000,
-      keepAliveIntervalMs: 15000
-    })
+      keepAliveIntervalMs: 15000,
+    });
 
-    sock.ev.on('creds.update', saveCreds)
+    sock.ev.on('creds.update', saveCreds);
 
-    let reconnectDelay = 3000 // backoff progresivo
+    // FIX: backoff progresivo con variable local al scope de esta instancia
+    // Así cada initializeWhatsApp() comienza desde 3000ms fresco
+    let reconnectDelay = 3000;
 
     sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr } = update
+      const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        logger.info('📲 QR Code received')
+        logger.info('📲 QR Code received');
 
-        currentQR = qr
+        currentQR = qr;
         try {
-          qrDataURL = await QRCode.toDataURL(qr)
-          logger.info('✅ QR disponible en /auth/qr')
+          qrDataURL = await QRCode.toDataURL(qr);
+          logger.info('✅ QR disponible en /auth/qr');
         } catch (err) {
-          logger.error({ err }, 'QR generation error')
+          logger.error({ err }, 'QR generation error');
         }
 
-        isReady = false
-        botPhoneNumber = null
+        isReady = false;
+        botPhoneNumber = null;
       }
 
       if (connection === 'open') {
-        logger.info('✅ WhatsApp connected successfully!')
-        reconnectDelay = 3000
-        isReady = true
-        currentQR = null
-        qrDataURL = null
+        logger.info('✅ WhatsApp connected successfully!');
+
+        // FIX: resetear backoff y flags al conectar exitosamente
+        reconnectDelay = 3000;
+        isLoggedOutPending = false;
+        isReady = true;
+        currentQR = null;
+        qrDataURL = null;
 
         if (sock?.user?.id) {
-          botPhoneNumber = extractPhoneFromJid(sock.user.id)
-          logger.info(`📱 Bot phone number: ${botPhoneNumber}`)
+          botPhoneNumber = extractPhoneFromJid(sock.user.id);
+          logger.info(`📱 Bot phone number: ${botPhoneNumber}`);
         }
       }
 
       if (connection === 'close') {
-        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
+        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
 
-        logger.warn({ statusCode }, 'Connection closed')
+        logger.warn({ statusCode }, 'Connection closed');
 
-        isReady = false
-        botPhoneNumber = null
+        isReady = false;
+        botPhoneNumber = null;
 
-        // ✅ Logout real → limpiar auth y generar QR nuevo
+        // FIX: Cancelar cualquier reconexión pendiente anterior
+        // para que no haya dos timers compitiendo
+        clearReconnectTimer();
+
+        // ✅ Logout real (desde celular o /api/logout)
+        // → limpiar auth, resetear estado y generar QR nuevo
         if (statusCode === DisconnectReason.loggedOut) {
-          logger.warn('🔐 Device logged out. Resetting auth...')
-          sock = null
-          currentQR = null
-          qrDataURL = null
+          // FIX: guardar referencia al sock actual para evitar
+          // que una segunda llamada concurrente también entre aquí
+          if (isLoggedOutPending) {
+            logger.warn('[LOGOUT] Ya hay un proceso de logout en curso, ignorando duplicado');
+            return;
+          }
+          isLoggedOutPending = true;
 
-          setTimeout(() => initializeWhatsApp(true), 2000)
-          return
+          logger.warn('🔐 Device logged out. Resetting auth...');
+
+          // Limpiar estado de QR/bot inmediatamente
+          sock = null;
+          currentQR = null;
+          qrDataURL = null;
+
+          reconnectTimer = setTimeout(async () => {
+            reconnectTimer = null;
+            isLoggedOutPending = false;
+            logger.info('🔄 Reinitializing after logout (forceNew=true)...');
+            await initializeWhatsApp(true);
+          }, 2000);
+
+          return;
         }
 
-        // ✅ BACKOFF PROGRESIVO (evita 405 loop)
-        reconnectDelay = Math.min(reconnectDelay * 1.5, 20000)
+        // ✅ Reconexión normal con backoff progresivo
+        reconnectDelay = Math.min(reconnectDelay * 1.5, 20000);
+        logger.info(`🔄 Reconnecting in ${Math.round(reconnectDelay)}ms...`);
 
-        logger.info(`🔄 Reconnecting in ${reconnectDelay}ms...`)
-
-        setTimeout(() => {
-          initializeWhatsApp(false).catch(err =>
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          initializeWhatsApp(false).catch((err) =>
             logger.error({ err }, 'Reinit error')
-          )
-        }, reconnectDelay)
+          );
+        }, reconnectDelay);
       }
-    })
+    });
 
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
       for (const message of messages) {
-        await handleIncomingMessage(message, type as UpsertType)
+        await handleIncomingMessage(message, type as UpsertType);
       }
-    })
+    });
 
-    logger.info('WhatsApp client initialized')
+    logger.info('WhatsApp client initialized');
   } catch (error) {
-    logger.error({ err: error }, 'Error initializing WhatsApp:')
-    throw error
+    logger.error({ err: error }, 'Error initializing WhatsApp:');
+    throw error;
   }
 }
 
@@ -580,11 +612,9 @@ async function handleAgentMessageFromMe(
   const messageText = extractMessageText(message);
   const textLower = (messageText || '').toLowerCase().trim();
 
-  // ✅ CAMBIO: Usar resolvePhoneFromJid que maneja tanto PN como LID
   const phoneNumberRaw = await resolvePhoneFromJid(senderJid, message.key);
 
   if (!phoneNumberRaw) {
-    // Si es LID y no pudimos resolver, loguear pero no crashear
     if (isLidJid(senderJid)) {
       logger.info(
         `[AGENT-MSG] Mensaje agente a LID sin resolver: ${senderJid} (ignorando takeover)`
@@ -597,24 +627,18 @@ async function handleAgentMessageFromMe(
     return;
   }
 
-  // ✅ Comandos explícitos /humano y /auto
   if (textLower === HUMAN_TAKEOVER_COMMAND) {
     await contactModel.setHumanTakeover(phoneNumberRaw);
-    logger.info(
-      `[HUMAN-TAKEOVER] ✋ Manually activated for ${phoneNumberRaw}`
-    );
+    logger.info(`[HUMAN-TAKEOVER] ✋ Manually activated for ${phoneNumberRaw}`);
     return;
   }
 
   if (textLower === RELEASE_TAKEOVER_COMMAND) {
     await contactModel.releaseHumanTakeover(phoneNumberRaw);
-    logger.info(
-      `[BOT-REACTIVATED] 🤖 Manually reactivated for ${phoneNumberRaw}`
-    );
+    logger.info(`[BOT-REACTIVATED] 🤖 Manually reactivated for ${phoneNumberRaw}`);
     return;
   }
 
-  // ✅ Solo activar takeover si el mensaje tiene contenido Y el usuario NO está en onboarding
   if (messageText && messageText.trim().length > 0) {
     const contact = await contactModel.findByPhone(phoneNumberRaw);
 
@@ -723,7 +747,6 @@ async function handleIncomingMessage(
     // ==================================================
     const isLid = isLidJid(senderJid);
 
-    // ✅ Normalizar LID si tiene doble sufijo (bug rc.6)
     const effectiveJid = isLid
       ? (normalizeLidJid(senderJid) || senderJid)
       : senderJid;
@@ -734,7 +757,6 @@ async function handleIncomingMessage(
     if (isLid) {
       logger.info(`[LID-DETECT] Mensaje desde @lid: ${senderJid} → normalized: ${effectiveJid}`);
 
-      // ✅ Resolución en cascada (altJid → getPNForLID → BD)
       const resolved = await resolvePhoneFromLid(effectiveJid, message.key);
 
       if (resolved) {
@@ -743,40 +765,29 @@ async function handleIncomingMessage(
           `[LID-RESOLVED] ${effectiveJid} → ${phoneE164} (fuente: ${resolved.source})`
         );
 
-        // Buscar o crear contacto por phone
         contact = await contactModel.findByPhone(phoneE164);
         if (!contact) {
           await contactModel.getOrCreate(phoneE164);
           contact = await contactModel.findByPhone(phoneE164);
         }
 
-        // Pegar billysId al contacto real (merge si hay shadow)
         await contactModel.attachLidToPhoneContact(phoneE164, effectiveJid);
 
-        // Refrescar por si hubo merge
         contact = await contactModel.findByPhone(phoneE164);
       } else {
-        // ✅ No se pudo resolver → responder al LID directamente
-        //    (Baileys permite enviar mensajes a @lid)
-        //    Pero NO podemos procesar el flujo de registro sin phoneE164
         logger.warn(
           `[LID-UNRESOLVED] No se pudo resolver PN para ${effectiveJid}`
         );
 
-        // Intentar buscar contacto shadow existente en BD
         const shadowContact = await contactModel.findByBillysId(effectiveJid);
 
         if (shadowContact && shadowContact.phoneNumber && !shadowContact.phoneNumber.startsWith('lid:')) {
-          // ✅ Tenemos un contacto con phone real pero el mapping no lo devolvió
-          //    (puede pasar si la BD tiene el mapping de una sesión anterior)
           phoneE164 = shadowContact.phoneNumber;
           contact = shadowContact;
           logger.info(
             `[LID-FALLBACK] Encontrado contacto existente por billysId: ${phoneE164}`
           );
         } else {
-          // ✅ Realmente no tenemos forma de saber el phone
-          //    Enviar mensaje al LID pidiendo que se identifique o ignorar
           logger.warn(
             `[LID-UNRESOLVED] Sin mapping disponible para ${effectiveJid}, ignorando mensaje`
           );
@@ -784,7 +795,6 @@ async function handleIncomingMessage(
         }
       }
     } else {
-      // ✅ PN normal (sin cambios en esta rama)
       const phoneNumberRaw = normalizeJidToPhone(senderJid);
       if (!phoneNumberRaw) {
         logger.warn(
@@ -804,7 +814,6 @@ async function handleIncomingMessage(
 
       await contactModel.getOrCreate(phoneE164);
 
-      // ✅ Si hay un LID alt en el message.key, aprovecharlo para mapear
       const lidFromAlt = (message.key as any)?.remoteJidAlt || (message.key as any)?.participantAlt || null;
       if (lidFromAlt && isLidJid(lidFromAlt)) {
         const cleanLid = normalizeLidJid(lidFromAlt) || lidFromAlt;
@@ -824,8 +833,6 @@ async function handleIncomingMessage(
       `[CONTACT] Procesando mensaje de ${contact.name || phoneE164} (state=${contact.state})`
     );
 
-    // ✅ IMPORTANTE: Para enviar mensajes, usar el JID original (funciona con @lid)
-    //    Baileys permite enviar a LIDs directamente
     const replyJid = senderJid;
 
     // ----------------------------------------------------------
@@ -1753,6 +1760,11 @@ export function getStatusForDashboard() {
 // DESCONEXIÓN
 // ==================================================
 export async function disconnectSession(): Promise<void> {
+  // FIX: cancelar cualquier reconexión pendiente antes de desconectar
+  // para que el logout manual no compita con un timer de backoff activo
+  clearReconnectTimer();
+  isLoggedOutPending = false;
+
   if (sock) {
     try {
       await sock.logout();
@@ -1825,6 +1837,9 @@ export async function getWhatsAppGroups(): Promise<Array<{
 }
 
 export async function disconnect(): Promise<void> {
+  // FIX: también cancelar timer en el disconnect suave
+  clearReconnectTimer();
+
   if (sock) {
     try {
       sock.end(undefined);
