@@ -481,17 +481,16 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
       printQRInTerminal: false,
       logger: logger as any,
 
-      // ✅ FINGERPRINT REAL (evita bloqueo WA)
+      // Fingerprint de navegador
       browser: ['Chrome', 'Chrome', '120.0.0'],
 
-      // ✅ VERSION WEB ESTABLE (CLAVE contra 405)
-      version: [2, 2413, 1],
+      // version eliminada - Baileys rc.9 usa su default interno actualizado
 
       syncFullHistory: false,
       markOnlineOnConnect: false,
       generateHighQualityLinkPreview: false,
 
-      // ✅ Evita cortes en VPS
+      // Evita cortes en VPS
       connectTimeoutMs: 60000,
       keepAliveIntervalMs: 15000,
     });
@@ -548,11 +547,21 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
         // para que no haya dos timers compitiendo
         clearReconnectTimer();
 
+        // ✅ Restart requerido después de escanear QR - es normal en v7
+        if (statusCode === DisconnectReason.restartRequired) {
+          logger.info('🔄 Restart required after QR scan, reconnecting...');
+          reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            initializeWhatsApp(false).catch(err =>
+              logger.error({ err }, 'Reinit error after restartRequired')
+            );
+          }, 1000);
+          return;
+        }
+
         // ✅ Logout real (desde celular o /api/logout)
         // → limpiar auth, resetear estado y generar QR nuevo
         if (statusCode === DisconnectReason.loggedOut) {
-          // FIX: guardar referencia al sock actual para evitar
-          // que una segunda llamada concurrente también entre aquí
           if (isLoggedOutPending) {
             logger.warn('[LOGOUT] Ya hay un proceso de logout en curso, ignorando duplicado');
             return;
@@ -601,7 +610,6 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
     throw error;
   }
 }
-
 // ==================================================
 // ✅ CAMBIO 5: MENSAJES DEL MISMO NÚMERO (AGENTE HUMANO) - CON SOPORTE LID
 // ==================================================
