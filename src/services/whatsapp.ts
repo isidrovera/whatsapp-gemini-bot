@@ -460,152 +460,113 @@ async function resolvePhoneFromJid(
 // ==================================================
 export async function initializeWhatsApp(forceNew: boolean = false) {
   try {
-    logger.info(
-      `Initializing WhatsApp client (Baileys v7)... forceNew=${forceNew}`
-    );
+    logger.info(`Initializing WhatsApp client (Baileys v7)... forceNew=${forceNew}`)
 
     if (forceNew) {
-      await ensureCleanAuthFolder();
+      await ensureCleanAuthFolder()
     } else {
-      await ensureAuthFolderExists();
+      await ensureAuthFolderExists()
     }
 
-    const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
+    const { state, saveCreds } = await useMultiFileAuthState('/app/baileys_auth')
 
     sock = makeWASocket({
       auth: state,
       printQRInTerminal: false,
       logger: logger as any,
+
+      // ✅ FINGERPRINT REAL (evita bloqueo WA)
       browser: ['Chrome', 'Chrome', '120.0.0'],
+
+      // ✅ VERSION WEB ESTABLE (CLAVE contra 405)
+      version: [2, 2413, 1],
+
       syncFullHistory: false,
       markOnlineOnConnect: false,
       generateHighQualityLinkPreview: false,
-    });
 
-    sock.ev.on('creds.update', saveCreds);
+      // ✅ Evita cortes en VPS
+      connectTimeoutMs: 60000,
+      keepAliveIntervalMs: 15000
+    })
 
-    // ==================================================
-    // LID mapping updates (Baileys v7) - para unir LID <-> PN
-    // ==================================================
-    sock.ev.on('lid-mapping.update', async (update: any) => {
-      try {
-        const items: any[] = Array.isArray(update)
-          ? update
-          : (update?.mappings || update?.updates || []);
+    sock.ev.on('creds.update', saveCreds)
 
-        for (const it of items) {
-          const lid = it?.lid || it?.LID || it?.id;
-          const pn =
-            it?.pn || it?.jid || it?.phoneNumber || it?.pnJid || null;
-
-          if (!lid || !pn) continue;
-
-          const pnDigits = String(pn).includes('@')
-            ? extractPhoneFromJid(String(pn))
-            : String(pn).replace(/\D/g, '');
-
-          if (!pnDigits) continue;
-
-          try {
-            const phoneE164 = normalizePhone(pnDigits);
-            if (!isLikelyRealPhone(phoneE164)) continue;
-
-            // Normalizar el LID por si viene con doble sufijo
-            const cleanLid = normalizeLidJid(String(lid)) || String(lid);
-
-            await contactModel.attachLidToPhoneContact(phoneE164, cleanLid);
-
-            logger.info(
-              `[LID-MAP] Attached/merged lid=${cleanLid} -> phone=${phoneE164}`
-            );
-          } catch (err) {
-            logger.debug({ err }, `[LID-MAP] Error normalizando pn=${pnDigits}`);
-          }
-        }
-      } catch (err) {
-        logger.warn({ err }, '[LID-MAP] error processing lid-mapping.update');
-      }
-    });
+    let reconnectDelay = 3000 // backoff progresivo
 
     sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr } = update;
+      const { connection, lastDisconnect, qr } = update
 
       if (qr) {
-        logger.info('QR Code received, scan to authenticate:');
-        qrcode.generate(qr, { small: true });
+        logger.info('📲 QR Code received')
 
-        currentQR = qr;
+        currentQR = qr
         try {
-          qrDataURL = await QRCode.toDataURL(qr);
-          logger.info('✅ QR available at: http://localhost:3000/auth/qr');
-        } catch (error) {
-          logger.error({ err: error }, 'Error generating QR data URL:');
-          qrDataURL = null;
+          qrDataURL = await QRCode.toDataURL(qr)
+          logger.info('✅ QR disponible en /auth/qr')
+        } catch (err) {
+          logger.error({ err }, 'QR generation error')
         }
 
-        isReady = false;
-        botPhoneNumber = null;
-      }
-
-      if (connection === 'close') {
-        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-
-        if (statusCode === DisconnectReason.loggedOut) {
-          logger.warn(
-            '⚠️ loggedOut (device_removed). Limpiando auth y reiniciando para QR nuevo...'
-          );
-
-          sock = null;
-          isReady = false;
-          botPhoneNumber = null;
-          currentQR = null;
-          qrDataURL = null;
-
-          setTimeout(() => {
-            initializeWhatsApp(true).catch((err) =>
-              logger.error({ err }, 'Error reinitializing after loggedOut:')
-            );
-          }, 1000);
-          return;
-        }
-
-        logger.warn({ statusCode }, 'Connection closed. Reconnecting...');
-
-        isReady = false;
-        botPhoneNumber = null;
-        currentQR = null;
-        qrDataURL = null;
-
-        setTimeout(() => {
-          initializeWhatsApp().catch((err) =>
-            logger.error({ err }, 'Error reinitializing WhatsApp:')
-          );
-        }, 3000);
+        isReady = false
+        botPhoneNumber = null
       }
 
       if (connection === 'open') {
-        logger.info('✅ WhatsApp connected successfully!');
-        isReady = true;
-        currentQR = null;
-        qrDataURL = null;
+        logger.info('✅ WhatsApp connected successfully!')
+        reconnectDelay = 3000
+        isReady = true
+        currentQR = null
+        qrDataURL = null
 
         if (sock?.user?.id) {
-          botPhoneNumber = extractPhoneFromJid(sock.user.id);
-          logger.info(`📱 Bot phone number: ${botPhoneNumber}`);
+          botPhoneNumber = extractPhoneFromJid(sock.user.id)
+          logger.info(`📱 Bot phone number: ${botPhoneNumber}`)
         }
       }
-    });
+
+      if (connection === 'close') {
+        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
+
+        logger.warn({ statusCode }, 'Connection closed')
+
+        isReady = false
+        botPhoneNumber = null
+
+        // ✅ Logout real → limpiar auth y generar QR nuevo
+        if (statusCode === DisconnectReason.loggedOut) {
+          logger.warn('🔐 Device logged out. Resetting auth...')
+          sock = null
+          currentQR = null
+          qrDataURL = null
+
+          setTimeout(() => initializeWhatsApp(true), 2000)
+          return
+        }
+
+        // ✅ BACKOFF PROGRESIVO (evita 405 loop)
+        reconnectDelay = Math.min(reconnectDelay * 1.5, 20000)
+
+        logger.info(`🔄 Reconnecting in ${reconnectDelay}ms...`)
+
+        setTimeout(() => {
+          initializeWhatsApp(false).catch(err =>
+            logger.error({ err }, 'Reinit error')
+          )
+        }, reconnectDelay)
+      }
+    })
 
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
       for (const message of messages) {
-        await handleIncomingMessage(message, type as UpsertType);
+        await handleIncomingMessage(message, type as UpsertType)
       }
-    });
+    })
 
-    logger.info('WhatsApp client initialized');
+    logger.info('WhatsApp client initialized')
   } catch (error) {
-    logger.error({ err: error }, 'Error initializing WhatsApp:');
-    throw error;
+    logger.error({ err: error }, 'Error initializing WhatsApp:')
+    throw error
   }
 }
 
