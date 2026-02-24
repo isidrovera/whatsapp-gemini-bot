@@ -56,7 +56,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./logs:/app/logs
-      - ./baileys_auth:/app/baileys_auth
+      - baileys_auth_data:/app/baileys_auth
     ports:
       - "${WEB_PORT:-3000}:3000"
     healthcheck:
@@ -114,7 +114,8 @@ services:
 volumes:
   db_data:
     name: ${COMPOSE_PROJECT_NAME:-gemini}_db_data
-
+  baileys_auth_data:
+    name: ${COMPOSE_PROJECT_NAME:-gemini}_baileys_auth
 networks:
   webnet:
     driver: bridge
