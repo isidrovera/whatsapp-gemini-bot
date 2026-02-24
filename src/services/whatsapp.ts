@@ -476,8 +476,10 @@ export async function initializeWhatsApp(forceNew: boolean = false) {
       auth: state,
       printQRInTerminal: false,
       logger: logger as any,
-      browser: ['WhatsApp Bot', 'Chrome', '1.0.0'],
+      browser: ['Chrome', 'Chrome', '120.0.0'],
       syncFullHistory: false,
+      markOnlineOnConnect: false,
+      generateHighQualityLinkPreview: false,
     });
 
     sock.ev.on('creds.update', saveCreds);
